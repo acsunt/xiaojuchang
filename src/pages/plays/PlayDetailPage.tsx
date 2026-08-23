@@ -13,7 +13,7 @@ import {
 import { getCachedPublicPlayById, getCachedPublicPlays, playApi } from '../../services/play-api';
 import { DEFAULT_CATEGORY, type Play, type Repo, type RepoOrder } from '../../types/play';
 import { RepoMarkdown } from '../repos/RepoMarkdown';
-import { getPlayVersionKey, getPlayVersionLabel, sortPlayVersions } from './play-versions';
+import { buildPlayVersionGroups, getPlayVersionKey, getPlayVersionLabel, sortPlayVersions } from './play-versions';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
 
@@ -78,27 +78,22 @@ export function PlayDetailPage() {
   }, [location.search]);
   const navigationIds = useMemo(() => {
     if (plazaPanel === 'derived' && play) {
-      const versionKey = getPlayVersionKey(play);
       const cachedPlays = getCachedPublicPlays();
       const snapshotIds = plazaSnapshot?.filteredPlayIds ?? [];
       const filteredSource = snapshotIds.length > 0 ? cachedPlays.filter((item) => snapshotIds.includes(item.id)) : cachedPlays;
       const source = filteredSource.length > 0 ? filteredSource : cachedPlays;
-      const group = sortPlayVersions(source.filter((item) => getPlayVersionKey(item) === versionKey));
-      const groupIds = group.map((item) => item.id);
+      const groups = buildPlayVersionGroups(source);
+      const currentKey = getPlayVersionKey(play);
+      const currentGroupIndex = groups.findIndex((group) => group.id === currentKey);
+      const representativeIds = groups.map((group, index) =>
+        index === currentGroupIndex ? play.id : group.plays[0].id,
+      );
 
-      if (groupIds.includes(play.id)) {
-        return groupIds;
+      if (currentGroupIndex >= 0) {
+        return representativeIds;
       }
 
-      if (group.length > 0) {
-        return sortPlayVersions([...group, play]).map((item) => item.id);
-      }
-
-      if (versionPlays.length > 0) {
-        return versionPlays.map((item) => item.id);
-      }
-
-      return [play.id];
+      return [play.id, ...representativeIds];
     }
 
     if (plazaSnapshot?.filteredPlayIds?.length) {
@@ -106,7 +101,7 @@ export function PlayDetailPage() {
     }
 
     return getCachedPublicPlays().map((item) => item.id);
-  }, [plazaSnapshot, plazaPanel, play, versionPlays]);
+  }, [plazaSnapshot, plazaPanel, play]);
   const currentIndex = navigationIds.indexOf(id);
   const previousPlayId = currentIndex > 0 ? navigationIds[currentIndex - 1] : '';
   const nextPlayId = currentIndex >= 0 && currentIndex < navigationIds.length - 1 ? navigationIds[currentIndex + 1] : '';

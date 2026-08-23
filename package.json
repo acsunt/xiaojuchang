@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true"
   },
   "dependencies": {
     "react": "latest",
