@@ -87,11 +87,31 @@ const detectDeviceCssWidth = (): number => {
   }
 
   const dpr = window.devicePixelRatio || 1;
-  if (typeof window.screen !== 'undefined' && window.screen.width && dpr > 0) {
-    return Math.round(window.screen.width / dpr);
+  const screenWidth = window.screen?.width ?? 0;
+  const screenHeight = window.screen?.height ?? 0;
+  if (!screenWidth) {
+    return window.innerWidth;
   }
 
-  return window.innerWidth;
+  const nav = typeof navigator === 'undefined' ? undefined : navigator;
+  const isIPad =
+    !!nav &&
+    (/iPad/i.test(nav.userAgent) ||
+      (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1) ||
+      (/Macintosh/i.test(nav.userAgent) && nav.maxTouchPoints > 1));
+
+  // iPad 的 screen.width 已是 CSS 像素（竖屏 768），再除以 dpr 会变成 384 被误判成手机
+  if (isIPad) {
+    return Math.min(screenWidth, screenHeight || screenWidth);
+  }
+
+  const divided = dpr > 0 ? Math.round(screenWidth / dpr) : screenWidth;
+  // iPhone 同样是 CSS 像素，除以 dpr 会小于 320
+  if (divided < 320) {
+    return screenWidth;
+  }
+
+  return divided || screenWidth;
 };
 
 const detectViewportMode = (): 'mobile' | 'tablet' | 'desktop' => {
@@ -100,13 +120,13 @@ const detectViewportMode = (): 'mobile' | 'tablet' | 'desktop' => {
   }
 
   const cssWidth = detectDeviceCssWidth();
-  // iPad 9.7/10.2" portrait 恰好是 768 CSS px，落到 < 769 才视为手机，避免被误判为 mobile（cap 2 列）
-  if (cssWidth > 0 && cssWidth < 769) return 'mobile';
+  // iPad 9.7/10.2" 竖屏是 768 CSS px，应视为平板（一行最多 3 个），不要当成手机 cap 2 列
+  if (cssWidth > 0 && cssWidth < 768) return 'mobile';
   if (cssWidth > 0 && cssWidth <= 1100) return 'tablet';
   if (cssWidth > 0) return 'desktop';
 
   const width = window.innerWidth;
-  if (width < 769) return 'mobile';
+  if (width < 768) return 'mobile';
   if (width <= 1100) return 'tablet';
   return 'desktop';
 };
@@ -1467,9 +1487,10 @@ export function PlayListPage() {
     });
   };
 
-  const openPlayDetail = (play: Play) => {
+  const openPlayDetail = (play: Play, fromPanel?: 'calendar' | 'derived') => {
     savePlazaNavigationSnapshot(createNavigationSnapshot(play.id));
-    navigate(`/plays/${play.id}`, {
+    const preservedSearch = fromPanel ? `?panel=${fromPanel}` : '';
+    navigate(`/plays/${play.id}${preservedSearch}`, {
       state: {
         playSnapshot: play,
       },
@@ -1560,9 +1581,9 @@ export function PlayListPage() {
         {sidePanelVisible ? (
           <aside className="plaza-sidebar">
             {plazaPanel === 'derived' ? (
-              <PlazaDerivedPanel plays={filteredPlays} onOpenPlay={openPlayDetail} />
+              <PlazaDerivedPanel plays={filteredPlays} onOpenPlay={(play) => openPlayDetail(play, 'derived')} />
             ) : (
-              <PlazaCalendarPanel plays={filteredPlays} onOpenPlay={openPlayDetail} />
+              <PlazaCalendarPanel plays={filteredPlays} onOpenPlay={(play) => openPlayDetail(play, 'calendar')} />
             )}
           </aside>
         ) : null}

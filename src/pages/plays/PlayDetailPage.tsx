@@ -80,12 +80,22 @@ export function PlayDetailPage() {
     if (plazaPanel === 'derived' && play) {
       const versionKey = getPlayVersionKey(play);
       const cachedPlays = getCachedPublicPlays();
-      const groupIds = cachedPlays
-        .filter((item) => getPlayVersionKey(item) === versionKey)
-        .map((item) => item.id);
+      const snapshotIds = plazaSnapshot?.filteredPlayIds ?? [];
+      const filteredSource = snapshotIds.length > 0 ? cachedPlays.filter((item) => snapshotIds.includes(item.id)) : cachedPlays;
+      const source = filteredSource.length > 0 ? filteredSource : cachedPlays;
+      const group = sortPlayVersions(source.filter((item) => getPlayVersionKey(item) === versionKey));
+      const groupIds = group.map((item) => item.id);
 
-      if (groupIds.length > 0) {
+      if (groupIds.includes(play.id)) {
         return groupIds;
+      }
+
+      if (group.length > 0) {
+        return sortPlayVersions([...group, play]).map((item) => item.id);
+      }
+
+      if (versionPlays.length > 0) {
+        return versionPlays.map((item) => item.id);
       }
 
       return [play.id];
@@ -96,7 +106,7 @@ export function PlayDetailPage() {
     }
 
     return getCachedPublicPlays().map((item) => item.id);
-  }, [plazaSnapshot, plazaPanel, play]);
+  }, [plazaSnapshot, plazaPanel, play, versionPlays]);
   const currentIndex = navigationIds.indexOf(id);
   const previousPlayId = currentIndex > 0 ? navigationIds[currentIndex - 1] : '';
   const nextPlayId = currentIndex >= 0 && currentIndex < navigationIds.length - 1 ? navigationIds[currentIndex + 1] : '';
@@ -300,10 +310,7 @@ export function PlayDetailPage() {
                 </div>
               </div>
             ) : null}
-            <div
-              className="inline-actions wrap-mobile detail-switch-row"
-              data-derived-nav-scope={plazaPanel === 'derived' ? '同标题+同分类的版本组' : undefined}
-            >
+            <div className="inline-actions wrap-mobile detail-switch-row">
               <button
                 className="button secondary"
                 disabled={!previousPlayId}

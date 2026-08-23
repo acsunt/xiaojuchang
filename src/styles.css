@@ -2449,14 +2449,29 @@ label {
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    gap: 6px;
+    gap: 4px;
+  }
+
+  .plaza-toolbar-row-mobile-export {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .plaza-toolbar-row-mobile-export::-webkit-scrollbar {
+    display: none;
   }
 
   .plaza-toolbar-row-mobile-main .plaza-toolbar-button,
-  .plaza-toolbar-row-mobile-export .plaza-toolbar-button {
+  .plaza-toolbar-row-mobile-export .plaza-toolbar-button,
+  .plaza-toolbar-row-mobile-export .plaza-block-disliked-export-chip {
     width: auto;
     max-width: none;
+    min-height: 32px;
+    padding-inline: 6px;
+    font-size: 12px;
     flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .plaza-export-modal-toolbar {
@@ -3575,22 +3590,35 @@ body.tag-sort-dragging {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* 手机端：6 个导出元素放得下就在同一行，放不下自然换行 */
+  /* 手机端：6 个导出元素同一行；宽度不够时行内横滑，不把页面撑出横向滚动 */
   .plaza-toolbar-row-mobile-main,
   .plaza-toolbar-row-mobile-export {
     display: flex;
     flex-wrap: wrap;
     width: 100%;
-    gap: 6px;
+    gap: 4px;
     justify-content: flex-start;
+  }
+
+  .plaza-toolbar-row-mobile-export {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .plaza-toolbar-row-mobile-export::-webkit-scrollbar {
+    display: none;
   }
 
   .plaza-toolbar-row-mobile-main .plaza-toolbar-button,
   .plaza-toolbar-row-mobile-export .plaza-toolbar-button,
   .plaza-toolbar-row-mobile-export .plaza-block-disliked-export-chip {
     width: fit-content;
-    max-width: 100%;
+    max-width: none;
     min-width: 0;
+    min-height: 32px;
+    padding-inline: 6px;
+    font-size: 12px;
     flex: 0 0 auto;
     white-space: nowrap;
   }
@@ -4001,8 +4029,28 @@ body.tag-sort-dragging {
   .review-action-row > .button.secondary,
   .sidebar-head > .button,
   .field-inline-action,
-  .admin-search-action-row .button {
+  .admin-search-action-row .button,
+  .plaza-toolbar-row-mobile-main .plaza-toolbar-button,
+  .plaza-toolbar-row-mobile-export .plaza-toolbar-button,
+  .plaza-toolbar-row-mobile-export .plaza-block-disliked-export-chip {
     width: auto;
+  }
+
+  .plaza-toolbar-row-mobile-export {
+    flex-wrap: nowrap;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .plaza-toolbar-row-mobile-main .plaza-toolbar-button,
+  .plaza-toolbar-row-mobile-export .plaza-toolbar-button,
+  .plaza-toolbar-row-mobile-export .plaza-block-disliked-export-chip {
+    min-height: 32px;
+    padding-inline: 6px;
+    font-size: 12px;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .detail-footer-actions {
