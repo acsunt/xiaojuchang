@@ -1,0 +1,4490 @@
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent as ReactChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { useAdminUpdateNotifier } from '../../../hooks/useUpdateNotifier';
+import { UpdatePromptModal } from '../../../components/UpdatePromptModal';
+import {
+  backupStatusLabelMap,
+  downloadBackupArchive,
+  downloadMergedBackupArchive,
+  flattenBackupArchive,
+  getBackupStatusCounts,
+  parseBackupArchive,
+} from '../../../services/play-backup';
+import {
+  buildSideBySideDiff,
+  clearDuplicateReviewState,
+  collectAllDuplicateIds,
+  collectSecondDuplicateIds,
+  getDuplicateReviewState,
+  pruneDuplicateReviewState,
+  scanDuplicateGroups,
+  setDuplicateCompareTarget,
+  setDuplicateScanScope,
+  setDuplicateThreshold,
+  toggleDuplicateSelection,
+  type DuplicateReviewState,
+  type DuplicateScanProgress,
+  type DuplicateScanScope,
+} from '../../../services/admin-duplicate-review';
+import { playApi } from '../../../services/play-api';
+import {
+  DEFAULT_CATEGORY,
+  PLAYS_UPDATED_EVENT,
+  TAGS_UPDATED_EVENT,
+  statusLabelMap,
+  repoStatusLabelMap,
+  type AdminSession,
+  type Play,
+  type PlayStatus,
+  type Repo,
+  type RepoAuditAction,
+  type RepoAuditLog,
+  type RepoReviewAction,
+  type RepoStatus,
+  type ReviewAction,
+  type ReviewLog,
+  type SiteSettings,
+  type Tag,
+} from '../../../types/play';
+
+const createDefaultBackground = (overlayOpacity: number) => ({
+  backgroundUrl: '',
+  crop: {
+    positionX: 50,
+    positionY: 50,
+    scale: 100,
+    backgroundOpacity: 1,
+    overlayOpacity,
+  },
+});
+
+const defaultSiteSettings: SiteSettings = {
+  light: {
+    desktop: createDefaultBackground(0.2),
+    mobile: createDefaultBackground(0.2),
+  },
+  dark: {
+    desktop: createDefaultBackground(0.32),
+    mobile: createDefaultBackground(0.32),
+  },
+  createdAt: '',
+  updatedAt: '',
+};
+
+const statusTabs: Array<{ label: string; value?: PlayStatus }> = [
+  { label: '全部', value: undefined },
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已拒绝', value: 'rejected' },
+  { label: '已下线', value: 'offline' },
+];
+
+const repoStatusTabs: Array<{ label: string; value?: RepoStatus }> = [
+  { label: '全部', value: undefined },
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已拒绝', value: 'rejected' },
+];
+
+const repoActionMeta: Array<{ action: RepoReviewAction; label: string; style: string }> = [
+  { action: 'reject', label: '拒绝', style: 'danger' },
+  { action: 'approve', label: '通过', style: 'primary' },
+];
+
+const backupStatusOrder: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
+
+const actionMeta: Array<{ action: ReviewAction; label: string; style: string }> = [
+  { action: 'approve', label: '通过', style: 'primary' },
+  { action: 'reject', label: '拒绝', style: 'danger' },
+  { action: 'offline', label: '下线', style: 'secondary' },
+];
+
+const SUCCESS_TOAST_DURATION_MS = 1800;
+const BULK_REVIEW_BATCH_SIZE = 5;
+const MOBILE_REVIEW_LIST_PREVIEW_COUNT = 2;
+const MOBILE_AUDIT_LOG_PREVIEW_COUNT = 2;
+
+const ClearableField = ({
+  children,
+  onClear,
+  visible,
+}: {
+  children: ReactNode;
+  onClear: () => void;
+  visible: boolean;
+}) => (
+  <div className="clearable-field">
+    {children}
+    {visible ? (
+      <button aria-label="清空输入" className="clear-field-button" onClick={onClear} type="button">
+        ×
+      </button>
+    ) : null}
+  </div>
+);
+
+// 可搜索的分类下拉框：自由输入 + 过滤现有分类 + 点击选中
+function SearchableCategorySelect({
+  options,
+  placeholder,
+  value,
+  onChange,
+}: {
+  options: string[];
+  placeholder: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        inputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
+
+  const trimmed = value.trim().toLowerCase();
+  const filtered = trimmed
+    ? options.filter((option) => option.toLowerCase().includes(trimmed))
+    : options;
+
+  return (
+    <div className={open ? 'custom-select open searchable-category-select' : 'custom-select searchable-category-select'} ref={rootRef}>
+      <input
+        ref={inputRef}
+        className="searchable-category-input"
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        value={value}
+      />
+      {open ? (
+        <div className="custom-select-menu searchable-category-menu" role="listbox" aria-label="选择分类">
+          {filtered.length > 0 ? (
+            filtered.map((option) => (
+              <button
+                aria-selected={option === value}
+                className={option === value ? 'custom-select-option active' : 'custom-select-option'}
+                key={option}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+                role="option"
+                type="button"
+              >
+                {option}
+              </button>
+            ))
+          ) : (
+            <div className="searchable-category-empty">
+              {value.trim() ? '没有匹配的分类，回车保存为自定义分类' : '暂无分类，直接输入可自定义'}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const actionResultLabelMap: Record<ReviewAction, string> = {
+  approve: '已通过',
+  reject: '已拒绝',
+  offline: '已下线',
+};
+
+const reviewActionLabelMap: Record<ReviewAction, string> = {
+  approve: '通过',
+  reject: '拒绝',
+  offline: '下线',
+};
+
+const repoAuditActionLabelMap: Record<RepoAuditAction, string> = {
+  approve: '通过',
+  reject: '拒绝',
+  delete: '删除',
+};
+
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const BACKGROUND_CROP_MIN_EDGE = 56;
+
+type CropRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+type CropSize = {
+  width: number;
+  height: number;
+};
+
+type BackgroundEditorInteraction = {
+  imageRect: CropRect;
+  maxCropRect: CropRect;
+  mode: 'move' | 'resize';
+  pointerId: number;
+  startRect: CropRect;
+  startX: number;
+  startY: number;
+};
+
+const getBackgroundCropAspectRatio = (device: BackgroundDeviceMode) => (device === 'desktop' ? 16 / 9 : 9 / 16);
+const getBackgroundCropRatioLabel = (device: BackgroundDeviceMode) => (device === 'desktop' ? '16:9' : '9:16');
+
+const getMinCropSize = (aspectRatio: number): CropSize => {
+  if (aspectRatio >= 1) {
+    const height = BACKGROUND_CROP_MIN_EDGE;
+    return {
+      width: height * aspectRatio,
+      height,
+    };
+  }
+
+  const width = BACKGROUND_CROP_MIN_EDGE;
+  return {
+    width,
+    height: width / aspectRatio,
+  };
+};
+
+const getContainRect = (stageSize: CropSize, imageSize: CropSize): CropRect => {
+  if (stageSize.width <= 0 || stageSize.height <= 0) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+
+  if (imageSize.width <= 0 || imageSize.height <= 0) {
+    return {
+      left: 0,
+      top: 0,
+      width: stageSize.width,
+      height: stageSize.height,
+    };
+  }
+
+  const stageRatio = stageSize.width / stageSize.height;
+  const imageRatio = imageSize.width / imageSize.height;
+
+  if (imageRatio > stageRatio) {
+    const width = stageSize.width;
+    const height = width / imageRatio;
+    return {
+      left: 0,
+      top: (stageSize.height - height) / 2,
+      width,
+      height,
+    };
+  }
+
+  const height = stageSize.height;
+  const width = height * imageRatio;
+  return {
+    left: (stageSize.width - width) / 2,
+    top: 0,
+    width,
+    height,
+  };
+};
+
+const getMaxCropRect = (imageRect: CropRect, aspectRatio: number): CropRect => {
+  if (imageRect.width <= 0 || imageRect.height <= 0) {
+    return { ...imageRect };
+  }
+
+  const imageRatio = imageRect.width / imageRect.height;
+  if (imageRatio > aspectRatio) {
+    const height = imageRect.height;
+    const width = height * aspectRatio;
+    return {
+      left: imageRect.left + (imageRect.width - width) / 2,
+      top: imageRect.top,
+      width,
+      height,
+    };
+  }
+
+  const width = imageRect.width;
+  const height = width / aspectRatio;
+  return {
+    left: imageRect.left,
+    top: imageRect.top + (imageRect.height - height) / 2,
+    width,
+    height,
+  };
+};
+
+const clampCropRectWithinImage = (rect: CropRect, imageRect: CropRect, aspectRatio: number, maxCropRect: CropRect): CropRect => {
+  const minCropSize = getMinCropSize(aspectRatio);
+  const width = clampNumber(rect.width, minCropSize.width, maxCropRect.width);
+  const height = width / aspectRatio;
+  const minLeft = imageRect.left;
+  const maxLeft = imageRect.left + imageRect.width - width;
+  const minTop = imageRect.top;
+  const maxTop = imageRect.top + imageRect.height - height;
+
+  return {
+    left: clampNumber(rect.left, minLeft, Math.max(minLeft, maxLeft)),
+    top: clampNumber(rect.top, minTop, Math.max(minTop, maxTop)),
+    width,
+    height,
+  };
+};
+
+const getCropRectFromSettings = (
+  crop: SiteSettings[ThemeMode][BackgroundDeviceMode]['crop'],
+  imageRect: CropRect,
+  aspectRatio: number,
+): CropRect => {
+  const maxCropRect = getMaxCropRect(imageRect, aspectRatio);
+  if (maxCropRect.width <= 0 || maxCropRect.height <= 0) {
+    return maxCropRect;
+  }
+
+  const width = maxCropRect.width * (100 / clampNumber(crop.scale, 100, 240));
+  const height = width / aspectRatio;
+  const centerX = imageRect.left + (imageRect.width * clampNumber(crop.positionX, 0, 100)) / 100;
+  const centerY = imageRect.top + (imageRect.height * clampNumber(crop.positionY, 0, 100)) / 100;
+
+  return clampCropRectWithinImage(
+    {
+      left: centerX - width / 2,
+      top: centerY - height / 2,
+      width,
+      height,
+    },
+    imageRect,
+    aspectRatio,
+    maxCropRect,
+  );
+};
+
+function BackgroundVisualEditor({
+  device,
+  deviceLabel,
+  disabled,
+  editing,
+  label,
+  onDone,
+  onEdit,
+  onRemove,
+  onUpdate,
+  settings,
+  theme,
+}: BackgroundEditorProps) {
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const interactionRef = useRef<BackgroundEditorInteraction | null>(null);
+  const [stageSize, setStageSize] = useState<CropSize>({ width: 0, height: 0 });
+  const [imageSize, setImageSize] = useState<CropSize>({ width: 0, height: 0 });
+  const cropAspectRatio = getBackgroundCropAspectRatio(device);
+  const cropRatioLabel = getBackgroundCropRatioLabel(device);
+
+  useEffect(() => {
+    const node = stageRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      setStageSize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      });
+    });
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    setImageSize({ width: 0, height: 0 });
+    interactionRef.current = null;
+  }, [settings.backgroundUrl]);
+
+  const imageRect = useMemo(() => getContainRect(stageSize, imageSize), [stageSize, imageSize]);
+  const maxCropRect = useMemo(() => getMaxCropRect(imageRect, cropAspectRatio), [imageRect, cropAspectRatio]);
+  const cropRect = useMemo(
+    () => getCropRectFromSettings(settings.crop, imageRect, cropAspectRatio),
+    [settings.crop, imageRect, cropAspectRatio],
+  );
+
+  const commitCropRect = useCallback(
+    (nextRect: CropRect) => {
+      if (imageRect.width <= 0 || imageRect.height <= 0 || maxCropRect.width <= 0) {
+        return;
+      }
+
+      const normalizedRect = clampCropRectWithinImage(nextRect, imageRect, cropAspectRatio, maxCropRect);
+      const centerX = normalizedRect.left + normalizedRect.width / 2;
+      const centerY = normalizedRect.top + normalizedRect.height / 2;
+      const positionX = clampNumber(((centerX - imageRect.left) / imageRect.width) * 100, 0, 100);
+      const positionY = clampNumber(((centerY - imageRect.top) / imageRect.height) * 100, 0, 100);
+      const scale = clampNumber((maxCropRect.width / normalizedRect.width) * 100, 100, 240);
+
+      onUpdate('positionX', String(Math.round(positionX)));
+      onUpdate('positionY', String(Math.round(positionY)));
+      onUpdate('scale', String(Math.round(scale)));
+    },
+    [cropAspectRatio, imageRect, maxCropRect, onUpdate],
+  );
+
+  const stopInteraction = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
+    if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    interactionRef.current = null;
+  }, []);
+
+  const handleStagePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!editing || !settings.backgroundUrl || imageRect.width <= 0 || imageRect.height <= 0 || disabled) {
+      return;
+    }
+
+    const action = (event.target as HTMLElement).closest<HTMLElement>('[data-crop-action]')?.dataset.cropAction;
+    const currentRect = cropRect;
+    const stage = event.currentTarget;
+    stage.setPointerCapture(event.pointerId);
+
+    if (!action) {
+      const pointerRect = clampCropRectWithinImage(
+        {
+          left: event.clientX - stage.getBoundingClientRect().left - currentRect.width / 2,
+          top: event.clientY - stage.getBoundingClientRect().top - currentRect.height / 2,
+          width: currentRect.width,
+          height: currentRect.height,
+        },
+        imageRect,
+        cropAspectRatio,
+        maxCropRect,
+      );
+      commitCropRect(pointerRect);
+      interactionRef.current = {
+        imageRect,
+        maxCropRect,
+        mode: 'move',
+        pointerId: event.pointerId,
+        startRect: pointerRect,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+      return;
+    }
+
+    event.preventDefault();
+    interactionRef.current = {
+      imageRect,
+      maxCropRect,
+      mode: action === 'resize' ? 'resize' : 'move',
+      pointerId: event.pointerId,
+      startRect: currentRect,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  };
+
+  const handleStagePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const interaction = interactionRef.current;
+    if (!interaction || interaction.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (interaction.mode === 'move') {
+      commitCropRect({
+        ...interaction.startRect,
+        left: interaction.startRect.left + (event.clientX - interaction.startX),
+        top: interaction.startRect.top + (event.clientY - interaction.startY),
+      });
+      return;
+    }
+
+    const aspectRatio = interaction.startRect.width / interaction.startRect.height;
+    const minCropSize = getMinCropSize(aspectRatio);
+    const widthByX = interaction.startRect.width + (event.clientX - interaction.startX);
+    const widthByY = interaction.startRect.width + (event.clientY - interaction.startY) * aspectRatio;
+    const proposedWidth = Math.max(widthByX, widthByY);
+    const maxWidthFromBounds = Math.min(
+      interaction.imageRect.left + interaction.imageRect.width - interaction.startRect.left,
+      (interaction.imageRect.top + interaction.imageRect.height - interaction.startRect.top) * aspectRatio,
+      interaction.maxCropRect.width,
+    );
+    const nextWidth = clampNumber(proposedWidth, minCropSize.width, maxWidthFromBounds);
+
+    commitCropRect({
+      left: interaction.startRect.left,
+      top: interaction.startRect.top,
+      width: nextWidth,
+      height: nextWidth / aspectRatio,
+    });
+  };
+
+  return (
+    <div className="background-device-panel stack-gap-md">
+      <div className="content-head">
+        <div>
+          <strong>{deviceLabel}</strong>
+          <p className="content-meta">只影响{deviceLabel}访问时的背景图。</p>
+        </div>
+        <div className="inline-actions wrap-mobile">
+          <button className="button secondary" disabled={!settings.backgroundUrl || disabled} onClick={onEdit} type="button">
+            编辑
+          </button>
+          <button className="button ghost" disabled={!settings.backgroundUrl || disabled} onClick={onRemove} type="button">
+            去掉背景图片
+          </button>
+        </div>
+      </div>
+
+      <label>
+        <span>{label} URL</span>
+        <input
+          value={settings.backgroundUrl}
+          onChange={(event) => {
+            onUpdate('backgroundUrl', event.target.value);
+            if (event.target.value.trim()) {
+              onEdit();
+            }
+          }}
+          onFocus={settings.backgroundUrl ? undefined : onEdit}
+          placeholder="https://example.com/background.jpg"
+        />
+      </label>
+
+      {settings.backgroundUrl ? (
+        <div className={editing ? 'background-crop-editor editing' : 'background-crop-editor'}>
+          <div className="content-meta">
+            当前裁剪比例 {cropRatioLabel}。{editing ? '拖动选框移动保留区域，拖右下角圆点可缩放，选框比例会固定。' : '点击编辑后可重新裁剪。'}
+          </div>
+          <div
+            className={`background-crop-stage ${device}`}
+            onPointerCancel={stopInteraction}
+            onPointerDown={handleStagePointerDown}
+            onPointerMove={handleStagePointerMove}
+            onPointerUp={stopInteraction}
+            ref={stageRef}
+            role="presentation"
+            style={{ '--preview-bg-overlay': settings.crop.overlayOpacity } as CSSProperties}
+          >
+            <div
+              className="background-crop-image-frame"
+              style={{
+                left: `${imageRect.left}px`,
+                top: `${imageRect.top}px`,
+                width: `${imageRect.width}px`,
+                height: `${imageRect.height}px`,
+                opacity: settings.crop.backgroundOpacity ?? 1,
+              }}
+            >
+              <img
+                alt=""
+                className="background-crop-image"
+                draggable={false}
+                onLoad={(event) =>
+                  setImageSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }
+                src={settings.backgroundUrl}
+              />
+            </div>
+            <span className="background-crop-grid" />
+            {cropRect.width > 0 && cropRect.height > 0 ? (
+              <div
+                className="background-crop-selection"
+                data-crop-action="move"
+                style={{
+                  left: `${cropRect.left}px`,
+                  top: `${cropRect.top}px`,
+                  width: `${cropRect.width}px`,
+                  height: `${cropRect.height}px`,
+                }}
+              >
+                <span className="background-crop-selection-badge">{cropRatioLabel}</span>
+                {editing ? <span className="background-crop-selection-handle" data-crop-action="resize" /> : null}
+              </div>
+            ) : null}
+            <span className="background-crop-hint">{editing ? '拖动选框或右下角圆点' : '点击编辑后可重新裁剪'}</span>
+          </div>
+
+          {editing ? (
+            <div className="background-crop-controls">
+              <label>
+                <span>裁剪缩放 {settings.crop.scale}%</span>
+                <input
+                  type="range"
+                  min={100}
+                  max={240}
+                  value={settings.crop.scale}
+                  onChange={(event) => onUpdate('scale', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>图片透明度 {Math.round((settings.crop.backgroundOpacity ?? 1) * 100)}%</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={settings.crop.backgroundOpacity ?? 1}
+                  onChange={(event) => onUpdate('backgroundOpacity', event.target.value)}
+                />
+              </label>
+              <label>
+                <span>遮罩强度 {Math.round(settings.crop.overlayOpacity * 100)}%</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={0.9}
+                  step={0.05}
+                  value={settings.crop.overlayOpacity}
+                  onChange={(event) => onUpdate('overlayOpacity', event.target.value)}
+                />
+              </label>
+              <button className="button primary" disabled={disabled} onClick={onDone} type="button">
+                完成调节
+              </button>
+            </div>
+          ) : null}
+
+          <div className="content-meta">
+            {theme === 'light' ? '日间' : '夜间'} · {device === 'desktop' ? '电脑端' : '手机端'} · 当前裁剪比例 {cropRatioLabel} · 裁剪中心 {settings.crop.positionX}% / {settings.crop.positionY}%
+          </div>
+        </div>
+      ) : (
+        <div className="background-crop-empty">填入图床 URL 后，可直接在这里裁剪画面。</div>
+      )}
+    </div>
+  );
+}
+
+type AdminPanel = 'review' | 'repo' | 'auditLogs' | 'delete' | 'backup' | 'appearance' | 'tags' | 'duplicates' | 'moveCategory';
+type AuditLogCategory = 'plays' | 'repos';
+type ThemeMode = 'light' | 'dark';
+type BackgroundDeviceMode = 'desktop' | 'mobile';
+type BackgroundEditableField = 'backgroundUrl' | 'positionX' | 'positionY' | 'scale' | 'backgroundOpacity' | 'overlayOpacity';
+
+type BackgroundEditorProps = {
+  theme: ThemeMode;
+  device: BackgroundDeviceMode;
+  label: string;
+  deviceLabel: string;
+  settings: SiteSettings[ThemeMode][BackgroundDeviceMode];
+  editing: boolean;
+  disabled: boolean;
+  onEdit: () => void;
+  onDone: () => void;
+  onRemove: () => void;
+  onUpdate: (field: BackgroundEditableField, value: string) => void;
+};
+
+type SubmissionDiffItem = {
+  label: string;
+  changed: boolean;
+  before: string;
+  after: string;
+};
+
+type BulkReviewProgress = {
+  completed: number;
+  total: number;
+  label: string;
+};
+
+type DeleteProgress = {
+  completed: number;
+  total: number;
+  label: string;
+};
+
+type BulkReviewTaskStatus = 'running' | 'paused' | 'stopping';
+
+type BulkReviewTask = {
+  label: string;
+  note: string;
+  pendingIds: string[];
+  skippedIds: string[];
+  status: BulkReviewTaskStatus;
+  total: number;
+  updatedIds: string[];
+};
+
+type DuplicateScanProgressState = DuplicateScanProgress & {
+  scopeLabel: string;
+};
+
+const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
+  { label: '审核', value: 'review' },
+  { label: 'repo', value: 'repo' },
+  { label: '审核记录', value: 'auditLogs' },
+  { label: '删除', value: 'delete' },
+  { label: '移动分类', value: 'moveCategory' },
+  { label: '备份', value: 'backup' },
+  { label: '背景', value: 'appearance' },
+  { label: '标签', value: 'tags' },
+  { label: '重复', value: 'duplicates' },
+];
+
+const auditLogTabs: Array<{ label: string; value: AuditLogCategory }> = [
+  { label: '小剧场', value: 'plays' },
+  { label: 'repo', value: 'repos' },
+];
+
+const formatAuditLogTime = (value: string) => new Date(value).toLocaleString('zh-CN');
+
+const reorderTagsInMemory = (items: Tag[], sourceId: string, targetId: string) => {
+  if (sourceId === targetId) {
+    return items;
+  }
+
+  const fromIndex = items.findIndex((item) => item.id === sourceId);
+  const toIndex = items.findIndex((item) => item.id === targetId);
+  if (fromIndex === -1 || toIndex === -1) {
+    return items;
+  }
+
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems.map((item, index) => ({ ...item, sortOrder: index }));
+};
+
+const isTouchLikePointer = (pointerType: string) => pointerType === 'touch' || pointerType === 'pen';
+
+const formatReviewResultMessage = (label: string, count: number) => `${label} ${count} 篇小剧场`;
+
+const notifyPlaysUpdate = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(new Event(PLAYS_UPDATED_EVENT));
+};
+
+const matchesPlayKeyword = (play: Play, normalizedKeyword: string) =>
+  [play.title, play.summary, play.authorName, play.content, play.category]
+    .join(' ')
+    .toLowerCase()
+    .includes(normalizedKeyword);
+
+export function AdminReviewPage() {
+  const navigate = useNavigate();
+  const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useAdminUpdateNotifier();
+  const [session, setSession] = useState<AdminSession | null>(null);
+  const [plays, setPlays] = useState<Play[]>([]);
+  const [allPlays, setAllPlays] = useState<Play[]>([]);
+  const [hasLoadedAllPlays, setHasLoadedAllPlays] = useState(false);
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [allRepos, setAllRepos] = useState<Repo[]>([]);
+  const [hasLoadedAllRepos, setHasLoadedAllRepos] = useState(false);
+  const [selectedRepoStatus, setSelectedRepoStatus] = useState<RepoStatus | undefined>('pending');
+  const [repoReviewNote, setRepoReviewNote] = useState('');
+  const [repoBusyAction, setRepoBusyAction] = useState<RepoReviewAction | 'delete' | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
+  const [selectedPlayId, setSelectedPlayId] = useState('');
+  const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
+  const [allPlayReviewLogs, setAllPlayReviewLogs] = useState<ReviewLog[]>([]);
+  const [allRepoAuditLogs, setAllRepoAuditLogs] = useState<RepoAuditLog[]>([]);
+  const [selectedAuditLogCategory, setSelectedAuditLogCategory] = useState<AuditLogCategory>('plays');
+  const [isMobileAuditLogsExpanded, setIsMobileAuditLogsExpanded] = useState(false);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewAuthorName, setReviewAuthorName] = useState('');
+  const [reviewCategory, setReviewCategory] = useState('');
+  const [reviewSummary, setReviewSummary] = useState('');
+  const [reviewContent, setReviewContent] = useState('');
+  const [reviewNote, setReviewNote] = useState('');
+  const reviewContentRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const ADMIN_VIEW_MODE_KEY = 'mini-theater:admin-review-view-mode';
+  const readAdminViewMode = (): 'preview' | 'edit' | 'both' => {
+    if (typeof window === 'undefined') {
+      return 'both';
+    }
+    const saved = window.localStorage.getItem(ADMIN_VIEW_MODE_KEY);
+    return saved === 'preview' || saved === 'edit' || saved === 'both' ? saved : 'both';
+  };
+  const [adminViewMode, setAdminViewModeState] = useState<'preview' | 'edit' | 'both'>(readAdminViewMode);
+  const setAdminViewMode = (next: 'preview' | 'edit' | 'both') => {
+    setAdminViewModeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ADMIN_VIEW_MODE_KEY, next);
+    }
+  };
+
+  const ADMIN_PAGE_SIZE_KEY = 'mini-theater:admin-review-page-size';
+  const ADMIN_CURRENT_PAGE_KEY = 'mini-theater:admin-review-current-page';
+  const DEFAULT_ADMIN_PAGE_SIZE = 20;
+  const MIN_ADMIN_PAGE_SIZE = 1;
+  const MAX_ADMIN_PAGE_SIZE = 200;
+  const clampAdminPageSize = (value: number) =>
+    Math.min(MAX_ADMIN_PAGE_SIZE, Math.max(MIN_ADMIN_PAGE_SIZE, Math.trunc(value)));
+  const readAdminPageSize = (): number => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_ADMIN_PAGE_SIZE;
+    }
+    const raw = Number(window.localStorage.getItem(ADMIN_PAGE_SIZE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? clampAdminPageSize(raw) : DEFAULT_ADMIN_PAGE_SIZE;
+  };
+  const readAdminCurrentPage = (): number => {
+    if (typeof window === 'undefined') {
+      return 1;
+    }
+    const raw = Number(window.localStorage.getItem(ADMIN_CURRENT_PAGE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 1;
+  };
+  const [adminPageSize, setAdminPageSizeState] = useState(() => readAdminPageSize());
+  const [adminPageSizeInput, setAdminPageSizeInput] = useState(() => String(readAdminPageSize()));
+  const [adminCurrentPage, setAdminCurrentPageState] = useState(() => readAdminCurrentPage());
+  const [adminPageInput, setAdminPageInput] = useState(() => String(readAdminCurrentPage()));
+  const setAdminPageSize = (next: number) => {
+    const clamped = clampAdminPageSize(next);
+    setAdminPageSizeState(clamped);
+    setAdminPageSizeInput(String(clamped));
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ADMIN_PAGE_SIZE_KEY, String(clamped));
+    }
+  };
+  const setAdminCurrentPage = (next: number) => {
+    const safe = Math.max(1, Math.trunc(next));
+    setAdminCurrentPageState(safe);
+    setAdminPageInput(String(safe));
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ADMIN_CURRENT_PAGE_KEY, String(safe));
+    }
+  };
+
+  const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const [tagDraft, setTagDraft] = useState('');
+  const [editingTagId, setEditingTagId] = useState('');
+  const [editingTagName, setEditingTagName] = useState('');
+  const [tagMessage, setTagMessage] = useState('');
+  const [tagMessageTone, setTagMessageTone] = useState<'success' | 'error'>('success');
+  const [tagSaving, setTagSaving] = useState(false);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
+  const [appearanceMessage, setAppearanceMessage] = useState('');
+  const [appearanceMessageTone, setAppearanceMessageTone] = useState<'success' | 'error'>('success');
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [editingBackgroundKey, setEditingBackgroundKey] = useState('');
+  const [activePanel, setActivePanel] = useState<AdminPanel>('review');
+  const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState>(() => getDuplicateReviewState());
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
+  const [duplicateScanProgress, setDuplicateScanProgress] = useState<DuplicateScanProgressState | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkTask, setBulkTask] = useState<BulkReviewTask | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<BulkReviewProgress | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<DeleteProgress | null>(null);
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [feedbackScope, setFeedbackScope] = useState<'bulk' | 'review' | 'delete' | null>(null);
+  const [reviewBusyAction, setReviewBusyAction] = useState<ReviewAction | 'delete' | 'save' | null>(null);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+  const [bulkAuthorName, setBulkAuthorName] = useState('');
+  const [bulkSelectCountInput, setBulkSelectCountInput] = useState('');
+  const [isBulkApproveCollapsed, setIsBulkApproveCollapsed] = useState(false);
+  const [deleteSelectedIds, setDeleteSelectedIds] = useState<string[]>([]);
+  const [deleteAuthorName, setDeleteAuthorName] = useState('');
+  const [deleteSelectCountInput, setDeleteSelectCountInput] = useState('');
+  const [isTagSorting, setIsTagSorting] = useState(false);
+  const [tagSortDraft, setTagSortDraft] = useState<Tag[]>([]);
+  const [tagSortSnapshot, setTagSortSnapshot] = useState<Tag[]>([]);
+  const [draggingTagId, setDraggingTagId] = useState('');
+  const [isMobileReviewViewport, setIsMobileReviewViewport] = useState(false);
+  const [isMobilePendingExpanded, setIsMobilePendingExpanded] = useState(false);
+  const [showJumpButton, setShowJumpButton] = useState(true);
+  const [moveCategoryBusy, setMoveCategoryBusy] = useState(false);
+  const [moveCategoryMessage, setMoveCategoryMessage] = useState('');
+  const [moveCategoryError, setMoveCategoryError] = useState('');
+  const [moveSourceCategories, setMoveSourceCategories] = useState<string[]>([]);
+  const [moveTargetCategory, setMoveTargetCategory] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
+  const [backupMessageTone, setBackupMessageTone] = useState<'success' | 'error'>('success');
+  const [backupImportName, setBackupImportName] = useState('');
+  const [backupImportPlays, setBackupImportPlays] = useState<Play[]>([]);
+  const [backupImportCounts, setBackupImportCounts] = useState<Record<PlayStatus, number> | null>(null);
+  const [mergedBackupIncludeAttachedMeta, setMergedBackupIncludeAttachedMeta] = useState(true);
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
+  const playListLoadRequestRef = useRef(0);
+  const playTotalsLoadRequestRef = useRef(0);
+  const repoListLoadRequestRef = useRef(0);
+  const repoTotalsLoadRequestRef = useRef(0);
+
+  const load = async (status = selectedStatus, options?: { silent?: boolean }) => {
+    const requestId = ++playListLoadRequestRef.current;
+    if (!options?.silent) {
+      setLoading(true);
+    }
+    setError('');
+
+    try {
+      const items = await playApi.getAdminPlays(status);
+      if (requestId !== playListLoadRequestRef.current) {
+        return { items: [] as Play[], nextSelectedId: '' };
+      }
+
+      setPlays(items);
+      const nextSelectedId =
+        selectedPlayId && items.some((item) => item.id === selectedPlayId) ? selectedPlayId : items[0]?.id ?? '';
+      setSelectedPlayId(nextSelectedId);
+      return { items, nextSelectedId };
+    } catch (reason) {
+      if (requestId !== playListLoadRequestRef.current) {
+        return { items: [] as Play[], nextSelectedId: '' };
+      }
+
+      setError(reason instanceof Error ? reason.message : '加载审核数据失败');
+      return { items: [] as Play[], nextSelectedId: '' };
+    } finally {
+      if (!options?.silent && requestId === playListLoadRequestRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const loadAllPlays = async () => {
+    const requestId = ++playTotalsLoadRequestRef.current;
+    try {
+      const items = await playApi.getAdminPlays();
+      if (requestId !== playTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllPlays(items);
+      setHasLoadedAllPlays(true);
+    } catch {
+      if (requestId !== playTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllPlays([]);
+    }
+  };
+
+  const loadRepos = async (status = selectedRepoStatus) => {
+    const requestId = ++repoListLoadRequestRef.current;
+    try {
+      const items = await playApi.getAdminRepos(status);
+      if (requestId !== repoListLoadRequestRef.current) {
+        return;
+      }
+
+      setRepos(items);
+    } catch (reason) {
+      if (requestId !== repoListLoadRequestRef.current) {
+        return;
+      }
+
+      setError(reason instanceof Error ? reason.message : 'repo 审核数据加载失败');
+      setRepos([]);
+    }
+  };
+
+  const loadAllRepos = async () => {
+    const requestId = ++repoTotalsLoadRequestRef.current;
+    try {
+      const items = await playApi.getAdminRepos();
+      if (requestId !== repoTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllRepos(items);
+      setHasLoadedAllRepos(true);
+    } catch {
+      if (requestId !== repoTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllRepos([]);
+    }
+  };
+
+  const loadTags = async () => {
+    try {
+      const items = await playApi.getAdminTags();
+      setTags(items);
+      if (!isTagSorting) {
+        setTagSortDraft(items);
+      }
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '标签加载失败');
+    }
+  };
+
+  const loadReviewLogs = async (playId: string) => {
+    try {
+      const logs = await playApi.getReviewLogs(playId);
+      setReviewLogs(logs);
+    } catch {
+      setReviewLogs([]);
+    }
+  };
+
+  const loadAllAuditLogs = async () => {
+    setAuditLogsLoading(true);
+    try {
+      const [playLogs, repoLogs] = await Promise.all([playApi.getAllPlayReviewLogs(), playApi.getAllRepoAuditLogs()]);
+      setAllPlayReviewLogs(playLogs);
+      setAllRepoAuditLogs(repoLogs);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '审核记录加载失败');
+      setAllPlayReviewLogs([]);
+      setAllRepoAuditLogs([]);
+    } finally {
+      setAuditLogsLoading(false);
+    }
+  };
+
+  const loadSiteSettings = async () => {
+    try {
+      const settings = await playApi.getAdminSiteSettings();
+      setSiteSettings(settings);
+    } catch (reason) {
+      setAppearanceMessageTone('error');
+      setAppearanceMessage(reason instanceof Error ? reason.message : '站点外观配置加载失败');
+    }
+  };
+
+  useEffect(() => {
+    playApi.getAdminSession().then((foundSession) => {
+      setSession(foundSession);
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const syncViewport = () => {
+      setIsMobileReviewViewport(mediaQuery.matches);
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener('change', syncViewport);
+
+    return () => {
+      mediaQuery.removeEventListener('change', syncViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    void load();
+    void loadRepos();
+    void loadAllPlays();
+    void loadAllRepos();
+    void loadTags();
+    void loadSiteSettings();
+  }, [session, selectedStatus, selectedRepoStatus]);
+
+  useEffect(() => {
+    if (!session || activePanel !== 'auditLogs') {
+      return;
+    }
+
+    void loadAllAuditLogs();
+  }, [session, activePanel]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+
+    const handlePlayRefresh = () => {
+      void load(selectedStatus, { silent: true });
+      void loadAllPlays();
+      void loadRepos(selectedRepoStatus);
+      void loadAllRepos();
+      if (selectedPlayId) {
+        void loadReviewLogs(selectedPlayId);
+      }
+      if (activePanel === 'auditLogs') {
+        void loadAllAuditLogs();
+      }
+    };
+
+    const handleTagRefresh = () => {
+      void loadTags();
+    };
+
+    const handleFocusRefresh = () => {
+      void load(selectedStatus, { silent: true });
+      void loadAllPlays();
+      void loadRepos(selectedRepoStatus);
+      void loadAllRepos();
+      void loadTags();
+      void loadSiteSettings();
+      if (selectedPlayId) {
+        void loadReviewLogs(selectedPlayId);
+      }
+      if (activePanel === 'auditLogs') {
+        void loadAllAuditLogs();
+      }
+    };
+
+    const handleVisibilityRefresh = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+
+      handleFocusRefresh();
+    };
+
+    window.addEventListener(PLAYS_UPDATED_EVENT, handlePlayRefresh);
+    window.addEventListener(TAGS_UPDATED_EVENT, handleTagRefresh);
+    window.addEventListener('focus', handleFocusRefresh);
+    window.addEventListener('pageshow', handleVisibilityRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      window.removeEventListener(PLAYS_UPDATED_EVENT, handlePlayRefresh);
+      window.removeEventListener(TAGS_UPDATED_EVENT, handleTagRefresh);
+      window.removeEventListener('focus', handleFocusRefresh);
+      window.removeEventListener('pageshow', handleVisibilityRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [session, selectedStatus, selectedRepoStatus, selectedPlayId, activePanel]);
+
+  useEffect(() => {
+    bulkTaskRef.current = bulkTask;
+  }, [bulkTask]);
+
+  useEffect(() => () => {
+    duplicateScanRunRef.current += 1;
+  }, []);
+
+  const playMetricsSource = hasLoadedAllPlays ? allPlays : plays;
+  const repoMetricsSource = hasLoadedAllRepos ? allRepos : repos;
+  const pendingPlayCount = useMemo(
+    () => (hasLoadedAllPlays ? allPlays.filter((play) => play.status === 'pending').length : selectedStatus === 'pending' ? plays.length : 0),
+    [allPlays, hasLoadedAllPlays, plays.length, selectedStatus],
+  );
+  const pendingRepoCount = useMemo(
+    () => (hasLoadedAllRepos ? allRepos.filter((repo) => repo.status === 'pending').length : selectedRepoStatus === 'pending' ? repos.length : 0),
+    [allRepos, hasLoadedAllRepos, repos.length, selectedRepoStatus],
+  );
+  const filteredPlays = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    if (!normalizedKeyword) {
+      return plays;
+    }
+
+    return plays.filter((play) => matchesPlayKeyword(play, normalizedKeyword));
+  }, [keyword, plays]);
+  const currentPlayListCount = useMemo(() => {
+    if (!hasLoadedAllPlays) {
+      return filteredPlays.length;
+    }
+
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    const statusMatchedPlays = selectedStatus
+      ? playMetricsSource.filter((play) => play.status === selectedStatus)
+      : playMetricsSource;
+
+    if (!normalizedKeyword) {
+      return statusMatchedPlays.length;
+    }
+
+    return statusMatchedPlays.filter((play) => matchesPlayKeyword(play, normalizedKeyword)).length;
+  }, [filteredPlays.length, hasLoadedAllPlays, keyword, playMetricsSource, selectedStatus]);
+  const currentRepoListCount = useMemo(() => {
+    if (!hasLoadedAllRepos) {
+      return repos.length;
+    }
+
+    return selectedRepoStatus
+      ? repoMetricsSource.filter((repo) => repo.status === selectedRepoStatus).length
+      : repoMetricsSource.length;
+  }, [hasLoadedAllRepos, repoMetricsSource, repos.length, selectedRepoStatus]);
+
+  const pendingVisiblePlays = useMemo(() => filteredPlays.filter((play) => play.status === 'pending'), [filteredPlays]);
+  const adminTotalPages = Math.max(1, Math.ceil(filteredPlays.length / adminPageSize));
+  const adminPagedPlays = useMemo(() => {
+    const startIndex = (adminCurrentPage - 1) * adminPageSize;
+    return filteredPlays.slice(startIndex, startIndex + adminPageSize);
+  }, [adminCurrentPage, adminPageSize, filteredPlays]);
+  const shouldCollapseMobileReviewList = isMobileReviewViewport && adminPagedPlays.length > MOBILE_REVIEW_LIST_PREVIEW_COUNT;
+  const reviewListPlays = shouldCollapseMobileReviewList && !isMobilePendingExpanded
+    ? adminPagedPlays.slice(0, MOBILE_REVIEW_LIST_PREVIEW_COUNT)
+    : adminPagedPlays;
+  const mobileReviewListLabel = selectedStatus ? statusLabelMap[selectedStatus] : '全部';
+  const activeAuditLogs = useMemo(
+    () => (selectedAuditLogCategory === 'plays' ? allPlayReviewLogs : allRepoAuditLogs),
+    [allPlayReviewLogs, allRepoAuditLogs, selectedAuditLogCategory],
+  );
+  const shouldCollapseMobileAuditLogs =
+    isMobileReviewViewport && activeAuditLogs.length > MOBILE_AUDIT_LOG_PREVIEW_COUNT;
+  const visibleAuditLogs =
+    shouldCollapseMobileAuditLogs && !isMobileAuditLogsExpanded
+      ? activeAuditLogs.slice(0, MOBILE_AUDIT_LOG_PREVIEW_COUNT)
+      : activeAuditLogs;
+
+  const shouldHideMobileReviewWorkspace = isMobileReviewViewport && activePanel !== 'review';
+  const shouldShowReviewSidebarContent = !shouldHideMobileReviewWorkspace;
+
+  const pendingVisibleIds = useMemo(() => pendingVisiblePlays.map((play) => play.id), [pendingVisiblePlays]);
+  const deleteVisibleIds = useMemo(() => filteredPlays.map((play) => play.id), [filteredPlays]);
+
+  const pendingAuthorOptions = useMemo(
+    () => Array.from(new Set(pendingVisiblePlays.map((play) => play.authorName).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    [pendingVisiblePlays],
+  );
+  const deleteAuthorOptions = useMemo(
+    () => Array.from(new Set(filteredPlays.map((play) => play.authorName).filter(Boolean))).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    [filteredPlays],
+  );
+
+  const selectedAuthorPendingIds = useMemo(
+    () => pendingVisiblePlays.filter((play) => play.authorName === bulkAuthorName).map((play) => play.id),
+    [bulkAuthorName, pendingVisiblePlays],
+  );
+  const selectedAuthorDeleteIds = useMemo(
+    () => filteredPlays.filter((play) => play.authorName === deleteAuthorName).map((play) => play.id),
+    [deleteAuthorName, filteredPlays],
+  );
+
+  const parsedBulkSelectCount = Number.parseInt(bulkSelectCountInput.trim(), 10);
+  const bulkSelectCount = Number.isFinite(parsedBulkSelectCount) ? Math.max(0, parsedBulkSelectCount) : 0;
+  const parsedDeleteSelectCount = Number.parseInt(deleteSelectCountInput.trim(), 10);
+  const deleteSelectCount = Number.isFinite(parsedDeleteSelectCount) ? Math.max(0, parsedDeleteSelectCount) : 0;
+  const bulkTaskCompletedCount = bulkTask ? bulkTask.updatedIds.length + bulkTask.skippedIds.length : 0;
+  const bulkTaskStatus = bulkTask?.status ?? null;
+  const bulkTaskRef = useRef<BulkReviewTask | null>(null);
+  const duplicateScanRunRef = useRef(0);
+
+  const bulkSelectedIdSet = useMemo(() => new Set(bulkSelectedIds), [bulkSelectedIds]);
+  const deleteSelectedIdSet = useMemo(() => new Set(deleteSelectedIds), [deleteSelectedIds]);
+  const duplicateApprovedPlays = useMemo(() => allPlays.filter((play) => play.status === 'approved'), [allPlays]);
+  const moveCategoryStats = useMemo(() => {
+    const counts = new Map<string, number>();
+    allPlays.forEach((play) => {
+      const name = play.category?.trim() || DEFAULT_CATEGORY;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'));
+  }, [allPlays]);
+  const moveCategoryTargetIds = useMemo(() => {
+    if (moveSourceCategories.length === 0) {
+      return [];
+    }
+
+    return allPlays
+      .filter((play) => moveSourceCategories.includes(play.category?.trim() || DEFAULT_CATEGORY))
+      .map((play) => play.id);
+  }, [allPlays, moveSourceCategories]);
+  const duplicateScanSourcePlays = useMemo(
+    () => (duplicateReview.scanScope === 'approved' ? duplicateApprovedPlays : allPlays),
+    [allPlays, duplicateApprovedPlays, duplicateReview.scanScope],
+  );
+  const duplicateScanScopeLabel = duplicateReview.scanScope === 'approved' ? '已通过' : '整个库';
+
+  const reviewMutationBusy = bulkBusy || bulkTask !== null || deleteBusy || reviewBusyAction !== null;
+
+  const selectedPlay = useMemo(
+    () => filteredPlays.find((play) => play.id === selectedPlayId) ?? null,
+    [filteredPlays, selectedPlayId],
+  );
+
+  // 在当前过滤后的全集里取上一篇/下一篇 id；不在当前页时跳到对应页
+  const adminAdjacentPlay = (offset: -1 | 1) => {
+    if (!selectedPlayId) {
+      return '';
+    }
+
+    const currentIndex = filteredPlays.findIndex((play) => play.id === selectedPlayId);
+    if (currentIndex < 0) {
+      return '';
+    }
+
+    const targetIndex = currentIndex + offset;
+    if (targetIndex < 0 || targetIndex >= filteredPlays.length) {
+      return '';
+    }
+
+    return filteredPlays[targetIndex].id;
+  };
+  const adminPrevPlayId = useMemo(() => adminAdjacentPlay(-1), [filteredPlays, selectedPlayId]);
+  const adminNextPlayId = useMemo(() => adminAdjacentPlay(1), [filteredPlays, selectedPlayId]);
+
+  const selectAdminPlayById = (playId: string) => {
+    if (!playId) {
+      return;
+    }
+
+    setSelectedPlayId(playId);
+    setSuccessMessage('');
+    setActivePanel('review');
+
+    // 跳到目标所在页
+    const targetIndex = filteredPlays.findIndex((play) => play.id === playId);
+    if (targetIndex >= 0) {
+      const targetPage = Math.floor(targetIndex / adminPageSize) + 1;
+      if (targetPage !== adminCurrentPage) {
+        setAdminCurrentPage(targetPage);
+      }
+    }
+  };
+
+  const previousSubmission = useMemo(() => {
+    if (!selectedPlay) {
+      return null;
+    }
+
+    return [...allPlays]
+      .filter(
+        (play) =>
+          play.id !== selectedPlay.id &&
+          play.authorName === selectedPlay.authorName &&
+          play.title === selectedPlay.title &&
+          play.createdAt < selectedPlay.createdAt,
+      )
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
+  }, [allPlays, selectedPlay]);
+
+  const submissionDiffItems = useMemo<SubmissionDiffItem[]>(() => {
+    if (!selectedPlay || !previousSubmission) {
+      return [];
+    }
+
+    return [
+      {
+        label: '分类',
+        changed: (previousSubmission.category || DEFAULT_CATEGORY) !== (selectedPlay.category || DEFAULT_CATEGORY),
+        before: previousSubmission.category || DEFAULT_CATEGORY,
+        after: selectedPlay.category || DEFAULT_CATEGORY,
+      },
+      {
+        label: '简介',
+        changed: previousSubmission.summary.trim() !== selectedPlay.summary.trim(),
+        before: previousSubmission.summary,
+        after: selectedPlay.summary,
+      },
+      {
+        label: '正文',
+        changed: previousSubmission.content.trim() !== selectedPlay.content.trim(),
+        before: previousSubmission.content,
+        after: selectedPlay.content,
+      },
+    ];
+  }, [previousSubmission, selectedPlay]);
+
+  const metrics = useMemo(() => {
+    const total = hasLoadedAllPlays ? allPlays.length : playMetricsSource.length;
+    const approved = hasLoadedAllPlays
+      ? allPlays.filter((play) => play.status === 'approved').length
+      : selectedStatus === 'approved'
+        ? plays.length
+        : 0;
+
+    return [
+      { label: '当前列表', value: `${currentPlayListCount} 篇` },
+      { label: '待审核', value: `${pendingPlayCount} 篇` },
+      { label: '已通过', value: `${approved} 篇` },
+      { label: '标签库', value: `${tags.length} 个` },
+      { label: '总内容量', value: `${total} 篇` },
+    ];
+  }, [allPlays, currentPlayListCount, hasLoadedAllPlays, pendingPlayCount, playMetricsSource.length, plays.length, selectedStatus, tags.length]);
+
+  const repoMetrics = useMemo(() => {
+    const total = hasLoadedAllRepos ? allRepos.length : repoMetricsSource.length;
+    const approved = hasLoadedAllRepos
+      ? allRepos.filter((repo) => repo.status === 'approved').length
+      : selectedRepoStatus === 'approved'
+        ? repos.length
+        : 0;
+
+    return [
+      { label: '当前列表', value: `${currentRepoListCount} 条` },
+      { label: '待审核', value: `${pendingRepoCount} 条` },
+      { label: '已通过', value: `${approved} 条` },
+      { label: '总内容量', value: `${total} 条` },
+    ];
+  }, [allRepos, currentRepoListCount, hasLoadedAllRepos, pendingRepoCount, repoMetricsSource.length, repos.length, selectedRepoStatus]);
+
+  const backupCounts = useMemo(() => getBackupStatusCounts(allPlays), [allPlays]);
+  const backupImportTotal = backupImportPlays.length;
+
+  const displayTags = isTagSorting ? tagSortDraft : tags;
+
+  useEffect(() => {
+    if (!selectedPlay) {
+      setReviewLogs([]);
+      return;
+    }
+
+    void loadReviewLogs(selectedPlay.id);
+  }, [selectedPlay]);
+
+  useEffect(() => {
+    if (!selectedPlay) {
+      setReviewTitle('');
+      setReviewAuthorName('');
+      setReviewCategory('');
+      setReviewSummary('');
+      setReviewContent('');
+      return;
+    }
+
+    setReviewTitle(selectedPlay.title);
+    setReviewAuthorName(selectedPlay.authorName);
+    setReviewCategory(selectedPlay.category || DEFAULT_CATEGORY);
+    setReviewSummary(selectedPlay.summary);
+    setReviewContent(selectedPlay.content);
+  }, [selectedPlay]);
+
+  useEffect(() => {
+    const element = reviewContentRef.current;
+    if (!element) {
+      return;
+    }
+
+    const resize = () => {
+      element.style.height = 'auto';
+      element.style.height = `${element.scrollHeight}px`;
+    };
+    resize();
+    // textarea 刚挂载时 scrollHeight 可能尚未稳定，下一帧再校准一次
+    const raf = requestAnimationFrame(resize);
+    return () => cancelAnimationFrame(raf);
+  }, [reviewContent, adminViewMode]);
+
+  useEffect(() => {
+    if (selectedPlay) {
+      return;
+    }
+
+    const fallback = filteredPlays[0]?.id ?? '';
+    if (fallback !== selectedPlayId) {
+      setSelectedPlayId(fallback);
+    }
+  }, [filteredPlays, selectedPlay, selectedPlayId]);
+
+  useEffect(() => {
+    if (!isMobileReviewViewport) {
+      setIsMobilePendingExpanded(false);
+      return;
+    }
+
+    setIsMobilePendingExpanded(false);
+  }, [filteredPlays.length, isMobileReviewViewport, selectedStatus, keyword]);
+
+  useEffect(() => {
+    if (!isMobileReviewViewport || activePanel !== 'auditLogs') {
+      setIsMobileAuditLogsExpanded(false);
+      return;
+    }
+
+    setIsMobileAuditLogsExpanded(false);
+  }, [activePanel, isMobileReviewViewport, selectedAuditLogCategory, allPlayReviewLogs.length, allRepoAuditLogs.length]);
+
+  useEffect(() => {
+    const pendingIdSet = new Set(pendingVisibleIds);
+    setBulkSelectedIds((current) => current.filter((id) => pendingIdSet.has(id)));
+  }, [pendingVisibleIds]);
+
+  useEffect(() => {
+    const visibleIdSet = new Set(deleteVisibleIds);
+    setDeleteSelectedIds((current) => current.filter((id) => visibleIdSet.has(id)));
+  }, [deleteVisibleIds]);
+
+  useEffect(() => {
+    if (bulkAuthorName && !pendingAuthorOptions.includes(bulkAuthorName)) {
+      setBulkAuthorName('');
+    }
+  }, [bulkAuthorName, pendingAuthorOptions]);
+
+  useEffect(() => {
+    if (deleteAuthorName && !deleteAuthorOptions.includes(deleteAuthorName)) {
+      setDeleteAuthorName('');
+    }
+  }, [deleteAuthorName, deleteAuthorOptions]);
+
+  // 列表过滤条件变化导致总页数缩小时，把当前页拉回到最后一页
+  useEffect(() => {
+    if (adminCurrentPage > adminTotalPages) {
+      setAdminCurrentPage(adminTotalPages);
+    }
+  }, [adminCurrentPage, adminTotalPages]);
+
+  // selectedStatus 或 keyword 变化时，列表重置回第一页
+  useEffect(() => {
+    setAdminCurrentPage(1);
+  }, [selectedStatus, keyword]);
+
+  useEffect(() => {
+    if (!successMessage) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setSuccessMessage('');
+    }, SUCCESS_TOAST_DURATION_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [successMessage]);
+
+  const syncSelectedReviewLogs = async (playId = selectedPlayId) => {
+    if (playId) {
+      await loadReviewLogs(playId);
+      return;
+    }
+
+    setReviewLogs([]);
+  };
+
+  const syncPlayStateLocally = useCallback(
+    (updatedPlay: Play | null) => {
+      if (!updatedPlay) {
+        return;
+      }
+
+      setAllPlays((current) => current.map((play) => (play.id === updatedPlay.id ? updatedPlay : play)));
+      setPlays((current) => {
+        const exists = current.some((play) => play.id === updatedPlay.id);
+        const shouldStayInCurrentList = selectedStatus === undefined || updatedPlay.status === selectedStatus;
+
+        if (!exists) {
+          return current;
+        }
+
+        if (!shouldStayInCurrentList) {
+          return current.filter((play) => play.id !== updatedPlay.id);
+        }
+
+        return current.map((play) => (play.id === updatedPlay.id ? updatedPlay : play));
+      });
+    },
+    [selectedStatus],
+  );
+
+  const removePlayStateLocally = useCallback((playId: string) => {
+    setAllPlays((current) => current.filter((play) => play.id !== playId));
+    setPlays((current) => current.filter((play) => play.id !== playId));
+  }, []);
+
+  const markPlaysApprovedLocally = useCallback((playIds: string[]) => {
+    if (playIds.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(playIds);
+    setAllPlays((current) => current.map((play) => (idSet.has(play.id) ? { ...play, status: 'approved' } : play)));
+    setPlays((current) => current.filter((play) => !idSet.has(play.id)));
+  }, []);
+
+  const syncRepoStateLocally = useCallback(
+    (updatedRepo: Repo | null) => {
+      if (!updatedRepo) {
+        return;
+      }
+
+      setAllRepos((current) => current.map((repo) => (repo.id === updatedRepo.id ? updatedRepo : repo)));
+      setRepos((current) => {
+        const exists = current.some((repo) => repo.id === updatedRepo.id);
+        const shouldStayInCurrentList = selectedRepoStatus === undefined || updatedRepo.status === selectedRepoStatus;
+
+        if (!exists) {
+          return current;
+        }
+
+        if (!shouldStayInCurrentList) {
+          return current.filter((repo) => repo.id !== updatedRepo.id);
+        }
+
+        return current.map((repo) => (repo.id === updatedRepo.id ? updatedRepo : repo));
+      });
+    },
+    [selectedRepoStatus],
+  );
+
+  const removeRepoStateLocally = useCallback((repoId: string) => {
+    setAllRepos((current) => current.filter((repo) => repo.id !== repoId));
+    setRepos((current) => current.filter((repo) => repo.id !== repoId));
+  }, []);
+
+  const markReposApprovedLocally = useCallback((repoIds: string[]) => {
+    if (repoIds.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(repoIds);
+    setAllRepos((current) => current.map((repo) => (idSet.has(repo.id) ? { ...repo, status: 'approved' } : repo)));
+    setRepos((current) => current.filter((repo) => !idSet.has(repo.id)));
+  }, []);
+
+  const refreshAdminAfterReviewMutation = async (nextPlayId?: string) => {
+    const { items, nextSelectedId } = await load(selectedStatus, { silent: true });
+    await Promise.all([
+      loadAllPlays(),
+      activePanel === 'auditLogs' ? loadAllAuditLogs() : Promise.resolve(),
+    ]);
+
+    const resolvedPlayId =
+      typeof nextPlayId === 'string'
+        ? items.some((item) => item.id === nextPlayId)
+          ? nextPlayId
+          : nextSelectedId
+        : nextSelectedId;
+
+    setSelectedPlayId(resolvedPlayId);
+    await syncSelectedReviewLogs(resolvedPlayId);
+    notifyPlaysUpdate();
+  };
+
+  const clearBackupImportSelection = useCallback(() => {
+    setBackupImportName('');
+    setBackupImportPlays([]);
+    setBackupImportCounts(null);
+    if (backupFileInputRef.current) {
+      backupFileInputRef.current.value = '';
+    }
+  }, []);
+
+  const handleExportBackup = () => {
+    try {
+      downloadBackupArchive(allPlays, tags);
+      setBackupMessageTone('success');
+      setBackupMessage(`备份已导出，共 ${allPlays.length} 篇内容，附带 ${tags.length} 个标签。`);
+    } catch (reason) {
+      setBackupMessageTone('error');
+      setBackupMessage(reason instanceof Error ? reason.message : '导出备份失败');
+    }
+  };
+
+  const handleExportMergedBackup = () => {
+    try {
+      downloadMergedBackupArchive(allPlays, {
+        includeAttachedMeta: mergedBackupIncludeAttachedMeta,
+      });
+      setBackupMessageTone('success');
+      setBackupMessage(
+        `合并备份已导出，共 ${allPlays.length} 篇内容，按作者和分类分别成组，${mergedBackupIncludeAttachedMeta ? '保留' : '不保留'}附带信息。`,
+      );
+    } catch (reason) {
+      setBackupMessageTone('error');
+      setBackupMessage(reason instanceof Error ? reason.message : '导出合并备份失败');
+    }
+  };
+
+  const handleBackupFileChange = async (event: ReactChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      clearBackupImportSelection();
+      return;
+    }
+
+    setBackupBusy(true);
+    setBackupMessage('');
+
+    try {
+      const archive = await parseBackupArchive(file);
+      const importedPlays = flattenBackupArchive(archive);
+      if (importedPlays.length === 0) {
+        throw new Error('备份压缩包里没有可导入内容');
+      }
+
+      setBackupImportName(file.name);
+      setBackupImportPlays(importedPlays);
+      setBackupImportCounts(getBackupStatusCounts(importedPlays));
+      setBackupMessageTone('success');
+      setBackupMessage(`已识别备份，共 ${importedPlays.length} 篇内容。`);
+    } catch (reason) {
+      clearBackupImportSelection();
+      setBackupMessageTone('error');
+      setBackupMessage(reason instanceof Error ? reason.message : '解析备份压缩包失败');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (backupImportPlays.length === 0) {
+      setBackupMessageTone('error');
+      setBackupMessage('先选择一个可解析的备份压缩包');
+      return;
+    }
+
+    if (!window.confirm(`确认恢复备份吗？这会覆盖当前内容库，共导入 ${backupImportPlays.length} 篇内容。`)) {
+      return;
+    }
+
+    setBackupBusy(true);
+    setBackupMessage('');
+
+    try {
+      const result = await playApi.restoreAdminBackup(backupImportPlays);
+      setBulkSelectedIds([]);
+      setDeleteSelectedIds([]);
+      setReviewNote('');
+      await refreshAdminAfterReviewMutation();
+      clearBackupImportSelection();
+      setBackupMessageTone('success');
+      setBackupMessage(`备份已恢复，共导入 ${result.restoredCount} 篇内容。`);
+    } catch (reason) {
+      setBackupMessageTone('error');
+      setBackupMessage(reason instanceof Error ? reason.message : '恢复备份失败');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const finishBulkReviewTask = useCallback(
+    async (
+      task: BulkReviewTask,
+      options?: {
+        errorMessage?: string;
+        stopped?: boolean;
+      },
+    ) => {
+      const completedCount = task.updatedIds.length + task.skippedIds.length;
+
+      setBulkTask(null);
+      setBulkBusy(false);
+      setBulkProgress({ completed: completedCount, total: task.total, label: task.label });
+      setProcessingMessage('');
+      await refreshAdminAfterReviewMutation();
+
+      if (options?.errorMessage) {
+        setError(`${task.label}已完成 ${completedCount} / ${task.total} 篇，剩余内容审核中断：${options.errorMessage}`);
+        return;
+      }
+
+      if (options?.stopped) {
+        setSuccessMessage(`${task.label}已停止，已完成 ${completedCount} / ${task.total} 篇`);
+        return;
+      }
+
+      setReviewNote('');
+      setSuccessMessage(
+        `${formatReviewResultMessage(actionResultLabelMap.approve, task.updatedIds.length)}${
+          task.skippedIds.length > 0 ? `，跳过 ${task.skippedIds.length} 篇` : ''
+        }`,
+      );
+    },
+    [refreshAdminAfterReviewMutation],
+  );
+
+  useEffect(() => {
+    if (!bulkTask || bulkTask.status !== 'running' || bulkBusy) {
+      return;
+    }
+
+    if (bulkTask.pendingIds.length === 0) {
+      void finishBulkReviewTask(bulkTask);
+      return;
+    }
+
+    const batchIds = bulkTask.pendingIds.slice(0, BULK_REVIEW_BATCH_SIZE);
+    const completedCount = bulkTask.updatedIds.length + bulkTask.skippedIds.length;
+
+    setBulkBusy(true);
+    setBulkProgress({ completed: completedCount, total: bulkTask.total, label: bulkTask.label });
+    setProcessingMessage(`正在处理：已完成 ${completedCount} / ${bulkTask.total}`);
+
+    void playApi
+      .bulkReviewPlays(batchIds, 'approve', bulkTask.note)
+      .then(async (result) => {
+        const latestTask = bulkTaskRef.current;
+        if (!latestTask) {
+          return;
+        }
+
+        const handledIds = Array.from(new Set([...result.updatedIds, ...result.skippedIds]));
+        const nextTask: BulkReviewTask = {
+          ...latestTask,
+          pendingIds: latestTask.pendingIds.filter((id) => !handledIds.includes(id)),
+          skippedIds: [...latestTask.skippedIds, ...result.skippedIds],
+          updatedIds: [...latestTask.updatedIds, ...result.updatedIds],
+        };
+        markPlaysApprovedLocally(result.updatedIds);
+        const nextCompletedCount = nextTask.updatedIds.length + nextTask.skippedIds.length;
+
+        setBulkSelectedIds((current) => current.filter((id) => !result.updatedIds.includes(id)));
+        setBulkProgress({ completed: nextCompletedCount, total: nextTask.total, label: nextTask.label });
+
+        if (latestTask.status === 'stopping') {
+          await finishBulkReviewTask(nextTask, { stopped: true });
+          return;
+        }
+
+        if (latestTask.status === 'paused') {
+          setBulkTask({ ...nextTask, status: 'paused' });
+          setBulkBusy(false);
+          setProcessingMessage(`已暂停，已完成 ${nextCompletedCount} / ${nextTask.total}`);
+          return;
+        }
+
+        if (nextTask.pendingIds.length === 0) {
+          await finishBulkReviewTask(nextTask);
+          return;
+        }
+
+        setBulkTask({ ...nextTask, status: 'running' });
+        setBulkBusy(false);
+      })
+      .catch(async (reason) => {
+        const latestTask = bulkTaskRef.current;
+        if (!latestTask) {
+          return;
+        }
+
+        await finishBulkReviewTask(latestTask, {
+          errorMessage: reason instanceof Error ? reason.message : '批量通过失败',
+        });
+      });
+  }, [bulkBusy, bulkTask, finishBulkReviewTask]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || !draggingTagId) {
+      return;
+    }
+
+    document.body.classList.add('tag-sort-dragging');
+
+    return () => {
+      document.body.classList.remove('tag-sort-dragging');
+    };
+  }, [draggingTagId]);
+
+  if (!loading && !session) {
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  const getNextPendingPlayId = (currentPlayId: string) => {
+    const currentIndex = pendingVisiblePlays.findIndex((play) => play.id === currentPlayId);
+    if (currentIndex === -1) {
+      return pendingVisiblePlays[0]?.id ?? '';
+    }
+
+    return pendingVisiblePlays[currentIndex + 1]?.id ?? pendingVisiblePlays[currentIndex - 1]?.id ?? '';
+  };
+
+  const handleToggleBulkSelection = (playId: string) => {
+    setBulkSelectedIds((current) =>
+      current.includes(playId) ? current.filter((id) => id !== playId) : [...current, playId],
+    );
+  };
+
+  const handleSelectAllPendingVisible = () => {
+    setBulkSelectedIds(pendingVisibleIds);
+  };
+
+  const handleInvertBulkSelection = () => {
+    const pendingIdSet = new Set(pendingVisibleIds);
+    setBulkSelectedIds((current) => {
+      const currentSet = new Set(current.filter((id) => pendingIdSet.has(id)));
+      return pendingVisibleIds.filter((id) => !currentSet.has(id));
+    });
+  };
+
+  const handleClearBulkSelection = () => {
+    setBulkSelectedIds([]);
+  };
+
+  const handleSelectTopPendingVisible = () => {
+    setFeedbackScope('bulk');
+
+    if (bulkSelectCount <= 0) {
+      setError('先输入大于 0 的条数');
+      return;
+    }
+
+    const nextIds = pendingVisibleIds.slice(0, bulkSelectCount);
+    if (nextIds.length === 0) {
+      setError('当前列表没有可选的待审核内容');
+      return;
+    }
+
+    setError('');
+    setBulkSelectedIds(nextIds);
+  };
+
+  const handleToggleDeleteSelection = (playId: string) => {
+    setDeleteSelectedIds((current) =>
+      current.includes(playId) ? current.filter((id) => id !== playId) : [...current, playId],
+    );
+  };
+
+  const handleSelectAllVisibleForDelete = () => {
+    setDeleteSelectedIds(deleteVisibleIds);
+  };
+
+  const handleInvertDeleteSelection = () => {
+    const visibleIdSet = new Set(deleteVisibleIds);
+    setDeleteSelectedIds((current) => {
+      const currentSet = new Set(current.filter((id) => visibleIdSet.has(id)));
+      return deleteVisibleIds.filter((id) => !currentSet.has(id));
+    });
+  };
+
+  const handleClearDeleteSelection = () => {
+    setDeleteSelectedIds([]);
+  };
+
+  const handleSelectTopVisibleForDelete = () => {
+    setFeedbackScope('delete');
+
+    if (deleteSelectCount <= 0) {
+      setError('先输入大于 0 的条数');
+      return;
+    }
+
+    const nextIds = deleteVisibleIds.slice(0, deleteSelectCount);
+    if (nextIds.length === 0) {
+      setError('当前列表没有可删除的内容');
+      return;
+    }
+
+    setError('');
+    setDeleteSelectedIds(nextIds);
+  };
+
+  const handleBatchDelete = async (playIds: string[], label: string) => {
+    const normalizedIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+    if (normalizedIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认删除${label}吗？共 ${normalizedIds.length} 篇。删除后内容和审核记录都会一起清掉。`);
+    if (!confirmed) {
+      return;
+    }
+
+    setFeedbackScope('delete');
+    setDeleteBusy(true);
+    setDeleteProgress({ completed: 0, total: normalizedIds.length, label });
+    setProcessingMessage(`正在删除：已完成 0 / ${normalizedIds.length}`);
+    setError('');
+    setSuccessMessage('');
+
+    const deletedIds: string[] = [];
+    let completed = 0;
+
+    try {
+      for (const playId of normalizedIds) {
+        await playApi.deleteAdminPlay(playId);
+        removePlayStateLocally(playId);
+        deletedIds.push(playId);
+        completed += 1;
+        setDeleteProgress({ completed, total: normalizedIds.length, label });
+        setProcessingMessage(`正在删除：已完成 ${completed} / ${normalizedIds.length}`);
+      }
+
+      setDeleteSelectedIds((current) => current.filter((id) => !deletedIds.includes(id)));
+      await refreshAdminAfterReviewMutation();
+      setProcessingMessage('');
+      setDeleteProgress({ completed: normalizedIds.length, total: normalizedIds.length, label });
+      setSuccessMessage(formatReviewResultMessage('已删除', deletedIds.length));
+    } catch (reason) {
+      setProcessingMessage('');
+      setDeleteProgress({ completed, total: normalizedIds.length, label });
+      setError(
+        `${label}已完成 ${completed} / ${normalizedIds.length} 篇，剩余内容删除中断：${
+          reason instanceof Error ? reason.message : '批量删除失败'
+        }`,
+      );
+      await refreshAdminAfterReviewMutation();
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const handleBulkApprove = async (playIds: string[], label: string) => {
+    const normalizedIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+    if (normalizedIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认一键通过${label}吗？共 ${normalizedIds.length} 篇。`);
+    if (!confirmed) {
+      return;
+    }
+
+    setFeedbackScope('bulk');
+    setBulkProgress({ completed: 0, total: normalizedIds.length, label });
+    setProcessingMessage(`正在处理：已完成 0 / ${normalizedIds.length}`);
+    setError('');
+    setSuccessMessage('');
+    setBulkTask({
+      label,
+      note: reviewNote.trim(),
+      pendingIds: normalizedIds,
+      skippedIds: [],
+      status: 'running',
+      total: normalizedIds.length,
+      updatedIds: [],
+    });
+  };
+
+  const handlePauseBulkApprove = () => {
+    setFeedbackScope('bulk');
+    setBulkTask((current) => (current && current.status === 'running' ? { ...current, status: 'paused' } : current));
+    setProcessingMessage(bulkBusy ? '当前这一小批完成后暂停' : `已暂停，已完成 ${bulkTaskCompletedCount} / ${bulkTask?.total ?? 0}`);
+  };
+
+  const handleContinueBulkApprove = () => {
+    if (!bulkTask || bulkTask.status !== 'paused') {
+      return;
+    }
+
+    setFeedbackScope('bulk');
+    setError('');
+    setProcessingMessage(`继续处理：已完成 ${bulkTaskCompletedCount} / ${bulkTask.total}`);
+    setBulkTask({ ...bulkTask, status: 'running' });
+  };
+
+  const handleStopBulkApprove = async () => {
+    const currentTask = bulkTaskRef.current;
+    if (!currentTask) {
+      return;
+    }
+
+    setFeedbackScope('bulk');
+    if (currentTask.status === 'paused' && !bulkBusy) {
+      await finishBulkReviewTask(currentTask, { stopped: true });
+      return;
+    }
+
+    setBulkTask((task) => (task ? { ...task, status: 'stopping' } : task));
+    setProcessingMessage('正在停止，当前这一小批完成后结束');
+  };
+
+  const handleReviewForPlay = async (
+    play: Play,
+    action: ReviewAction,
+    options?: {
+      title?: string;
+      authorName?: string;
+      category?: string;
+      summary?: string;
+      content?: string;
+      note?: string;
+    },
+  ) => {
+    const currentPlayId = play.id;
+    const nextPendingPlayId = getNextPendingPlayId(currentPlayId);
+    const nextTitle = options?.title ?? play.title;
+    const nextAuthorName = options?.authorName ?? play.authorName;
+    const nextCategory = options?.category ?? play.category ?? DEFAULT_CATEGORY;
+    const nextSummary = options?.summary ?? play.summary;
+    const nextContent = options?.content ?? play.content;
+    const nextNote = options?.note ?? '';
+
+    setFeedbackScope('review');
+    setReviewBusyAction(action);
+    setProcessingMessage('正在处理');
+    setError('');
+    setSuccessMessage('');
+    try {
+      const updatedPlay = await playApi.reviewPlay(currentPlayId, action, nextNote.trim(), {
+        title: nextTitle.trim(),
+        authorName: nextAuthorName.trim(),
+        category: nextCategory.trim() || DEFAULT_CATEGORY,
+        summary: nextSummary.trim(),
+        content: nextContent,
+      });
+      syncPlayStateLocally(updatedPlay);
+      setReviewNote('');
+      if (selectedPlayId === currentPlayId) {
+        setReviewTitle(updatedPlay?.title ?? nextTitle);
+        setReviewAuthorName(updatedPlay?.authorName ?? nextAuthorName);
+        setReviewCategory(updatedPlay?.category ?? nextCategory);
+        setReviewSummary(updatedPlay?.summary ?? nextSummary);
+        setReviewContent(updatedPlay?.content ?? nextContent);
+      }
+      setProcessingMessage('');
+      setSuccessMessage(formatReviewResultMessage(actionResultLabelMap[action], 1));
+      const shouldAutoJumpNextPending = play.status === 'pending';
+      await refreshAdminAfterReviewMutation(shouldAutoJumpNextPending ? nextPendingPlayId : undefined);
+      await loadTags();
+    } catch (reason) {
+      setProcessingMessage('');
+      setError(reason instanceof Error ? reason.message : '审核失败');
+    } finally {
+      setReviewBusyAction(null);
+    }
+  };
+
+  const handleReview = async (action: ReviewAction) => {
+    if (!selectedPlay) {
+      return;
+    }
+
+    await handleReviewForPlay(selectedPlay, action, {
+      title: reviewTitle,
+      authorName: reviewAuthorName,
+      category: reviewCategory,
+      summary: reviewSummary,
+      content: reviewContent,
+      note: reviewNote,
+    });
+  };
+
+  const handleSaveAdminEdit = async () => {
+    if (!selectedPlay) {
+      return;
+    }
+
+    setFeedbackScope('review');
+    setReviewBusyAction('save');
+    setProcessingMessage('正在保存修改');
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const updatedPlay = await playApi.updateAdminPlay(selectedPlay.id, {
+        title: reviewTitle.trim(),
+        authorName: reviewAuthorName.trim(),
+        category: reviewCategory.trim() || DEFAULT_CATEGORY,
+        summary: reviewSummary.trim(),
+        content: reviewContent,
+      });
+
+      if (updatedPlay) {
+        setReviewTitle(updatedPlay.title);
+        setReviewAuthorName(updatedPlay.authorName);
+        setReviewCategory(updatedPlay.category || DEFAULT_CATEGORY);
+        setReviewSummary(updatedPlay.summary);
+        setReviewContent(updatedPlay.content);
+      }
+
+      setProcessingMessage('');
+      setSuccessMessage('修改已保存');
+      await refreshAdminAfterReviewMutation(selectedPlay.id);
+      await loadTags();
+    } catch (reason) {
+      setProcessingMessage('');
+      setError(reason instanceof Error ? reason.message : '保存修改失败');
+    } finally {
+      setReviewBusyAction(null);
+    }
+  };
+
+  const handleQuickApprove = async (playId: string) => {
+    const targetPlay = filteredPlays.find((item) => item.id === playId);
+    if (!targetPlay || targetPlay.status !== 'pending') {
+      return;
+    }
+
+    setSelectedPlayId(playId);
+    setActivePanel('review');
+
+    await handleReviewForPlay(targetPlay, 'approve', {
+      title: targetPlay.id === selectedPlayId ? reviewTitle : targetPlay.title,
+      authorName: targetPlay.id === selectedPlayId ? reviewAuthorName : targetPlay.authorName,
+      category: targetPlay.id === selectedPlayId ? reviewCategory : targetPlay.category,
+      summary: targetPlay.id === selectedPlayId ? reviewSummary : targetPlay.summary,
+      content: targetPlay.id === selectedPlayId ? reviewContent : targetPlay.content,
+      note: targetPlay.id === selectedPlayId ? reviewNote : '',
+    });
+  };
+
+  const handleScrollToTop = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleScrollToBottom = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  };
+
+  const handleToggleJumpButton = () => {
+    setShowJumpButton((current) => !current);
+  };
+
+  const handleRepoReview = async (repoId: string, action: RepoReviewAction) => {
+    if (action === 'reject') {
+      const reason = window.prompt('确认拒绝这条 repo 吗？可填写拒绝理由（会反馈给提交者）：', repoReviewNote || '');
+      if (reason === null) {
+        return;
+      }
+      setRepoReviewNote(reason);
+      if (!window.confirm('确认提交拒绝？')) {
+        return;
+      }
+    }
+
+    setRepoBusyAction(action);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const note = action === 'reject' ? (repoReviewNote || '') : repoReviewNote;
+      const updatedRepo = await playApi.reviewRepo(repoId, action, note);
+      syncRepoStateLocally(updatedRepo);
+      await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+      setRepoReviewNote('');
+      setSuccessMessage(action === 'approve' ? 'repo 已通过。' : 'repo 已拒绝。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'repo 审核失败');
+    } finally {
+      setRepoBusyAction(null);
+    }
+  };
+
+  const handleRepoDelete = async (repoId: string) => {
+    if (!window.confirm('确认删除这条 repo 吗？删除后不可恢复。')) {
+      return;
+    }
+
+    setRepoBusyAction('delete');
+    setError('');
+    setSuccessMessage('');
+    try {
+      await playApi.deleteRepo(repoId);
+      removeRepoStateLocally(repoId);
+      await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+      setSuccessMessage('repo 已删除。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'repo 删除失败');
+    } finally {
+      setRepoBusyAction(null);
+    }
+  };
+
+  const handleBulkApproveRepos = async () => {
+    const pendingRepos = repos.filter((repo) => repo.status === 'pending');
+    if (pendingRepos.length === 0) {
+      setError('当前没有待审核 repo');
+      return;
+    }
+
+    setRepoBusyAction('approve');
+    setError('');
+    setSuccessMessage('');
+    try {
+      for (const repo of pendingRepos) {
+        await playApi.reviewRepo(repo.id, 'approve', repoReviewNote);
+      }
+      markReposApprovedLocally(pendingRepos.map((repo) => repo.id));
+      await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+      setRepoReviewNote('');
+      setSuccessMessage(`已通过 ${pendingRepos.length} 条 repo。`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'repo 批量通过失败');
+    } finally {
+      setRepoBusyAction(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    await playApi.logoutAdmin();
+    setSession(null);
+    navigate('/admin/login');
+  };
+
+  const handleCreateTag = async () => {
+    if (!tagDraft.trim()) {
+      setTagMessageTone('error');
+      setTagMessage('先输入标签名');
+      return;
+    }
+
+    setTagSaving(true);
+    setTagMessage('');
+    try {
+      await playApi.createAdminTag({ name: tagDraft.trim() });
+      setTagDraft('');
+      setTagMessageTone('success');
+      setTagMessage('标签已加入字典');
+      await loadTags();
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '标签创建失败');
+    } finally {
+      setTagSaving(false);
+    }
+  };
+
+  const startEditTag = (tag: Tag) => {
+    setEditingTagId(tag.id);
+    setEditingTagName(tag.name);
+    setTagMessage('');
+    setTagMessageTone('success');
+  };
+
+  const cancelEditTag = () => {
+    setEditingTagId('');
+    setEditingTagName('');
+  };
+
+  const handleUpdateTag = async () => {
+    if (!editingTagId) {
+      return;
+    }
+
+    setTagSaving(true);
+    setTagMessage('');
+    try {
+      await playApi.updateAdminTag(editingTagId, { name: editingTagName.trim() });
+      setTagMessageTone('success');
+      setTagMessage('标签已更新，历史内容已同步新标签');
+      cancelEditTag();
+      await loadTags();
+      await load(selectedStatus, { silent: true });
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '标签更新失败');
+    } finally {
+      setTagSaving(false);
+    }
+  };
+
+  const handleDeleteTag = async (tagId: string) => {
+    setTagSaving(true);
+    setTagMessage('');
+    try {
+      await playApi.deleteAdminTag(tagId);
+      setTagMessageTone('success');
+      setTagMessage(`标签已删除，相关内容已回退到 ${DEFAULT_CATEGORY}`);
+      if (editingTagId === tagId) {
+        cancelEditTag();
+      }
+      await loadTags();
+      await load(selectedStatus, { silent: true });
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '标签删除失败');
+    } finally {
+      setTagSaving(false);
+    }
+  };
+
+  const enterTagSortMode = () => {
+    setTagMessage('');
+    setTagSortSnapshot(tags);
+    setTagSortDraft(tags);
+    setDraggingTagId('');
+    setIsTagSorting(true);
+    cancelEditTag();
+  };
+
+  const cancelTagSort = () => {
+    setTagSortDraft(tagSortSnapshot);
+    setDraggingTagId('');
+    setIsTagSorting(false);
+    setTagMessageTone('success');
+    setTagMessage('已取消本次标签排序');
+  };
+
+  const saveTagSort = async () => {
+    setTagSaving(true);
+    setTagMessage('');
+    try {
+      const savedTags = await playApi.reorderAdminTags(tagSortDraft.map((tag) => tag.id));
+      setTags(savedTags);
+      setTagSortDraft(savedTags);
+      setTagSortSnapshot(savedTags);
+      setIsTagSorting(false);
+      setDraggingTagId('');
+      setTagMessageTone('success');
+      setTagMessage('标签顺序已更新');
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '标签排序保存失败');
+      await loadTags();
+      setTagSortDraft(tagSortSnapshot);
+      setIsTagSorting(false);
+      setDraggingTagId('');
+    } finally {
+      setTagSaving(false);
+    }
+  };
+
+  const toggleTagSortMode = async () => {
+    if (!isTagSorting) {
+      enterTagSortMode();
+      return;
+    }
+
+    await saveTagSort();
+  };
+
+  const moveDraftTag = (sourceId: string, targetId: string) => {
+    if (!isTagSorting || sourceId === targetId) {
+      return;
+    }
+
+    setTagSortDraft((current) => reorderTagsInMemory(current, sourceId, targetId));
+  };
+
+  const handleTagPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, tagId: string) => {
+    if (!isTagSorting || tagSaving || editingTagId || !isTouchLikePointer(event.pointerType)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggingTagId(tagId);
+  };
+
+  const handleTagPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!isTagSorting || !draggingTagId || !isTouchLikePointer(event.pointerType)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const target = element?.closest('[data-tag-id]');
+    const targetId = target?.getAttribute('data-tag-id') ?? '';
+    if (!targetId || targetId === draggingTagId) {
+      return;
+    }
+
+    moveDraftTag(draggingTagId, targetId);
+  };
+
+  const handleTagPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    setDraggingTagId('');
+  };
+
+  const updateThemeField = (
+    theme: ThemeMode,
+    device: BackgroundDeviceMode,
+    field: BackgroundEditableField,
+    value: string,
+  ) => {
+    setSiteSettings((current) => {
+      const themeConfig = current[theme];
+      const deviceConfig = themeConfig[device];
+
+      if (field === 'backgroundUrl') {
+        return {
+          ...current,
+          [theme]: {
+            ...themeConfig,
+            [device]: {
+              ...deviceConfig,
+              backgroundUrl: value,
+            },
+          },
+        };
+      }
+
+      const numericValue = Number(value);
+      const nextValue =
+        field === 'scale'
+          ? clampNumber(numericValue, 100, 240)
+          : field === 'backgroundOpacity'
+            ? clampNumber(numericValue, 0, 1)
+            : field === 'overlayOpacity'
+              ? clampNumber(numericValue, 0, 0.9)
+              : clampNumber(numericValue, 0, 100);
+
+      return {
+        ...current,
+        [theme]: {
+          ...themeConfig,
+          [device]: {
+            ...deviceConfig,
+            crop: {
+              ...deviceConfig.crop,
+              [field]: nextValue,
+            },
+          },
+        },
+      };
+    });
+  };
+
+  const removeThemeBackground = (theme: ThemeMode, device: BackgroundDeviceMode) => {
+    updateThemeField(theme, device, 'backgroundUrl', '');
+    setEditingBackgroundKey((current) => (current === `${theme}:${device}` ? '' : current));
+  };
+
+  const handleSaveAppearance = async () => {
+    setAppearanceSaving(true);
+    setAppearanceMessage('');
+    try {
+      const saved = await playApi.updateAdminSiteSettings(siteSettings);
+      setSiteSettings(saved);
+      setAppearanceMessageTone('success');
+      setAppearanceMessage('站点背景配置已保存');
+    } catch (reason) {
+      setAppearanceMessageTone('error');
+      setAppearanceMessage(reason instanceof Error ? reason.message : '站点外观配置保存失败');
+    } finally {
+      setAppearanceSaving(false);
+    }
+  };
+
+  const handleStatusTabChange = (nextStatus?: PlayStatus) => {
+    if (nextStatus === selectedStatus) {
+      void load(nextStatus, { silent: true });
+      void loadAllPlays();
+      return;
+    }
+
+    setSelectedStatus(nextStatus);
+  };
+
+  const handleRepoStatusTabChange = (nextStatus?: RepoStatus) => {
+    if (nextStatus === selectedRepoStatus) {
+      void loadRepos(nextStatus);
+      void loadAllRepos();
+      return;
+    }
+
+    setSelectedRepoStatus(nextStatus);
+  };
+
+  const handleDeletePlayItem = async (play: Play) => {
+    if (!window.confirm(`确认删除《${play.title}》吗？删除后内容和审核记录都会一起清掉。`)) {
+      return;
+    }
+
+    const deletingPlayId = play.id;
+    const isDeletingSelectedPlay = selectedPlayId === deletingPlayId;
+    const nextPendingPlayId = isDeletingSelectedPlay && play.status === 'pending' ? getNextPendingPlayId(deletingPlayId) : undefined;
+
+    setFeedbackScope('review');
+    setReviewBusyAction('delete');
+    setProcessingMessage('正在处理');
+    setError('');
+    setSuccessMessage('');
+    try {
+      await playApi.deleteAdminPlay(deletingPlayId);
+      removePlayStateLocally(deletingPlayId);
+      setProcessingMessage('');
+      setSuccessMessage(formatReviewResultMessage('已删除', 1));
+      if (isDeletingSelectedPlay) {
+        setSelectedPlayId('');
+        setReviewLogs([]);
+      }
+      await refreshAdminAfterReviewMutation(nextPendingPlayId);
+    } catch (reason) {
+      setProcessingMessage('');
+      setError(reason instanceof Error ? reason.message : '删除失败');
+    } finally {
+      setReviewBusyAction(null);
+    }
+  };
+
+  const handleDeletePlay = async () => {
+    if (!selectedPlay) {
+      return;
+    }
+
+    await handleDeletePlayItem(selectedPlay);
+  };
+
+  const handleBulkMoveCategory = async () => {
+    if (moveCategoryTargetIds.length === 0) {
+      setMoveCategoryError('请先勾选至少一个源分类');
+      return;
+    }
+
+    if (!moveTargetCategory.trim() && moveTargetCategory.trim() !== '') {
+      // 未分类用空字符串保存后端会自行 fallback；这里允许 ""
+    }
+
+    const targetCategory = moveTargetCategory.trim();
+    const label = targetCategory || DEFAULT_CATEGORY;
+
+    if (!window.confirm(`确认将 ${moveCategoryTargetIds.length} 篇小剧场移动到「${label}」吗？`)) {
+      return;
+    }
+
+    setMoveCategoryBusy(true);
+    setMoveCategoryError('');
+    setMoveCategoryMessage('');
+
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (const playId of moveCategoryTargetIds) {
+        try {
+          await playApi.updateAdminPlay(playId, { category: targetCategory });
+          completed += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      await Promise.all([
+        load(selectedStatus, { silent: true }),
+        loadAllPlays(),
+      ]);
+      notifyPlaysUpdate();
+
+      setMoveCategoryMessage(`已移动 ${completed} 篇到「${label}」${failed > 0 ? `，${failed} 篇失败` : ''}`);
+    } finally {
+      setMoveCategoryBusy(false);
+    }
+  };
+
+  const handleClearReviewLogs = async () => {
+    if (!selectedPlay) {
+      return;
+    }
+
+    if (!window.confirm(`确认清空《${selectedPlay.title}》的审核记录吗？`)) {
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    try {
+      await playApi.clearReviewLogs(selectedPlay.id);
+      setReviewLogs([]);
+      setSuccessMessage(`《${selectedPlay.title}》的审核记录已清空。`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '清空审核记录失败');
+    }
+  };
+
+  const handleScanDuplicates = async () => {
+    const scanRunId = duplicateScanRunRef.current + 1;
+    const scanScope = duplicateReview.scanScope;
+    const scopeLabel = scanScope === 'approved' ? '已通过内容' : '整个库';
+    const sourcePlays = duplicateScanSourcePlays;
+
+    duplicateScanRunRef.current = scanRunId;
+    setDuplicateBusy(true);
+    setDuplicateScanProgress({
+      completedAnchors: 0,
+      totalAnchors: sourcePlays.length,
+      processedPairs: 0,
+      totalPairs: sourcePlays.length <= 1 ? 0 : Math.floor((sourcePlays.length * (sourcePlays.length - 1)) / 2),
+      scopeLabel,
+    });
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const nextState = await scanDuplicateGroups(allPlays, duplicateReview.threshold, {
+        onProgress: (progress) => {
+          if (duplicateScanRunRef.current !== scanRunId) {
+            return;
+          }
+
+          setDuplicateScanProgress({
+            ...progress,
+            scopeLabel,
+          });
+        },
+        scanScope,
+        shouldStop: () => duplicateScanRunRef.current !== scanRunId,
+      });
+
+      if (duplicateScanRunRef.current !== scanRunId) {
+        return;
+      }
+
+      setDuplicateReview(nextState);
+      setSuccessMessage(
+        nextState.groups.length > 0
+          ? `已在${scopeLabel}里找到 ${nextState.groups.length} 组重复候选。`
+          : `扫描完成，当前${scopeLabel} ${sourcePlays.length} 篇里没有达到 ${duplicateReview.threshold}% 的重复候选。`,
+      );
+    } catch (reason) {
+      if (duplicateScanRunRef.current !== scanRunId) {
+        return;
+      }
+
+      setError(reason instanceof Error ? reason.message : '重复扫描失败');
+    } finally {
+      if (duplicateScanRunRef.current === scanRunId) {
+        setDuplicateBusy(false);
+      }
+    }
+  };
+
+  const handleClearDuplicateSearch = () => {
+    duplicateScanRunRef.current += 1;
+    setDuplicateBusy(false);
+    setDuplicateScanProgress(null);
+    setDuplicateReview((current) => clearDuplicateReviewState(current));
+    setSuccessMessage('重复检索结果已清空。');
+    setError('');
+  };
+
+  const handleDuplicateThresholdChange = (value: number) => {
+    setDuplicateReview(setDuplicateThreshold(value));
+  };
+
+  const handleDuplicateScanScopeChange = (scanScope: DuplicateScanScope) => {
+    setDuplicateScanProgress(null);
+    setDuplicateReview(setDuplicateScanScope(scanScope));
+  };
+
+  const handleToggleDuplicateSelection = (playId: string) => {
+    setDuplicateReview((current) => toggleDuplicateSelection(current, playId));
+  };
+
+  const handleOpenDuplicateCompare = (groupId: string, playId: string) => {
+    setDuplicateReview((current) => setDuplicateCompareTarget(current, groupId, playId));
+  };
+
+  const refreshAdminAfterDuplicateDelete = async () => {
+    await load(selectedStatus, { silent: true });
+    const nextAllPlays = await playApi.getAdminPlays();
+    setAllPlays(nextAllPlays);
+    setDuplicateReview((current) => pruneDuplicateReviewState(current, nextAllPlays));
+    if (selectedPlayId) {
+      await loadReviewLogs(selectedPlayId);
+    }
+    notifyPlaysUpdate();
+  };
+
+  const handleDeleteDuplicateIds = async (ids: string[], message: string) => {
+    const normalizedIds = Array.from(new Set(ids.filter(Boolean)));
+    if (normalizedIds.length === 0) {
+      return;
+    }
+
+    setDuplicateBusy(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      for (const playId of normalizedIds) {
+        await playApi.deleteAdminPlay(playId);
+      }
+      await refreshAdminAfterDuplicateDelete();
+      setSuccessMessage(message);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '批量剔除重复失败');
+    } finally {
+      setDuplicateBusy(false);
+    }
+  };
+
+  const handleDeleteSelectedDuplicates = async () => {
+    if (duplicateReview.selectedIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认剔除已勾选的 ${duplicateReview.selectedIds.length} 篇重复内容吗？`);
+    if (!confirmed) {
+      return;
+    }
+
+    await handleDeleteDuplicateIds(
+      duplicateReview.selectedIds,
+      `已剔除 ${duplicateReview.selectedIds.length} 篇勾选的重复内容。`,
+    );
+  };
+
+  const handleDeleteAllDuplicates = async () => {
+    const ids = collectAllDuplicateIds(duplicateReview.groups);
+    if (ids.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认一键剔除全部重复内容吗？将保留每组的第一篇，共删除 ${ids.length} 篇。`);
+    if (!confirmed) {
+      return;
+    }
+
+    await handleDeleteDuplicateIds(ids, `已一键剔除全部重复内容，共删除 ${ids.length} 篇。`);
+  };
+
+  const handleDeleteAllGroupSeconds = async () => {
+    const ids = collectSecondDuplicateIds(duplicateReview.groups);
+    if (ids.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认删除每个相似组里的第二篇内容吗？共删除 ${ids.length} 篇。`);
+    if (!confirmed) {
+      return;
+    }
+
+    await handleDeleteDuplicateIds(ids, `已删除全部相似组的第二篇内容，共删除 ${ids.length} 篇。`);
+  };
+
+  return (
+    <>
+    <section className="review-layout review-layout-wide">
+      <aside className={shouldHideMobileReviewWorkspace ? 'review-sidebar review-sidebar-mobile-compact' : 'review-sidebar'}>
+        <div className="sidebar-head sidebar-head-admin sidebar-head-admin-header">
+          <div className="stack-gap-sm sidebar-head-title-block">
+            <p className="eyebrow">Admin Loop</p>
+            <h2>审核后台</h2>
+          </div>
+          <div className="inline-actions sidebar-head-account-row">
+            <p className="sub-copy">登录账号：{session?.username ?? '-'}</p>
+            <div className="inline-actions sidebar-head-account-actions">
+              <button className="button ghost" onClick={handleLogout} type="button">
+                退出登录
+              </button>
+              <button className={showJumpButton ? 'button secondary' : 'button ghost'} onClick={handleToggleJumpButton} type="button">
+                跳转
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="admin-panel-tab-grid">
+          {adminPanelTabs.map((panel) => {
+            const showPendingDot =
+              (panel.value === 'review' && pendingPlayCount > 0) || (panel.value === 'repo' && pendingRepoCount > 0);
+
+            return (
+              <button
+                key={panel.value}
+                className={activePanel === panel.value ? 'tab-chip active admin-panel-tab-button' : 'tab-chip admin-panel-tab-button'}
+                onClick={() => {
+                  setActivePanel(panel.value);
+                  if (panel.value === 'moveCategory' && !hasLoadedAllPlays) {
+                    void loadAllPlays();
+                  }
+                }}
+                type="button"
+              >
+                <span>{panel.label}</span>
+                {showPendingDot ? <span className="admin-panel-tab-dot" aria-hidden="true" /> : null}
+              </button>
+            );
+          })}
+        </div>
+
+        {shouldShowReviewSidebarContent ? (
+          <>
+        <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
+          {metrics.map((item) => (
+            <div key={item.label} className="metric-card-lite">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="tab-list">
+          {statusTabs.map((tab) => (
+            <button
+              key={tab.label}
+              className={selectedStatus === tab.value ? 'tab-chip active' : 'tab-chip'}
+              onClick={() => handleStatusTabChange(tab.value)}
+              type="button"
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <label>
+          <span>后台搜索</span>
+          <ClearableField visible={Boolean(keyword.trim())} onClear={() => setKeyword('')}>
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="搜标题、作者、分类或正文关键词"
+            />
+          </ClearableField>
+        </label>
+        {keyword.trim() ? (
+          <div className="inline-actions admin-search-action-row">
+            <button
+              className="button secondary"
+              disabled={reviewMutationBusy || deleteVisibleIds.length === 0}
+              onClick={handleSelectAllVisibleForDelete}
+              type="button"
+            >
+              全选
+            </button>
+            <button
+              className="button danger"
+              disabled={reviewMutationBusy || deleteSelectedIds.length === 0}
+              onClick={() => void handleBatchDelete(deleteSelectedIds, '已勾选搜索结果')}
+              type="button"
+            >
+              删除（{deleteSelectedIds.length}）
+            </button>
+            <button
+              className="button ghost"
+              disabled={reviewMutationBusy || deleteSelectedIds.length === 0}
+              onClick={handleClearDeleteSelection}
+              type="button"
+            >
+              清选
+            </button>
+          </div>
+        ) : null}
+
+        <div className="form-panel stack-gap-md admin-bulk-review-panel">
+          <div className="content-head admin-bulk-review-head">
+            <div>
+              <strong>一键通过</strong>
+              <span className="content-meta">当前列表待审核 {pendingVisiblePlays.length} 篇，已选 {bulkSelectedIds.length} 篇</span>
+            </div>
+            <button className="button ghost" onClick={() => setIsBulkApproveCollapsed((current) => !current)} type="button">
+              {isBulkApproveCollapsed ? '展开' : '折叠'}
+            </button>
+          </div>
+
+          {!isBulkApproveCollapsed ? (
+            <>
+              <div className="stack-gap-sm admin-bulk-review-progress-block">
+                <span className="content-meta">批量通过会按小批次提交到 bulk API，可在批次之间暂停、继续或停止。</span>
+                {bulkProgress ? (
+                  <div className="admin-bulk-review-progress" role="status">
+                    <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                      <strong>{bulkProgress.label}</strong>
+                      <span className="content-meta">
+                        已完成 {bulkProgress.completed} / {bulkProgress.total}
+                        {bulkTaskStatus === 'paused' ? ' · 已暂停' : ''}
+                        {bulkTaskStatus === 'stopping' ? ' · 正在停止' : ''}
+                      </span>
+                    </div>
+                    <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                      <div
+                        className="admin-bulk-review-progress-fill"
+                        style={{ width: `${bulkProgress.total === 0 ? 0 : (bulkProgress.completed / bulkProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {feedbackScope === 'bulk' && processingMessage ? <div className="feedback info">{processingMessage}</div> : null}
+                {feedbackScope === 'bulk' && successMessage ? <div className="feedback success">{successMessage}</div> : null}
+                {feedbackScope === 'bulk' && error ? <div className="feedback error">{error}</div> : null}
+              </div>
+
+          <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-toggle-row">
+            <button
+              className="button secondary"
+              disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
+              onClick={handleSelectAllPendingVisible}
+              type="button"
+            >
+              全选
+            </button>
+            <button
+              className="button secondary"
+              disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
+              onClick={handleInvertBulkSelection}
+              type="button"
+            >
+              反选
+            </button>
+          </div>
+
+          <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-top-row">
+            <div className="admin-bulk-review-top-count" role="group" aria-label="选中前几条待审核">
+              <button
+                className="button secondary admin-bulk-review-top-count-button"
+                disabled={reviewMutationBusy || bulkSelectCount <= 0 || pendingVisibleIds.length === 0}
+                onClick={handleSelectTopPendingVisible}
+                type="button"
+              >
+                选中
+              </button>
+              <span>前</span>
+              <input
+                aria-label="选中前几条"
+                inputMode="numeric"
+                min="1"
+                onChange={(event) => setBulkSelectCountInput(event.target.value.replace(/\D+/g, ''))}
+                placeholder="x"
+                value={bulkSelectCountInput}
+              />
+              <span>条</span>
+            </div>
+            <button
+              className="button ghost admin-bulk-review-clear-button"
+              disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+              onClick={handleClearBulkSelection}
+              type="button"
+            >
+              清空已选
+            </button>
+          </div>
+
+          <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-row-compact">
+            <button
+              className="button secondary"
+              disabled={!bulkTask || bulkTask.status !== 'running'}
+              onClick={handlePauseBulkApprove}
+              type="button"
+            >
+              暂停
+            </button>
+            <button
+              className="button secondary"
+              disabled={!bulkTask || bulkTask.status !== 'paused'}
+              onClick={handleContinueBulkApprove}
+              type="button"
+            >
+              继续
+            </button>
+            <button
+              className="button ghost"
+              disabled={!bulkTask || bulkTask.status === 'stopping'}
+              onClick={() => void handleStopBulkApprove()}
+              type="button"
+            >
+              {bulkTaskStatus === 'stopping' ? '正在停止' : '停止'}
+            </button>
+          </div>
+
+              <div className="field-grid two-columns admin-bulk-review-grid">
+                <label>
+                  <span>按作者一键通过</span>
+                  <select value={bulkAuthorName} onChange={(event) => setBulkAuthorName(event.target.value)}>
+                    <option value="">先选作者</option>
+                    {pendingAuthorOptions.map((authorName) => (
+                      <option key={authorName} value={authorName}>
+                        {authorName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="stack-gap-sm admin-bulk-review-actions">
+                  <button
+                    className="button primary"
+                    disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
+                    onClick={() => void handleBulkApprove(pendingVisibleIds, '当前列表待审核')}
+                    type="button"
+                  >
+                    {bulkTask ? '批量处理中' : `通过当前待审核（${pendingVisibleIds.length}）`}
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={reviewMutationBusy || selectedAuthorPendingIds.length === 0}
+                    onClick={() => void handleBulkApprove(selectedAuthorPendingIds, `作者 ${bulkAuthorName} 的待审核内容`)}
+                    type="button"
+                  >
+                    {bulkTask ? '批量处理中' : `通过该作者（${selectedAuthorPendingIds.length}）`}
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                    onClick={() => void handleBulkApprove(bulkSelectedIds, '已勾选内容')}
+                    type="button"
+                  >
+                    {bulkTask ? '批量处理中' : `通过已选（${bulkSelectedIds.length}）`}
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        {loading ? <div className="empty-panel">正在加载审核池…</div> : null}
+        {feedbackScope !== 'bulk' && feedbackScope !== 'delete' && processingMessage ? (
+          <div className="feedback info" role="status">
+            {processingMessage}
+          </div>
+        ) : null}
+        {feedbackScope !== 'bulk' && feedbackScope !== 'delete' && error ? <div className="feedback error">{error}</div> : null}
+        {successMessage && feedbackScope !== 'bulk' && feedbackScope !== 'delete' ? (
+          <div className="feedback success floating-toast" role="status">
+            {successMessage}
+          </div>
+        ) : null}
+
+        {activePanel === 'review' ? (
+          <div className="form-panel compact-panel stack-gap-md plaza-pagination-panel">
+            <div className="plaza-pagination-toolbar">
+              <div className="inline-actions plaza-pagination-nav">
+                <button
+                  className="button secondary icon-page-button"
+                  disabled={adminCurrentPage <= 1}
+                  onClick={() => setAdminCurrentPage(1)}
+                  title="第一页"
+                  type="button"
+                >
+                  ≪
+                </button>
+                <button
+                  className="button secondary icon-page-button"
+                  disabled={adminCurrentPage <= 1}
+                  onClick={() => setAdminCurrentPage(adminCurrentPage - 1)}
+                  title="上一页"
+                  type="button"
+                >
+                  ‹
+                </button>
+              </div>
+              <span className="content-meta plaza-page-indicator">
+                第 {adminCurrentPage} / {adminTotalPages} 页
+              </span>
+              <div className="inline-actions plaza-pagination-nav plaza-pagination-nav-end">
+                <button
+                  className="button secondary icon-page-button"
+                  disabled={adminCurrentPage >= adminTotalPages}
+                  onClick={() => setAdminCurrentPage(adminCurrentPage + 1)}
+                  title="下一页"
+                  type="button"
+                >
+                  ›
+                </button>
+                <button
+                  className="button secondary icon-page-button"
+                  disabled={adminCurrentPage >= adminTotalPages}
+                  onClick={() => setAdminCurrentPage(adminTotalPages)}
+                  title="最后一页"
+                  type="button"
+                >
+                  ≫
+                </button>
+              </div>
+              <div className="inline-actions plaza-page-control-inline">
+                <label className="plaza-page-size-field" htmlFor="admin-review-page-size-input">
+                  <span className="content-meta plaza-page-size-copy">每页</span>
+                  <input
+                    id="admin-review-page-size-input"
+                    inputMode="numeric"
+                    min={MIN_ADMIN_PAGE_SIZE}
+                    max={MAX_ADMIN_PAGE_SIZE}
+                    onBlur={() => {
+                      if (!/^\d+$/.test(adminPageSizeInput)) {
+                        setAdminPageSizeInput(String(adminPageSize));
+                        return;
+                      }
+                      setAdminPageSize(clampAdminPageSize(Number(adminPageSizeInput)));
+                    }}
+                    onChange={(event) => {
+                      const cleaned = event.target.value.replace(/\D+/g, '');
+                      setAdminPageSizeInput(cleaned);
+                      if (/^\d+$/.test(cleaned)) {
+                        setAdminPageSize(clampAdminPageSize(Number(cleaned)));
+                        setAdminCurrentPage(1);
+                      }
+                    }}
+                    value={adminPageSizeInput}
+                  />
+                  <span className="content-meta plaza-page-size-copy">个</span>
+                </label>
+                <div className="inline-actions plaza-page-jump-inline">
+                  <span className="content-meta plaza-page-jump-copy">第</span>
+                  <label className="page-jump-field page-jump-field-compact">
+                    <input
+                      inputMode="numeric"
+                      min={1}
+                      max={adminTotalPages}
+                      onChange={(event) => setAdminPageInput(event.target.value.replace(/\D+/g, ''))}
+                      value={adminPageInput}
+                    />
+                  </label>
+                  <span className="content-meta plaza-page-jump-copy">页</span>
+                  <button
+                    className="button primary plaza-page-jump-button"
+                    onClick={() => {
+                      const next = Number(adminPageInput);
+                      if (!Number.isFinite(next) || next < 1 || next > adminTotalPages) {
+                        setError(`页数范围是 1 到 ${adminTotalPages}`);
+                        return;
+                      }
+                      setError('');
+                      setAdminCurrentPage(next);
+                    }}
+                    type="button"
+                  >
+                    跳转
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="review-list">
+          {shouldCollapseMobileReviewList ? (
+            <div className="inline-actions review-list-mobile-toggle-row">
+              <span className="content-meta">
+                手机端先显示前 {MOBILE_REVIEW_LIST_PREVIEW_COUNT} 条，当前“{mobileReviewListLabel}”列表共 {filteredPlays.length} 条
+              </span>
+              <button className="button ghost" onClick={() => setIsMobilePendingExpanded((current) => !current)} type="button">
+                {isMobilePendingExpanded ? '收起' : '展开'}
+              </button>
+            </div>
+          ) : null}
+          {reviewListPlays.map((play) => {
+            const isBulkSelectable = play.status === 'pending';
+            const isBulkSelected = bulkSelectedIdSet.has(play.id);
+            const isDeleteSelectable = activePanel === 'delete' || keyword.trim().length > 0;
+            const isDeleteSelected = deleteSelectedIdSet.has(play.id);
+
+            return (
+              <article className="review-card-shell" key={play.id}>
+                {isDeleteSelectable ? (
+                  <div className="review-card-select-row">
+                    <label className="checkbox-chip review-card-checkbox" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        checked={isDeleteSelected}
+                        disabled={reviewMutationBusy}
+                        onChange={() => handleToggleDeleteSelection(play.id)}
+                        type="checkbox"
+                      />
+                      <span>{isDeleteSelected ? '已选' : '多选删除'}</span>
+                    </label>
+                  </div>
+                ) : isBulkSelectable ? (
+                  <div className="review-card-select-row">
+                    <label className="checkbox-chip review-card-checkbox" onClick={(event) => event.stopPropagation()}>
+                      <input
+                        checked={isBulkSelected}
+                        disabled={reviewMutationBusy}
+                        onChange={() => handleToggleBulkSelection(play.id)}
+                        type="checkbox"
+                      />
+                      <span>{isBulkSelected ? '已选' : '多选通过'}</span>
+                    </label>
+                  </div>
+                ) : null}
+                <div className={selectedPlayId === play.id ? 'review-card active' : 'review-card'}>
+                  <button
+                    className="review-card-main"
+                    onClick={() => {
+                      setSelectedPlayId(play.id);
+                      setSuccessMessage('');
+                      setActivePanel('review');
+                    }}
+                    type="button"
+                  >
+                    <div className="card-topline">
+                      <span className={`status-tag ${play.status}`}>{statusLabelMap[play.status]}</span>
+                      <div className="compact-meta-row compact-meta-row-small compact-meta-row-end">
+                        <span className="compact-meta-item">◈ {play.category || DEFAULT_CATEGORY}</span>
+                        <span className="compact-meta-item">✎ {play.authorName}</span>
+                      </div>
+                    </div>
+                    <strong>{play.title}</strong>
+                  </button>
+                  {play.summary || play.status === 'pending' ? (
+                    <div className="review-card-summary-row">
+                      {play.summary ? <span className="summary review-card-summary-text">{play.summary}</span> : <span className="summary review-card-summary-text">&nbsp;</span>}
+                      {play.status === 'pending' ? (
+                        <div className="inline-actions review-card-summary-actions">
+                          <button
+                            className="button warning review-card-delete-button"
+                            disabled={reviewMutationBusy}
+                            onClick={() => void handleDeletePlayItem(play)}
+                            type="button"
+                          >
+                            {reviewBusyAction === 'delete' && selectedPlayId === play.id ? '正在处理' : '删除'}
+                          </button>
+                          <button
+                            className="button primary review-card-approve-button"
+                            disabled={reviewMutationBusy}
+                            onClick={() => void handleQuickApprove(play.id)}
+                            type="button"
+                          >
+                            {reviewBusyAction === 'approve' && selectedPlayId === play.id ? '正在处理' : '通过'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {allPlays.some(
+                    (item) =>
+                      item.id !== play.id &&
+                      item.authorName === play.authorName &&
+                      item.title === play.title &&
+                      item.createdAt < play.createdAt,
+                  ) ? <span className="status-tag approved">有改动</span> : null}
+                </div>
+              </article>
+            );
+          })}
+          {!loading && filteredPlays.length === 0 ? <div className="empty-panel">这个状态下没有内容。</div> : null}
+        </div>
+          </>
+        ) : null}
+      </aside>
+
+      {showJumpButton ? (
+        <div className="admin-scroll-jump-stack">
+          <button
+            aria-label="一键置顶"
+            className="icon-button admin-scroll-top-button"
+            onClick={handleScrollToTop}
+            title="一键置顶"
+            type="button"
+          >
+            ↑
+          </button>
+          <button
+            aria-label="一键置底"
+            className="icon-button admin-scroll-bottom-button"
+            onClick={handleScrollToBottom}
+            title="一键置底"
+            type="button"
+          >
+            ↓
+          </button>
+        </div>
+      ) : null}
+
+      <section className="review-main review-main-wide stack-gap-lg">
+
+        {activePanel === 'repo' ? (
+          <div className="stack-gap-md">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head wrap-mobile">
+                <div>
+                  <h3>repo 审核</h3>
+                  <p className="sub-copy">独立于小剧场审核状态机，只处理 repo 的通过、拒绝和删除。</p>
+                </div>
+                <button className="button primary" disabled={repoBusyAction !== null} onClick={() => void handleBulkApproveRepos()} type="button">
+                  {repoBusyAction === 'approve' ? '处理中' : `通过当前待审核（${repos.filter((repo) => repo.status === 'pending').length}）`}
+                </button>
+              </div>
+              <div className="inline-actions wrap-mobile">
+                {repoStatusTabs.map((tab) => (
+                  <button
+                    className={selectedRepoStatus === tab.value ? 'tab-chip active' : 'tab-chip'}
+                    key={tab.label}
+                    onClick={() => handleRepoStatusTabChange(tab.value)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
+                {repoMetrics.map((item) => (
+                  <div key={item.label} className="metric-card-lite">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <label>
+                <span>repo 审核备注</span>
+                <textarea
+                  rows={3}
+                  value={repoReviewNote}
+                  onChange={(event) => setRepoReviewNote(event.target.value)}
+                  placeholder="可填写通过或拒绝说明"
+                />
+              </label>
+              {successMessage ? <div className="feedback success">{successMessage}</div> : null}
+              {error ? <div className="feedback error">{error}</div> : null}
+            </div>
+
+            {repos.length > 0 ? (
+              <div className="stack-gap-md">
+                {repos.map((repo) => (
+                  <article className="review-card repo-review-card" key={repo.id}>
+                    <div className="content-head wrap-mobile">
+                      <div className="stack-gap-xs">
+                        <span className={`status-tag ${repo.status}`}>{repoStatusLabelMap[repo.status]}</span>
+                        <strong>{repo.nickname}</strong>
+                        <span className="content-meta">
+                          《{repo.playTitle ?? repo.playId}》 · {new Date(repo.createdAt).toLocaleString('zh-CN')}
+                        </span>
+                        {repo.replyToNickname ? <span className="content-meta">回复 {repo.replyToNickname}</span> : null}
+                      </div>
+                      <div className="inline-actions wrap-mobile repo-action-row">
+                        {repoActionMeta.map((item, index) => (
+                          <Fragment key={item.action}>
+                            <button
+                              className={`button ${item.style}`}
+                              disabled={repoBusyAction !== null}
+                              onClick={() => void handleRepoReview(repo.id, item.action)}
+                              type="button"
+                            >
+                              {repoBusyAction === item.action ? '处理中' : item.label}
+                            </button>
+                            {index === 0 ? (
+                              <button
+                                className="button danger"
+                                disabled={repoBusyAction !== null}
+                                onClick={() => void handleRepoDelete(repo.id)}
+                                type="button"
+                              >
+                                {repoBusyAction === 'delete' ? '处理中' : '删除'}
+                              </button>
+                            ) : null}
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
+                    <p>{repo.content}</p>
+                    {repo.reviewNote ? <p className="sub-copy">审核备注：{repo.reviewNote}</p> : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-panel">当前筛选没有 repo。</div>
+            )}
+          </div>
+        ) : null}
+
+        {activePanel === 'auditLogs' ? (
+          <section className="stack-gap-md">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head wrap-mobile">
+                <div>
+                  <h3>审核记录</h3>
+                  <p className="sub-copy">这里展示全部审核记录，不受左侧当前筛选、当前选中内容和 repo 状态筛选影响。</p>
+                </div>
+                <span className="content-meta">
+                  小剧场 {allPlayReviewLogs.length} 条 · repo {allRepoAuditLogs.length} 条
+                </span>
+              </div>
+              <div className="inline-actions wrap-mobile">
+                {auditLogTabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    className={selectedAuditLogCategory === tab.value ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setSelectedAuditLogCategory(tab.value)}
+                    type="button"
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {shouldCollapseMobileAuditLogs ? (
+              <div className="inline-actions review-list-mobile-toggle-row">
+                <span className="content-meta">
+                  手机端先显示前 {MOBILE_AUDIT_LOG_PREVIEW_COUNT} 条，当前“{selectedAuditLogCategory === 'plays' ? '小剧场' : 'repo'}”记录共 {activeAuditLogs.length} 条
+                </span>
+                <button className="button ghost" onClick={() => setIsMobileAuditLogsExpanded((current) => !current)} type="button">
+                  {isMobileAuditLogsExpanded ? '收起' : '展开'}
+                </button>
+              </div>
+            ) : null}
+
+            {auditLogsLoading ? (
+              <div className="empty-panel">正在加载审核记录…</div>
+            ) : visibleAuditLogs.length > 0 ? (
+              <div className="log-list">
+                {selectedAuditLogCategory === 'plays'
+                  ? (visibleAuditLogs as ReviewLog[]).map((log) => (
+                      <article key={log.id} className="detail-panel log-item">
+                        <strong>{log.operator}</strong>
+                        <span>
+                          {reviewActionLabelMap[log.action]} · {formatAuditLogTime(log.createdAt)}
+                        </span>
+                        {log.playTitle ? <span>小剧场：《{log.playTitle}》</span> : <span>小剧场 ID：{log.playId}</span>}
+                        <p>{log.note}</p>
+                      </article>
+                    ))
+                  : (visibleAuditLogs as RepoAuditLog[]).map((log) => (
+                      <article key={log.id} className="detail-panel log-item">
+                        <strong>{log.operator}</strong>
+                        <span>
+                          {repoAuditActionLabelMap[log.action]} · {formatAuditLogTime(log.createdAt)}
+                        </span>
+                        {log.playTitle ? <span>小剧场：《{log.playTitle}》</span> : <span>小剧场 ID：{log.playId}</span>}
+                        {log.nickname ? <span>repo 昵称：{log.nickname}</span> : <span>repo ID：{log.repoId}</span>}
+                        <p>{log.note}</p>
+                      </article>
+                    ))}
+              </div>
+            ) : (
+              <div className="empty-panel">当前还没有{selectedAuditLogCategory === 'plays' ? '小剧场' : 'repo'}审核记录。</div>
+            )}
+          </section>
+        ) : null}
+
+        {activePanel === 'review' ? (
+          selectedPlay ? (
+            <>
+              <div className="admin-review-mode-line">
+                <div className="inline-actions wrap-mobile admin-review-view-mode-row admin-mode-lefthalf">
+                  <span className="content-meta">查看模式</span>
+                <button
+                  className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
+                  onClick={() => setAdminViewMode('preview')}
+                  type="button"
+                >
+                  仅预览
+               </button>
+                <button
+                  className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
+                  onClick={() => setAdminViewMode('edit')}
+                  type="button"
+                >
+                  仅编辑
+               </button>
+                <button
+                  className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
+                  onClick={() => setAdminViewMode('both')}
+                  type="button"
+                >
+                  编辑 + 预览
+               </button>
+             </div>
+              <div className="inline-actions admin-adjacent-row admin-mode-righthalf">
+                <button
+                  className="button secondary admin-mode-adjacent-button"
+                  disabled={!adminPrevPlayId}
+                  onClick={() => selectAdminPlayById(adminPrevPlayId)}
+                  type="button"
+                >
+                  上一篇
+                </button>
+                <button
+                  className="button secondary admin-mode-adjacent-button"
+                  disabled={!adminNextPlayId}
+                  onClick={() => selectAdminPlayById(adminNextPlayId)}
+                  type="button"
+                >
+                  下一篇
+                </button>
+              </div>
+              </div>
+
+              {adminViewMode !== 'edit' ? (
+                <div className="detail-panel stack-gap-md">
+                <div className="card-topline">
+                  <span className={`status-tag ${selectedPlay.status}`}>{statusLabelMap[selectedPlay.status]}</span>
+                  <span>{selectedPlay.category || DEFAULT_CATEGORY}</span>
+                </div>
+                <h3>{selectedPlay.title}</h3>
+                {selectedPlay.summary ? <p className="sub-copy">{selectedPlay.summary}</p> : null}
+                <div className="inline-detail-block stack-gap-md">
+                  <span className="content-meta">正文约 {selectedPlay.content.length} 字</span>
+                  <p>{selectedPlay.content}</p>
+                </div>
+                {selectedPlay.status !== 'pending' && selectedPlay.reviewNote ? (
+                  <div className="stack-gap-sm">
+                    <span className="content-meta">审核备注</span>
+                    <p className="sub-copy">{selectedPlay.reviewNote}</p>
+                  </div>
+                ) : null}
+                <div className="meta-row">
+                  <span>作者 {selectedPlay.authorName}</span>
+                  <span>创建于 {new Date(selectedPlay.createdAt).toLocaleString('zh-CN')}</span>
+                  {selectedPlay.reviewedAt ? (
+                    <span>审核于 {new Date(selectedPlay.reviewedAt).toLocaleString('zh-CN')}</span>
+                  ) : null}
+                </div>
+                {previousSubmission ? (
+                  <div className="stack-gap-md diff-panel">
+                    <div className="content-head">
+                      <h3>二次投稿差异</h3>
+                      <span className="content-meta">对比上一版同标题同作者内容</span>
+                    </div>
+                    <div className="inline-actions wrap-mobile diff-chip-row">
+                      {submissionDiffItems.map((item) => (
+                        <span key={item.label} className={item.changed ? 'status-tag approved' : 'status-tag offline'}>
+                          {item.label}{item.changed ? ' 已改' : ' 未改'}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="stack-gap-sm">
+                      {submissionDiffItems.map((item) =>
+                        item.changed ? (
+                          <article className="diff-card" key={item.label}>
+                            <strong>{item.label}</strong>
+                            <div className="diff-copy-row">
+                              <span className="content-meta">上一版</span>
+                              <p>{item.before || '（空）'}</p>
+                            </div>
+                            <div className="diff-copy-row diff-copy-row-next">
+                              <span className="content-meta">当前版</span>
+                              <p>{item.after || '（空）'}</p>
+                            </div>
+                          </article>
+                        ) : null,
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              ) : null}
+
+              {adminViewMode !== 'preview' ? (
+                <>
+              <div className="form-panel stack-gap-md">
+                <div className="stack-gap-sm">
+                  <span className="content-meta">管理员可修改标题、作者、分类、简介和正文；审核后也可以继续保存修改。</span>
+                </div>
+                <label>
+                  <span>标题</span>
+                  <input value={reviewTitle} onChange={(event) => setReviewTitle(event.target.value)} placeholder="标题不能为空" />
+                </label>
+                <label>
+                  <span>作者</span>
+                  <input value={reviewAuthorName} onChange={(event) => setReviewAuthorName(event.target.value)} placeholder="作者不能为空" />
+                </label>
+                <label>
+                  <span>分类</span>
+                  <input value={reviewCategory} onChange={(event) => setReviewCategory(event.target.value)} placeholder={DEFAULT_CATEGORY} />
+                </label>
+                <label>
+                  <span>简介（可空）</span>
+                  <input value={reviewSummary} onChange={(event) => setReviewSummary(event.target.value)} placeholder="留空则前台不展示简介" />
+                </label>
+                <label>
+                  <span>正文</span>
+                  <textarea
+                    ref={reviewContentRef}
+                    className="admin-review-content-textarea"
+                    value={reviewContent}
+                    onChange={(event) => setReviewContent(event.target.value)}
+                    placeholder="审核时可直接修正正文后再发布"
+                  />
+                </label>
+                <label>
+                  <span>审核备注</span>
+                  <textarea
+                    rows={4}
+                    value={reviewNote}
+                    onChange={(event) => setReviewNote(event.target.value)}
+                    placeholder="可填写通过原因、拒绝原因或下线说明"
+                  />
+                </label>
+
+                <div className="action-bar split-actions review-action-layout">
+                  <div className="inline-actions review-action-row">
+                    {actionMeta.map((item) => (
+                      <button
+                        key={item.action}
+                        className={`button ${item.style} review-primary-action-button`}
+                        disabled={reviewMutationBusy}
+                        onClick={() => void handleReview(item.action)}
+                        type="button"
+                      >
+                        {reviewBusyAction === item.action ? '正在处理' : item.label}
+                      </button>
+                    ))}
+                    <button
+                      className="button secondary review-save-action-button"
+                      disabled={reviewMutationBusy}
+                      onClick={() => void handleSaveAdminEdit()}
+                      type="button"
+                    >
+                      {reviewBusyAction === 'save' ? '保存中' : '保存'}
+                    </button>
+                    <button
+                      className="button warning review-delete-action-button"
+                      disabled={reviewMutationBusy}
+                      onClick={() => void handleDeletePlay()}
+                      type="button"
+                    >
+                      {reviewBusyAction === 'delete' ? '正在处理' : '删除'}
+                    </button>
+                  </div>
+                </div>
+                {feedbackScope === 'review' && processingMessage ? <div className="feedback info">{processingMessage}</div> : null}
+                {feedbackScope === 'review' && successMessage ? <div className="feedback success">{successMessage}</div> : null}
+                {feedbackScope === 'review' && error ? <div className="feedback error">{error}</div> : null}
+              </div>
+
+              <div className="log-panel stack-gap-md">
+                <div className="content-head">
+                  <h3>审核记录</h3>
+                  <div className="inline-actions wrap-mobile review-log-head-row">
+                    <span className="content-meta">共 {reviewLogs.length} 条，跨设备同步</span>
+                    {reviewLogs.length > 0 ? (
+                      <button className="button ghost review-log-action-button" onClick={() => void handleClearReviewLogs()} type="button">
+                        清空
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                {reviewLogs.length > 0 ? (
+                  <div className="log-list">
+                    {reviewLogs.map((log) => (
+                      <article key={log.id} className="log-item">
+                        <strong>{log.operator}</strong>
+                        <span>
+                          {reviewActionLabelMap[log.action]} · {new Date(log.createdAt).toLocaleString('zh-CN')}
+                        </span>
+                        {log.playTitle ? <span>小剧场：《{log.playTitle}》</span> : null}
+                        <p>{log.note}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-panel">当前内容还没有审核记录。</div>
+                )}
+              </div>
+              </>
+              ) : null}
+            </>
+          ) : (
+            <div className="empty-panel">{isMobileReviewViewport ? '先从上面选择一篇内容。' : '先从左侧选择一篇内容。'}</div>
+          )
+        ) : null}
+
+        {activePanel === 'delete' ? (
+          <section className="stack-gap-lg">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head">
+                <div>
+                  <p className="eyebrow">Bulk Delete</p>
+                  <h3>批量删除</h3>
+                  <p className="sub-copy">删除作用域基于左侧当前列表，也就是当前状态筛选和关键词筛选后的结果。</p>
+                </div>
+              </div>
+
+              <div className="duplicate-toolbar-grid">
+                <div className="duplicate-summary-card stack-gap-sm">
+                  <span>当前列表</span>
+                  <strong>{filteredPlays.length} 篇</strong>
+                  <span className="content-meta">删除面板里的“删除全部 / 删除前 x 条 / 按作者删除”都以这里为准。</span>
+                </div>
+                <div className="duplicate-summary-card stack-gap-sm">
+                  <span>已多选</span>
+                  <strong>{deleteSelectedIds.length} 篇</strong>
+                  <span className="content-meta">左侧卡片会切换成“多选删除”。</span>
+                </div>
+                <div className="duplicate-summary-card stack-gap-sm">
+                  <span>作者数</span>
+                  <strong>{deleteAuthorOptions.length} 位</strong>
+                  <span className="content-meta">可按当前列表中的某位作者整批删除。</span>
+                </div>
+              </div>
+
+              {deleteProgress ? (
+                <div className="admin-bulk-review-progress" role="status">
+                  <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                    <strong>{deleteBusy ? '删除中' : '删除结果'}</strong>
+                    <span className="content-meta">
+                      {deleteProgress.label} · 已完成 {deleteProgress.completed} / {deleteProgress.total} 篇
+                    </span>
+                  </div>
+                  <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                    <div
+                      className="admin-bulk-review-progress-fill"
+                      style={{ width: `${deleteProgress.total === 0 ? 0 : (deleteProgress.completed / deleteProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {feedbackScope === 'delete' && processingMessage ? <div className="feedback info">{processingMessage}</div> : null}
+              {feedbackScope === 'delete' && successMessage ? <div className="feedback success">{successMessage}</div> : null}
+              {feedbackScope === 'delete' && error ? <div className="feedback error">{error}</div> : null}
+
+              <div className="inline-actions wrap-mobile admin-bulk-review-row">
+                <button
+                  className="button secondary"
+                  disabled={reviewMutationBusy || deleteVisibleIds.length === 0}
+                  onClick={handleSelectAllVisibleForDelete}
+                  type="button"
+                >
+                  全选当前列表
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={reviewMutationBusy || deleteVisibleIds.length === 0}
+                  onClick={handleInvertDeleteSelection}
+                  type="button"
+                >
+                  反选
+                </button>
+                <label className="admin-bulk-review-top-count">
+                  <span>删除前</span>
+                  <input
+                    inputMode="numeric"
+                    min="1"
+                    onChange={(event) => setDeleteSelectCountInput(event.target.value.replace(/\D+/g, ''))}
+                    placeholder="x"
+                    value={deleteSelectCountInput}
+                  />
+                  <span>条</span>
+                </label>
+                <button
+                  className="button secondary"
+                  disabled={reviewMutationBusy || deleteSelectCount <= 0 || deleteVisibleIds.length === 0}
+                  onClick={handleSelectTopVisibleForDelete}
+                  type="button"
+                >
+                  选中前 {deleteSelectCount > 0 ? deleteSelectCount : 'x'} 条
+                </button>
+                <button
+                  className="button ghost"
+                  disabled={reviewMutationBusy || deleteSelectedIds.length === 0}
+                  onClick={handleClearDeleteSelection}
+                  type="button"
+                >
+                  清空已选
+                </button>
+              </div>
+
+              <div className="field-grid two-columns admin-bulk-review-grid">
+                <label>
+                  <span>按作者删除</span>
+                  <select value={deleteAuthorName} onChange={(event) => setDeleteAuthorName(event.target.value)}>
+                    <option value="">先选作者</option>
+                    {deleteAuthorOptions.map((authorName) => (
+                      <option key={authorName} value={authorName}>
+                        {authorName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="stack-gap-sm admin-bulk-review-actions">
+                  <button
+                    className="button danger"
+                    disabled={reviewMutationBusy || deleteVisibleIds.length === 0}
+                    onClick={() => void handleBatchDelete(deleteVisibleIds, '当前列表全部内容')}
+                    type="button"
+                  >
+                    {deleteBusy ? '删除处理中' : `删除当前列表全部（${deleteVisibleIds.length}）`}
+                  </button>
+                  <button
+                    className="button danger"
+                    disabled={reviewMutationBusy || selectedAuthorDeleteIds.length === 0}
+                    onClick={() => void handleBatchDelete(selectedAuthorDeleteIds, `作者 ${deleteAuthorName} 的内容`)}
+                    type="button"
+                  >
+                    {deleteBusy ? '删除处理中' : `删除该作者（${selectedAuthorDeleteIds.length}）`}
+                  </button>
+                  <button
+                    className="button danger"
+                    disabled={reviewMutationBusy || deleteSelectedIds.length === 0}
+                    onClick={() => void handleBatchDelete(deleteSelectedIds, '已勾选内容')}
+                    type="button"
+                  >
+                    {deleteBusy ? '删除处理中' : `删除已选（${deleteSelectedIds.length}）`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {activePanel === 'moveCategory' ? (
+          <section className="stack-gap-lg">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head">
+                <div>
+                  <p className="eyebrow">Bulk Move Category</p>
+                  <h3>批量移动分类</h3>
+                  <p className="sub-copy">
+                    勾选一个或多个源分类，把其中已加载的全部小剧场整体移动到目标分类（留空代表未分类）。仅在已加载全部 plays 后可用，第一次进入会自动加载。
+                  </p>
+                </div>
+              </div>
+
+              {!hasLoadedAllPlays ? (
+                <div className="feedback info">正在加载全部小剧场数据，请稍候…</div>
+              ) : (
+                <>
+                  <div className="stack-gap-sm">
+                    <strong>源分类</strong>
+                    <span className="content-meta">
+                      当前已加载 {allPlays.length} 篇，共 {moveCategoryStats.length} 个分类
+                    </span>
+                  </div>
+                  <div className="plaza-export-modal-list">
+                    {moveCategoryStats.map((item) => {
+                      const checked = moveSourceCategories.includes(item.name);
+                      return (
+                        <label className="checkbox-chip checkbox-chip-wide plaza-export-modal-option" key={item.name}>
+                          <input
+                            checked={checked}
+                            onChange={() =>
+                              setMoveSourceCategories((current) =>
+                                current.includes(item.name)
+                                  ? current.filter((value) => value !== item.name)
+                                  : [...current, item.name],
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            {item.name} · {item.count} 篇
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="stack-gap-sm">
+                    <strong>目标分类</strong>
+                    <span className="content-meta">留空则归入「未分类」（{DEFAULT_CATEGORY}）</span>
+                  </div>
+                  <SearchableCategorySelect
+                    options={moveCategoryStats.map((item) => item.name)}
+                    placeholder={DEFAULT_CATEGORY}
+                    value={moveTargetCategory}
+                    onChange={setMoveTargetCategory}
+                  />
+
+                  <div className="inline-actions wrap-mobile">
+                    <button
+                      className="button primary"
+                      disabled={moveCategoryBusy || moveCategoryTargetIds.length === 0}
+                      onClick={() => void handleBulkMoveCategory()}
+                      type="button"
+                    >
+                      {moveCategoryBusy
+                        ? '移动中…'
+                        : `移动 ${moveCategoryTargetIds.length} 篇到「${moveTargetCategory.trim() || DEFAULT_CATEGORY}」`}
+                    </button>
+                    <button
+                      className="button ghost"
+                      disabled={moveCategoryBusy}
+                      onClick={() => {
+                        setMoveSourceCategories([]);
+                        setMoveTargetCategory('');
+                        setMoveCategoryError('');
+                        setMoveCategoryMessage('');
+                      }}
+                      type="button"
+                    >
+                      重置
+                    </button>
+                  </div>
+
+                  {moveCategoryMessage ? <div className="feedback success">{moveCategoryMessage}</div> : null}
+                  {moveCategoryError ? <div className="feedback error">{moveCategoryError}</div> : null}
+                </>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activePanel === 'backup' ? (
+          <section className="stack-gap-lg">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head">
+                <div>
+                  <p className="eyebrow">Backup Restore</p>
+                  <h3>备份恢复</h3>
+                  <p className="sub-copy">导出会把待审核、已通过、已拒绝、已下线分别写进压缩包里的 4 个 TXT。导入会覆盖当前内容库，适合故障后整体恢复。</p>
+                </div>
+              </div>
+
+              <div className="backup-summary-grid">
+                {backupStatusOrder.map((status) => (
+                  <div className="duplicate-summary-card stack-gap-sm" key={`backup_current_${status}`}>
+                    <span>{backupStatusLabelMap[status]}</span>
+                    <strong>{backupCounts[status]} 篇</strong>
+                    <span className="content-meta">当前库里 {backupStatusLabelMap[status]} 的数量。</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="inline-actions wrap-mobile backup-action-row">
+                <button className="button primary" disabled={backupBusy} onClick={handleExportBackup} type="button">
+                  导出备份压缩包
+                </button>
+                <button className="button secondary" disabled={backupBusy} onClick={handleExportMergedBackup} type="button">
+                  合并导出
+                </button>
+                <button className="button secondary" disabled={backupBusy} onClick={() => backupFileInputRef.current?.click()} type="button">
+                  选择备份压缩包
+                </button>
+                <button className="button warning" disabled={backupBusy || backupImportTotal === 0} onClick={() => void handleRestoreBackup()} type="button">
+                  {backupBusy ? '恢复中' : `导入并恢复（${backupImportTotal}）`}
+                </button>
+                <button className="button ghost" disabled={backupBusy || !backupImportName} onClick={clearBackupImportSelection} type="button">
+                  清空选择
+                </button>
+                <input accept=".zip,application/zip" hidden onChange={(event) => void handleBackupFileChange(event)} ref={backupFileInputRef} type="file" />
+              </div>
+
+              <label className="checkbox-chip backup-merge-meta-toggle">
+                <input
+                  checked={mergedBackupIncludeAttachedMeta}
+                  disabled={backupBusy}
+                  onChange={(event) => setMergedBackupIncludeAttachedMeta(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>合并导出时保留附带信息</span>
+              </label>
+
+              <div className="stack-gap-sm backup-notes-panel">
+                <span className="content-meta">当前备份包会保留标题、作者、分类、简介、正文、状态、创建时间、更新时间、审核时间、审核备注和标签顺序。</span>
+                <span className="content-meta">
+                  合并导出会额外生成 authors/ 和 categories/ 两个文件夹，每位作者、每个分类各一个 TXT，便于人工查看与整理。
+                </span>
+                <span className="content-meta">
+                  关闭“保留附带信息”后，合并导出的 TXT 会去掉 Id、Status、CreatedAt、UpdatedAt、ReviewedAt、ReviewNote，只保留阅读整理需要的正文信息。
+                </span>
+                <span className="content-meta">背景图配置、审核日志不在这次 TXT 备份里。</span>
+                {backupImportName ? <span className="content-meta">已选择 {backupImportName}</span> : null}
+              </div>
+
+              {backupImportCounts ? (
+                <div className="backup-summary-grid">
+                  {backupStatusOrder.map((status) => (
+                    <div className="duplicate-summary-card stack-gap-sm" key={`backup_import_${status}`}>
+                      <span>待导入 {backupStatusLabelMap[status]}</span>
+                      <strong>{backupImportCounts[status]} 篇</strong>
+                      <span className="content-meta">压缩包里该状态的内容数量。</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {backupMessage ? (
+                <div className={backupMessageTone === 'error' ? 'feedback error' : 'feedback success'}>{backupMessage}</div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {activePanel === 'duplicates' ? (
+          <section className="stack-gap-lg">
+            <div className="form-panel stack-gap-md">
+              <div className="content-head">
+                <div>
+                  <p className="eyebrow">Duplicate Review</p>
+                  <h3>重复检测</h3>
+                  <p className="sub-copy">按 70% 到 100% 相似度扫描全文，切换面板后仍保留结果。user / char 对调的占位文本会自动忽略。</p>
+                </div>
+                <div className="inline-actions wrap-mobile duplicate-scan-actions">
+                  <button className="button primary" disabled={duplicateBusy} onClick={() => void handleScanDuplicates()} type="button">
+                    {duplicateBusy ? '扫描中...' : '开始扫描'}
+                  </button>
+                  <button className="button ghost" onClick={handleClearDuplicateSearch} type="button">
+                    清空检索
+                  </button>
+                </div>
+              </div>
+
+              <div className="duplicate-toolbar-grid">
+                <div className="duplicate-summary-card stack-gap-sm">
+                  <span>扫描范围</span>
+                  <div className="inline-actions wrap-mobile">
+                    <button
+                      className={duplicateReview.scanScope === 'all' ? 'tab-chip active' : 'tab-chip'}
+                      disabled={duplicateBusy}
+                      onClick={() => handleDuplicateScanScopeChange('all')}
+                      type="button"
+                    >
+                      整个库
+                    </button>
+                    <button
+                      className={duplicateReview.scanScope === 'approved' ? 'tab-chip active' : 'tab-chip'}
+                      disabled={duplicateBusy}
+                      onClick={() => handleDuplicateScanScopeChange('approved')}
+                      type="button"
+                    >
+                      已通过
+                    </button>
+                  </div>
+                  <span className="content-meta">当前会扫描 {duplicateScanScopeLabel} {duplicateScanSourcePlays.length} 篇。</span>
+                </div>
+                <label className="duplicate-threshold-field">
+                  <span>相似度 {duplicateReview.threshold}%</span>
+                  <input
+                    max={100}
+                    min={70}
+                    onChange={(event) => handleDuplicateThresholdChange(Number(event.target.value))}
+                    type="range"
+                    value={duplicateReview.threshold}
+                  />
+                </label>
+                <div className="duplicate-summary-card">
+                  <span>整个库</span>
+                  <strong>{allPlays.length} 篇</strong>
+                </div>
+                <div className="duplicate-summary-card">
+                  <span>已通过</span>
+                  <strong>{duplicateApprovedPlays.length} 篇</strong>
+                </div>
+                <div className="duplicate-summary-card">
+                  <span>重复组</span>
+                  <strong>{duplicateReview.groups.length} 组</strong>
+                </div>
+                <div className="duplicate-summary-card">
+                  <span>已勾选</span>
+                  <strong>{duplicateReview.selectedIds.length} 篇</strong>
+                </div>
+              </div>
+
+              {duplicateScanProgress ? (
+                <div className="admin-bulk-review-progress" role="status">
+                  <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                    <strong>{duplicateBusy ? '扫描中' : '扫描结果'}</strong>
+                    <span className="content-meta">
+                      {duplicateScanProgress.scopeLabel} · 已扫描 {duplicateScanProgress.completedAnchors} / {duplicateScanProgress.totalAnchors} 篇
+                    </span>
+                  </div>
+                  <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                    <div
+                      className="admin-bulk-review-progress-fill"
+                      style={{
+                        width: `${
+                          duplicateScanProgress.totalAnchors === 0
+                            ? 0
+                            : (duplicateScanProgress.completedAnchors / duplicateScanProgress.totalAnchors) * 100
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <span className="content-meta">
+                    已比较 {duplicateScanProgress.processedPairs} / {duplicateScanProgress.totalPairs} 对
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="inline-actions wrap-mobile duplicate-bulk-row">
+                <button className="button danger" disabled={duplicateBusy || duplicateReview.selectedIds.length === 0} onClick={() => void handleDeleteSelectedDuplicates()} type="button">
+                  剔除勾选重复
+                </button>
+                <button className="button danger" disabled={duplicateBusy || duplicateReview.groups.length === 0} onClick={() => void handleDeleteAllDuplicates()} type="button">
+                  一键剔除全部重复（保留一个）
+                </button>
+                <button className="button secondary" disabled={duplicateBusy || duplicateReview.groups.length === 0} onClick={() => void handleDeleteAllGroupSeconds()} type="button">
+                  删除全部相似组的第二个小剧场
+                </button>
+              </div>
+
+              {duplicateReview.scannedAt ? (
+                <p className="content-meta">
+                  最近扫描：{new Date(duplicateReview.scannedAt).toLocaleString('zh-CN')}，基于 {duplicateReview.scanScope === 'approved' ? '已通过' : '整个库'} {duplicateReview.scannedCount} 篇内容。
+                </p>
+              ) : null}
+            </div>
+
+            {duplicateReview.groups.length === 0 ? (
+              <div className="empty-panel">先开始扫描，重复候选会显示在这里。</div>
+            ) : (
+              <div className="stack-gap-lg">
+                {duplicateReview.groups.map((group) => {
+                  const compareTarget =
+                    duplicateReview.activeGroupId === group.id
+                      ? group.duplicates.find((item) => item.play.id === duplicateReview.activeComparedPlayId) ?? group.duplicates[0]
+                      : null;
+                  const compareDiff = compareTarget ? buildSideBySideDiff(group.anchor.content, compareTarget.play.content) : null;
+
+                  return (
+                    <article className="form-panel stack-gap-md duplicate-group-card" key={group.id}>
+                      <div className="content-head">
+                        <div>
+                          <h3>{group.anchor.title}</h3>
+                          <p className="sub-copy">保留首篇：{group.anchor.authorName} · {group.anchor.category || DEFAULT_CATEGORY} · {new Date(group.anchor.createdAt).toLocaleString('zh-CN')}</p>
+                        </div>
+                        <span className="status-tag approved">重复 {group.duplicates.length} 篇</span>
+                      </div>
+
+                      <div className="duplicate-compare-grid">
+                        <article className="duplicate-play-pane">
+                          <div className="stack-gap-sm">
+                            <strong>保留内容</strong>
+                            <span className="content-meta">{group.anchor.title}</span>
+                            {group.anchor.summary ? <p className="summary">{group.anchor.summary}</p> : null}
+                            <div className="duplicate-content-pane">
+                              {compareDiff
+                                ? compareDiff.leftSegments.map((segment, index) => (
+                                    <span className={segment.changed ? 'diff-token changed removed' : 'diff-token'} key={`left_${group.id}_${index}`}>
+                                      {segment.value}
+                                    </span>
+                                  ))
+                                : group.anchor.content}
+                            </div>
+                          </div>
+                        </article>
+
+                        <article className="duplicate-play-pane">
+                          <div className="stack-gap-sm">
+                            <strong>{compareTarget ? '当前对比内容' : '候选重复内容'}</strong>
+                            {compareTarget ? (
+                              <>
+                                <span className="content-meta">{compareTarget.play.title} · 相似度 {compareTarget.similarity}%</span>
+                                {compareTarget.play.summary ? <p className="summary">{compareTarget.play.summary}</p> : null}
+                                <div className="duplicate-content-pane">
+                                  {compareDiff
+                                    ? compareDiff.rightSegments.map((segment, index) => (
+                                        <span className={segment.changed ? 'diff-token changed added' : 'diff-token'} key={`right_${group.id}_${index}`}>
+                                          {segment.value}
+                                        </span>
+                                      ))
+                                    : compareTarget.play.content}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="empty-panel">先从右下角选一篇候选内容对比。</div>
+                            )}
+                          </div>
+                        </article>
+                      </div>
+
+                      <div className="stack-gap-md duplicate-match-list">
+                        {group.duplicates.map((item, index) => {
+                          const checked = duplicateReview.selectedIds.includes(item.play.id);
+                          const active = duplicateReview.activeGroupId === group.id && duplicateReview.activeComparedPlayId === item.play.id;
+
+                          return (
+                            <div className={active ? 'duplicate-match-row active' : 'duplicate-match-row'} key={item.play.id}>
+                              <label className="checkbox-chip checkbox-chip-wide">
+                                <input checked={checked} onChange={() => handleToggleDuplicateSelection(item.play.id)} type="checkbox" />
+                                <span>勾选剔除</span>
+                              </label>
+                              <div className="stack-gap-sm duplicate-match-meta">
+                                <strong>
+                                  #{index + 2} {item.play.title}
+                                </strong>
+                                <span className="content-meta">
+                                  {item.play.authorName} · {item.play.category || DEFAULT_CATEGORY} · 相似度 {item.similarity}%
+                                </span>
+                              </div>
+                              <div className="inline-actions wrap-mobile duplicate-match-actions">
+                                <button className={active ? 'button primary' : 'button secondary'} onClick={() => handleOpenDuplicateCompare(group.id, item.play.id)} type="button">
+                                  全文对比
+                                </button>
+                                <button
+                                  className="button danger"
+                                  disabled={duplicateBusy}
+                                  onClick={() => {
+                                    if (!window.confirm(`确认剔除《${item.play.title}》吗？`)) {
+                                      return;
+                                    }
+                                    void handleDeleteDuplicateIds([item.play.id], `已剔除《${item.play.title}》。`);
+                                  }}
+                                  type="button"
+                                >
+                                  剔除这篇
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {activePanel === 'appearance' ? (
+          <section className="form-panel stack-gap-md">
+            <div>
+              <p className="eyebrow">Theme Background</p>
+              <h3>站点</h3>
+              <p className="sub-copy">分别配置日间与夜间背景图 URL、位置、缩放和遮罩强度。</p>
+            </div>
+
+            {(['light', 'dark'] as const).map((theme) => {
+              const themeLabel = theme === 'light' ? '日间背景' : '夜间背景';
+              const themeSettings = siteSettings[theme];
+
+              return (
+                <div key={theme} className="stack-gap-md">
+                  <strong>{themeLabel}</strong>
+                  <div className="admin-grid-two-columns">
+                    {(['desktop', 'mobile'] as const).map((device) => {
+                      const deviceLabel = device === 'desktop' ? '电脑端' : '手机端';
+                      const deviceSettings = themeSettings[device];
+
+                      return (
+                        <BackgroundVisualEditor
+                          key={device}
+                          theme={theme}
+                          device={device}
+                          label={`${deviceLabel}背景图`}
+                          deviceLabel={deviceLabel}
+                          settings={deviceSettings}
+                          editing={editingBackgroundKey === `${theme}:${device}`}
+                          disabled={appearanceSaving}
+                          onEdit={() => setEditingBackgroundKey(`${theme}:${device}`)}
+                          onDone={() => setEditingBackgroundKey('')}
+                          onRemove={() => removeThemeBackground(theme, device)}
+                          onUpdate={(field, value) => updateThemeField(theme, device, field, value)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <button className="button primary" disabled={appearanceSaving} onClick={() => void handleSaveAppearance()} type="button">
+              保存背景配置
+            </button>
+            {appearanceMessage ? <div className={`feedback ${appearanceMessageTone}`}>{appearanceMessage}</div> : null}
+          </section>
+        ) : null}
+
+        {activePanel === 'tags' ? (
+          <div className="stack-gap-lg">
+            <section className="form-panel stack-gap-md">
+              <div>
+                <p className="eyebrow">Tag Dictionary</p>
+                <h3>标签</h3>
+                <p className="sub-copy">这里维护上传页可复用的标签词表。改名会同步历史内容，删除会回退到未分类。</p>
+              </div>
+
+              <label>
+                <span>新增标签</span>
+                <input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  placeholder="输入新标签名"
+                />
+              </label>
+              <button className="button primary" disabled={tagSaving || isTagSorting} onClick={() => void handleCreateTag()} type="button">
+                新增标签
+              </button>
+
+              {tagMessage ? <div className={`feedback ${tagMessageTone}`}>{tagMessage}</div> : null}
+            </section>
+
+            <section className="form-panel stack-gap-md">
+              <div className="content-head tag-library-head">
+                <div className="inline-actions wrap-mobile tag-library-title-row">
+                  <h3>当前标签库</h3>
+                  <button className="button ghost drag-toggle-button" disabled={tagSaving} onClick={() => void toggleTagSortMode()} type="button">
+                    {isTagSorting ? '保存拖拽' : '拖拽排序'}
+                  </button>
+                  {isTagSorting ? (
+                    <button className="button ghost" disabled={tagSaving} onClick={cancelTagSort} type="button">
+                      取消
+                    </button>
+                  ) : null}
+                </div>
+                <span className="content-meta">共 {displayTags.length} 个</span>
+              </div>
+
+              <div className={isTagSorting ? 'tag-admin-list is-sorting' : 'tag-admin-list'}>
+                {displayTags.map((tag) => {
+                  const editing = editingTagId === tag.id;
+
+                  return (
+                    <article
+                      key={tag.id}
+                      className={draggingTagId === tag.id ? 'tag-admin-card dragging is-sorting' : isTagSorting ? 'tag-admin-card is-sorting' : 'tag-admin-card'}
+                      data-tag-id={tag.id}
+                      draggable={isTagSorting && !editing && !tagSaving}
+                      onDragEnd={() => setDraggingTagId('')}
+                      onDragOver={(event) => {
+                        if (isTagSorting) {
+                          event.preventDefault();
+                        }
+                      }}
+                      onDragStart={() => setDraggingTagId(tag.id)}
+                      onDrop={() => {
+                        if (draggingTagId) {
+                          moveDraftTag(draggingTagId, tag.id);
+                        }
+                        setDraggingTagId('');
+                      }}
+                    >
+                      {editing ? (
+                        <label>
+                          <span>编辑标签</span>
+                          <input
+                            value={editingTagName}
+                            onChange={(event) => setEditingTagName(event.target.value)}
+                            placeholder="输入新的标签名"
+                          />
+                        </label>
+                      ) : (
+                        <div className="tag-chip-row tag-card-head">
+                          <div className="tag-chip-row tag-card-title-group">
+                            {isTagSorting ? (
+                              <button
+                                className="tag-drag-handle"
+                                onPointerCancel={handleTagPointerUp}
+                                onPointerDown={(event) => handleTagPointerDown(event, tag.id)}
+                                onPointerMove={handleTagPointerMove}
+                                onPointerUp={handleTagPointerUp}
+                                type="button"
+                              >
+                                拖拽
+                              </button>
+                            ) : null}
+                            <span className="content-meta tag-floor-order">#{tag.sortOrder + 1}</span>
+                            <strong>{tag.name}</strong>
+                          </div>
+                          {!isTagSorting ? (
+                            <span className="content-meta">更新于 {new Date(tag.updatedAt).toLocaleString('zh-CN')}</span>
+                          ) : null}
+                        </div>
+                      )}
+
+                      {!isTagSorting ? (
+                        <div className="inline-actions wrap-mobile tag-card-actions">
+                          {editing ? (
+                            <>
+                              <button className="button primary" disabled={tagSaving} onClick={() => void handleUpdateTag()} type="button">
+                                保存标签
+                              </button>
+                              <button className="button ghost" onClick={cancelEditTag} type="button">
+                                取消
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                className="button secondary"
+                                disabled={isTagSorting || tagSaving}
+                                onClick={() => startEditTag(tag)}
+                                type="button"
+                              >
+                                改名
+                              </button>
+                              <button
+                                className="button danger"
+                                disabled={isTagSorting || tagSaving}
+                                onClick={() => void handleDeleteTag(tag.id)}
+                                type="button"
+                              >
+                                删除
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
+                {displayTags.length === 0 ? <div className="empty-panel">当前还没有可用标签。</div> : null}
+              </div>
+            </section>
+          </div>
+        ) : null}
+      </section>
+    </section>
+
+      {updateAvailable ? (
+        <UpdatePromptModal onCancel={dismissUpdate} onRefresh={refreshUpdate} />
+      ) : null}
+    </>
+  );
+}
