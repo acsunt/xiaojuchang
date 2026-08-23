@@ -1,9 +1,9 @@
 name = "replace-me"
 compatibility_date = "2026-07-08"
 pages_build_output_dir = "dist"
+# 复制为 wrangler.local.toml 后填入真实项目名和 D1 database_id。
+# wrangler.local.toml 只留在本机，不要提交到 GitHub。
 # Cloudflare Pages 固定部署到 main 别名。
-# GitHub 的版本分支只做备份，不要用本地 git 分支名作为 Pages --branch。
-# 真实项目名和 D1 database_id 写在本机 wrangler.local.toml，不要提交到 GitHub。
 
 [[d1_databases]]
 binding = "DB"
