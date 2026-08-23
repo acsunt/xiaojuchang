@@ -5,7 +5,9 @@ import { getConfettiPrefs, setConfettiEnabled, setConfettiSound, type ConfettiPr
 import {
   clearRandomSeen,
   getPlazaAutoRefresh,
+  getPlazaControlsCollapsed,
   getPlazaNavigationSnapshot,
+  getPlazaToolbarCollapsed,
   getPlayPreferenceStore,
   getVisiblePlays,
   isDislikedPlay,
@@ -15,10 +17,12 @@ import {
   setDislikedBatch,
   setFavoriteBatch,
   setPlazaAutoRefresh,
+  setPlazaControlsCollapsed,
   setPlayPreferenceSetting,
   updatePlazaNavigationSnapshot,
   toggleDislikedPlay,
   toggleFavoritePlay,
+  PLAZA_TOOLBAR_UPDATED_EVENT,
   type PlazaNavigationSnapshot,
   type PlazaView,
   type PlayPreferenceStore,
@@ -62,7 +66,6 @@ const DEFAULT_PAGE_SIZE = 50;
 const MIN_PAGE_SIZE = 1;
 const MAX_PAGE_SIZE = 200;
 const PLAZA_PAGE_SIZE_KEY = 'mini-theater:plaza-page-size';
-const PLAZA_CONTROLS_COLLAPSED_KEY = 'mini-theater:plaza-controls-collapsed';
 const PLAZA_ACTIVE_VIEW_KEY = 'mini-theater:plaza-active-view';
 const PLAZA_ACTIVE_CATEGORY_KEY = 'mini-theater:plaza-active-category';
 const PLAZA_CATEGORY_FILTER_OPEN_KEY = 'mini-theater:plaza-category-filter-open';
@@ -218,15 +221,53 @@ const readPlazaNumber = (key: string, fallback: number) => {
 
 const clampPageSize = (value: number) => Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, Math.trunc(value)));
 
-const matchesPlayKeyword = (play: Play, normalizedKeyword: string) => {
+type PlaySearchField = 'title' | 'author' | 'category' | 'content';
+
+const playSearchFieldOptions: Array<{ value: PlaySearchField; label: string }> = [
+  { value: 'title', label: '标题' },
+  { value: 'author', label: '作者' },
+  { value: 'category', label: '分类' },
+  { value: 'content', label: '正文' },
+];
+
+const defaultPlaySearchFields: PlaySearchField[] = playSearchFieldOptions.map((item) => item.value);
+
+const toggleSearchField = <T extends string>(current: T[], field: T) => {
+  if (current.includes(field)) {
+    return current.filter((item) => item !== field);
+  }
+
+  return [...current, field];
+};
+
+const isSearchFieldActive = <T extends string>(current: T[], field: T) => current.includes(field);
+
+const matchesPlayKeyword = (
+  play: Play,
+  normalizedKeyword: string,
+  fields: PlaySearchField[] = defaultPlaySearchFields,
+) => {
   if (!normalizedKeyword) {
     return true;
   }
 
-  return [play.title, play.summary, play.authorName, play.content, play.category]
-    .join(' ')
-    .toLowerCase()
-    .includes(normalizedKeyword);
+  const activeFields = fields.length > 0 ? fields : defaultPlaySearchFields;
+  const haystack: string[] = [];
+
+  if (activeFields.includes('title')) {
+    haystack.push(play.title);
+  }
+  if (activeFields.includes('author')) {
+    haystack.push(play.authorName);
+  }
+  if (activeFields.includes('category')) {
+    haystack.push(play.category);
+  }
+  if (activeFields.includes('content')) {
+    haystack.push(play.summary, play.content);
+  }
+
+  return haystack.join(' ').toLowerCase().includes(normalizedKeyword);
 };
 
 const getPlayAuthorName = (play: Play) => play.authorName.trim() || '匿名';
@@ -471,6 +512,7 @@ export function PlayListPage() {
   const [message, setMessage] = useState('');
   const [repoCounts, setRepoCounts] = useState<RepoSummary[]>([]);
   const [keyword, setKeyword] = useState(() => readPlazaSearchKeyword());
+  const [playSearchFields, setPlaySearchFields] = useState<PlaySearchField[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const saved = readPlazaString(PLAZA_SORT_MODE_KEY, 'created_desc');
     return (['updated_desc', 'updated_asc', 'created_desc', 'created_asc'] as SortMode[]).includes(saved as SortMode)
@@ -558,13 +600,8 @@ export function PlayListPage() {
     };
   }, []);
 
-  const [controlsCollapsed, setControlsCollapsed] = useState(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-
-    return window.localStorage.getItem(PLAZA_CONTROLS_COLLAPSED_KEY) === 'true';
-  });
+  const [controlsCollapsed, setControlsCollapsed] = useState(() => getPlazaControlsCollapsed());
+  const [toolbarCollapsed, setToolbarCollapsed] = useState(() => getPlazaToolbarCollapsed());
   const [randomMode, setRandomMode] = useState<RandomMode>('repeatable');
   const [randomPickedPlayId, setRandomPickedPlayId] = useState('');
   const [randomMessage, setRandomMessage] = useState('');
@@ -714,11 +751,20 @@ export function PlayListPage() {
   }, [selectionMode]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    const syncToolbarCollapsed = () => {
+      setToolbarCollapsed(getPlazaToolbarCollapsed());
+    };
 
-    window.localStorage.setItem(PLAZA_CONTROLS_COLLAPSED_KEY, String(controlsCollapsed));
+    window.addEventListener('storage', syncToolbarCollapsed);
+    window.addEventListener(PLAZA_TOOLBAR_UPDATED_EVENT, syncToolbarCollapsed);
+    return () => {
+      window.removeEventListener('storage', syncToolbarCollapsed);
+      window.removeEventListener(PLAZA_TOOLBAR_UPDATED_EVENT, syncToolbarCollapsed);
+    };
+  }, []);
+
+  useEffect(() => {
+    setPlazaControlsCollapsed(controlsCollapsed);
   }, [controlsCollapsed]);
 
   useEffect(() => {
@@ -939,7 +985,7 @@ export function PlayListPage() {
         return false;
       }
 
-      return matchesPlayKeyword(play, normalizedKeyword);
+      return matchesPlayKeyword(play, normalizedKeyword, playSearchFields);
     });
 
     const field = sortMode.startsWith('created') ? 'createdAt' : 'updatedAt';
@@ -977,7 +1023,7 @@ export function PlayListPage() {
       const result = left[field].localeCompare(right[field]);
       return sortMode.endsWith('_asc') ? result : -result;
     });
-  }, [activeAuthor, activeCategory, normalizedKeyword, sortMode, viewScopedPlays, repoSortMode, activeRepoFilter, repoCountMap]);
+  }, [activeAuthor, activeCategory, normalizedKeyword, playSearchFields, sortMode, viewScopedPlays, repoSortMode, activeRepoFilter, repoCountMap]);
 
   const allPlaysByAuthor = useMemo(() => groupPlaysByExportValue(plays, getPlayAuthorName), [plays]);
 
@@ -1589,12 +1635,15 @@ export function PlayListPage() {
         ) : null}
 
         <div className="stack-gap-lg plaza-main-stack">
+      {!toolbarCollapsed ? (
       <div className="hero-panel hero-grid hero-panel-compact">
         <div className="stack-gap-sm plaza-toolbar-stack">
           <div className="plaza-toolbar-row plaza-toolbar-row-desktop" role="group" aria-label="广场桌面端操作">
             <button
+              aria-label={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
               className={controlsCollapsed ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
               onClick={() => setControlsCollapsed((current) => !current)}
+              title={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
               type="button"
             >
               {controlsCollapsed ? '展开' : '折叠'}
@@ -1659,8 +1708,10 @@ export function PlayListPage() {
 
           <div className="plaza-toolbar-row plaza-toolbar-row-mobile-main" role="group" aria-label="广场手机端主操作">
             <button
+              aria-label={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
               className={controlsCollapsed ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
               onClick={() => setControlsCollapsed((current) => !current)}
+              title={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
               type="button"
             >
               {controlsCollapsed ? '展开' : '折叠'}
@@ -1735,6 +1786,7 @@ export function PlayListPage() {
           ) : null}
         </div>
       </div>
+      ) : null}
 
       {pendingRefresh ? (
         <div className="plaza-refresh-modal-backdrop" role="presentation">
@@ -1832,6 +1884,7 @@ export function PlayListPage() {
               </div>
             </div>
           ) : null}
+          {categoryFilterOpen && authorFilterOpen ? <div className="plaza-filter-divider" aria-hidden="true" /> : null}
           {authorFilterOpen ? (
             <div className="plaza-category-strip">
               <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
@@ -1864,19 +1917,6 @@ export function PlayListPage() {
         </div>
 
         <div className="toolbar-grid plaza-filter-grid">
-          <label>
-            <span>搜索</span>
-            <ClearableField visible={Boolean(keyword.trim())} onClear={() => { setKeyword(''); setCurrentPage(1); }}>
-              <input
-                value={keyword}
-                onChange={(event) => {
-                  setKeyword(event.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="搜标题、简介、作者、分类或正文关键词"
-              />
-            </ClearableField>
-          </label>
           <div className="plaza-toolbar-row-selects">
           <CustomSelect
             label="时间排序"
@@ -1932,6 +1972,38 @@ export function PlayListPage() {
               </button>
             </div>
           </div>
+        </div>
+        <div className="plaza-search-row">
+          <label>
+            <span>搜索</span>
+            <ClearableField visible={Boolean(keyword.trim())} onClear={() => { setKeyword(''); setCurrentPage(1); }}>
+              <input
+                value={keyword}
+                onChange={(event) => {
+                  setKeyword(event.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="默认搜标题、作者、分类或正文"
+              />
+            </ClearableField>
+          </label>
+          <div className="inline-actions wrap-mobile admin-search-field-row" role="group" aria-label="搜索范围">
+            {playSearchFieldOptions.map((item) => (
+              <button
+                aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+                className={isSearchFieldActive(playSearchFields, item.value) ? 'tab-chip active' : 'tab-chip'}
+                key={item.value}
+                onClick={() => {
+                  setPlaySearchFields((current) => toggleSearchField(current, item.value));
+                  setCurrentPage(1);
+                }}
+                type="button"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
         </div>
 
         <div className="filter-summary wrap-mobile">
@@ -2017,7 +2089,7 @@ export function PlayListPage() {
       </div>
       ) : null}
 
-      {!controlsCollapsed && randomPanelOpen ? (
+      {!toolbarCollapsed && randomPanelOpen ? (
         <section className="form-panel stack-gap-md plaza-random-panel">
           <div className="content-head">
             <div>
@@ -2132,7 +2204,7 @@ export function PlayListPage() {
       {loading ? <div className="empty-panel">正在加载公开内容…</div> : null}
       {error ? <div className="empty-panel error">{error}</div> : null}
 
-      {!loading && !error && !(!controlsCollapsed && randomPanelOpen && randomPickedPlay) ? (
+      {!loading && !error && !(!toolbarCollapsed && randomPanelOpen && randomPickedPlay) ? (
         filteredPlays.length > 0 ? (
           <>
             <div

@@ -3,6 +3,9 @@ import type { Play, PlayTimeField } from '../types/play';
 const PLAY_PREFERENCES_KEY = 'mini-theater.play-preferences';
 const PLAZA_NAVIGATION_SNAPSHOT_KEY = 'mini-theater.plaza-navigation-snapshot';
 const PLAZA_AUTO_REFRESH_KEY = 'mini-theater.plaza-auto-refresh';
+const PLAZA_CONTROLS_COLLAPSED_KEY = 'mini-theater:plaza-controls-collapsed';
+const PLAZA_TOOLBAR_COLLAPSED_KEY = 'mini-theater:plaza-toolbar-collapsed';
+const PLAZA_TOOLBAR_UPDATED_EVENT = 'mini-theater:plaza-toolbar-updated';
 const PLAZA_NAVIGATION_SNAPSHOT_TTL = 30 * 60 * 1000;
 const FAVORITE_RANDOM_WEIGHT = 3;
 
@@ -216,6 +219,41 @@ export const setPlazaAutoRefresh = (enabled: boolean) => {
 
   return enabled;
 };
+
+export const getPlazaControlsCollapsed = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem(PLAZA_CONTROLS_COLLAPSED_KEY) === 'true';
+};
+
+export const setPlazaControlsCollapsed = (collapsed: boolean) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(PLAZA_CONTROLS_COLLAPSED_KEY, String(collapsed));
+  }
+
+  return collapsed;
+};
+
+export const getPlazaToolbarCollapsed = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem(PLAZA_TOOLBAR_COLLAPSED_KEY) === 'true';
+};
+
+export const setPlazaToolbarCollapsed = (collapsed: boolean) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(PLAZA_TOOLBAR_COLLAPSED_KEY, String(collapsed));
+    window.dispatchEvent(new Event(PLAZA_TOOLBAR_UPDATED_EVENT));
+  }
+
+  return collapsed;
+};
+
+export { PLAZA_TOOLBAR_UPDATED_EVENT };
 
 export const getPlayPreferenceStore = () =>
   sanitizeStore(readStore<PlayPreferenceStore>(PLAY_PREFERENCES_KEY, defaultStore));

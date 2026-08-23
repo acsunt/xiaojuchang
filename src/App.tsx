@@ -10,6 +10,11 @@ import {
   getVisitorId,
   REPO_NOTICE_UPDATED_EVENT,
 } from './services/browser-repo-history';
+import {
+  getPlazaToolbarCollapsed,
+  setPlazaToolbarCollapsed,
+  PLAZA_TOOLBAR_UPDATED_EVENT,
+} from './services/browser-play-preferences';
 import type { RepoNoticeSettings, SiteSettings } from './types/play';
 import { PlayDetailPage } from './pages/plays/PlayDetailPage';
 import { PlayListPage } from './pages/plays/PlayListPage';
@@ -66,6 +71,7 @@ export default function App() {
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
   const [repoNoticeSettings, setRepoNoticeSettingsState] = useState<RepoNoticeSettings>(() => getRepoNoticeSettings());
   const [repoUnreadCount, setRepoUnreadCount] = useState(0);
+  const [plazaToolbarCollapsed, setPlazaToolbarCollapsedState] = useState(() => getPlazaToolbarCollapsed());
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
@@ -125,6 +131,19 @@ export default function App() {
   }, [location.pathname]);
 
   useEffect(() => {
+    const syncToolbarCollapsed = () => {
+      setPlazaToolbarCollapsedState(getPlazaToolbarCollapsed());
+    };
+
+    window.addEventListener('storage', syncToolbarCollapsed);
+    window.addEventListener(PLAZA_TOOLBAR_UPDATED_EVENT, syncToolbarCollapsed);
+    return () => {
+      window.removeEventListener('storage', syncToolbarCollapsed);
+      window.removeEventListener(PLAZA_TOOLBAR_UPDATED_EVENT, syncToolbarCollapsed);
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -163,6 +182,15 @@ export default function App() {
       <header className="app-header">
         <div className="header-actions">
           <nav className="top-nav">
+            <button
+              aria-label={plazaToolbarCollapsed ? '展开广场工具栏' : '折叠广场工具栏'}
+              className={plazaToolbarCollapsed ? 'icon-button header-toolbar-toggle active' : 'icon-button header-toolbar-toggle'}
+              onClick={() => setPlazaToolbarCollapsedState(setPlazaToolbarCollapsed(!plazaToolbarCollapsed))}
+              title={plazaToolbarCollapsed ? '展开广场工具栏' : '折叠广场工具栏'}
+              type="button"
+            >
+              {plazaToolbarCollapsed ? '▸' : '▾'}
+            </button>
             <NavLink to="/repos" className={({ isActive }) => (isActive ? 'nav-pill active repo-nav-pill' : 'nav-pill repo-nav-pill')}>
               repo
               {repoNoticeSettings === 'count' && repoUnreadCount > 0 ? (
