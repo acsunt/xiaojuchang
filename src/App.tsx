@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
+import { ChangelogModal } from './components/ChangelogModal';
 import { UpdatePromptModal } from './components/UpdatePromptModal';
 import {
   getOwnedPlayIds,
@@ -15,6 +16,7 @@ import {
   setPlazaToolbarCollapsed,
   PLAZA_TOOLBAR_UPDATED_EVENT,
 } from './services/browser-play-preferences';
+import { OPEN_CHANGELOG_EVENT } from './data/visitor-changelog';
 import type { RepoNoticeSettings, SiteSettings } from './types/play';
 import { PlayDetailPage } from './pages/plays/PlayDetailPage';
 import { PlayListPage } from './pages/plays/PlayListPage';
@@ -72,6 +74,7 @@ export default function App() {
   const [repoNoticeSettings, setRepoNoticeSettingsState] = useState<RepoNoticeSettings>(() => getRepoNoticeSettings());
   const [repoUnreadCount, setRepoUnreadCount] = useState(0);
   const [plazaToolbarCollapsed, setPlazaToolbarCollapsedState] = useState(() => getPlazaToolbarCollapsed());
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
@@ -144,6 +147,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openChangelog = () => {
+      setChangelogOpen(true);
+    };
+
+    window.addEventListener(OPEN_CHANGELOG_EVENT, openChangelog);
+    return () => {
+      window.removeEventListener(OPEN_CHANGELOG_EVENT, openChangelog);
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -183,10 +197,10 @@ export default function App() {
         <div className="header-actions">
           <nav className="top-nav">
             <button
-              aria-label={plazaToolbarCollapsed ? '展开广场工具栏' : '折叠广场工具栏'}
+              aria-label={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
               className={plazaToolbarCollapsed ? 'icon-button header-toolbar-toggle active' : 'icon-button header-toolbar-toggle'}
               onClick={() => setPlazaToolbarCollapsedState(setPlazaToolbarCollapsed(!plazaToolbarCollapsed))}
-              title={plazaToolbarCollapsed ? '展开广场工具栏' : '折叠广场工具栏'}
+              title={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
               type="button"
             >
               {plazaToolbarCollapsed ? '▸' : '▾'}
@@ -249,6 +263,8 @@ export default function App() {
       {updateAvailable ? (
         <UpdatePromptModal onCancel={dismissUpdate} onRefresh={refreshUpdate} />
       ) : null}
+
+      {changelogOpen ? <ChangelogModal onClose={() => setChangelogOpen(false)} /> : null}
     </div>
   );
 }

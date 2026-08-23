@@ -35,6 +35,7 @@ import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaDerivedPanel } from './PlazaDerivedPanel';
 import { getPlayVersionKey, sortPlayVersions } from './play-versions';
 import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT, type Play, type RepoSummary } from '../../types/play';
+import { openVisitorChangelog } from '../../data/visitor-changelog';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';
@@ -1056,6 +1057,14 @@ export function PlayListPage() {
     return filteredPlays.slice(startIndex, startIndex + pageSize);
   }, [currentPage, filteredPlays, pageSize]);
 
+  // 控制区面板内部是否仍有可见内容：工具栏展开时含时间排序/搜索/批量操作等；
+  // 工具栏收起后，分类/作者条或收藏视图随机选项仍可能显示。三者皆无则不渲染面板外壳，避免残留空白。
+  const hasVisibleControls =
+    !toolbarCollapsed || categoryFilterOpen || authorFilterOpen || activeView === 'favorites';
+  // 工具栏收起时，分类/作者筛选区可能仍有可见内容，单独判定；皆无则不渲染空筛选头。
+  const hasFilterHeaderContent =
+    !toolbarCollapsed || categoryFilterOpen || authorFilterOpen;
+
   useEffect(() => {
     if (loading) {
       return;
@@ -1676,6 +1685,9 @@ export function PlayListPage() {
             >
               {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
             </button>
+            <button className="button secondary plaza-toolbar-button" onClick={openVisitorChangelog} type="button">
+              更新日志
+            </button>
             <button className="button secondary plaza-toolbar-button" onClick={handleExportAll} type="button">
               导出全部
             </button>
@@ -1743,6 +1755,9 @@ export function PlayListPage() {
               type="button"
             >
               {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
+            </button>
+            <button className="button secondary plaza-toolbar-button" onClick={openVisitorChangelog} type="button">
+              更新日志
             </button>
           </div>
 
@@ -1833,9 +1848,11 @@ export function PlayListPage() {
         />
       ) : null}
 
-      {!controlsCollapsed ? (
+      {!controlsCollapsed && hasVisibleControls ? (
         <div className="form-panel compact-panel stack-gap-md plaza-controls-panel">
+        {hasFilterHeaderContent ? (
         <div className="stack-gap-sm plaza-filter-header">
+          {!toolbarCollapsed ? (
           <div className="plaza-view-primary">
             {(['everything', 'all', 'favorites', 'disliked'] as const).map((view) => (
               <button
@@ -1855,6 +1872,7 @@ export function PlayListPage() {
               </button>
             ))}
           </div>
+          ) : null}
           {categoryFilterOpen ? (
             <div className="plaza-category-strip">
               <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
@@ -1915,7 +1933,9 @@ export function PlayListPage() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
+        {!toolbarCollapsed ? (
         <div className="toolbar-grid plaza-filter-grid">
           <div className="plaza-toolbar-row-selects">
           <CustomSelect
@@ -1973,6 +1993,8 @@ export function PlayListPage() {
             </div>
           </div>
         </div>
+        ) : null}
+        {!toolbarCollapsed ? (
         <div className="plaza-search-row">
           <label>
             <span>搜索</span>
@@ -2005,7 +2027,9 @@ export function PlayListPage() {
           </div>
           <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
         </div>
+        ) : null}
 
+        {!toolbarCollapsed ? (
         <div className="filter-summary wrap-mobile">
           <span>
             当前 {filteredPlays.length} 篇，第 {currentPage} / {totalPages} 页
@@ -2031,7 +2055,9 @@ export function PlayListPage() {
             </button>
           ) : null}
         </div>
+        ) : null}
 
+        {!toolbarCollapsed ? (
         <div className="inline-actions wrap-mobile plaza-bulk-action-row">
           <button className="button secondary" onClick={() => applyBatchPreference('favorite')} type="button">
             {selectionMode === 'favorite'
@@ -2065,6 +2091,7 @@ export function PlayListPage() {
             <span>屏蔽不喜欢内容</span>
           </label>
         </div>
+        ) : null}
 
         {activeView === 'favorites' ? (
           <div className="inline-actions wrap-mobile plaza-random-options-row">
