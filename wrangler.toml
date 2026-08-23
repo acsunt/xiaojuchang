@@ -7,4 +7,4 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "mini-theater"
-database_id = "9d9a8905-16ed-4126-90a6-635c75a89ddb"
+database_id = "replace-me"
