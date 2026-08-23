@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent as ReactChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAdminUpdateNotifier } from '../../../hooks/useUpdateNotifier';
 import { UpdatePromptModal } from '../../../components/UpdatePromptModal';
@@ -43,33 +43,8 @@ import {
   type RepoStatus,
   type ReviewAction,
   type ReviewLog,
-  type SiteSettings,
   type Tag,
 } from '../../../types/play';
-
-const createDefaultBackground = (overlayOpacity: number) => ({
-  backgroundUrl: '',
-  crop: {
-    positionX: 50,
-    positionY: 50,
-    scale: 100,
-    backgroundOpacity: 1,
-    overlayOpacity,
-  },
-});
-
-const defaultSiteSettings: SiteSettings = {
-  light: {
-    desktop: createDefaultBackground(0.2),
-    mobile: createDefaultBackground(0.2),
-  },
-  dark: {
-    desktop: createDefaultBackground(0.32),
-    mobile: createDefaultBackground(0.32),
-  },
-  createdAt: '',
-  updatedAt: '',
-};
 
 const statusTabs: Array<{ label: string; value?: PlayStatus }> = [
   { label: '全部', value: undefined },
@@ -230,486 +205,8 @@ const repoAuditActionLabelMap: Record<RepoAuditAction, string> = {
   delete: '删除',
 };
 
-const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-const BACKGROUND_CROP_MIN_EDGE = 56;
-
-type CropRect = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-};
-
-type CropSize = {
-  width: number;
-  height: number;
-};
-
-type BackgroundEditorInteraction = {
-  imageRect: CropRect;
-  maxCropRect: CropRect;
-  mode: 'move' | 'resize';
-  pointerId: number;
-  startRect: CropRect;
-  startX: number;
-  startY: number;
-};
-
-const getBackgroundCropAspectRatio = (device: BackgroundDeviceMode) => (device === 'desktop' ? 16 / 9 : 9 / 16);
-const getBackgroundCropRatioLabel = (device: BackgroundDeviceMode) => (device === 'desktop' ? '16:9' : '9:16');
-
-const getMinCropSize = (aspectRatio: number): CropSize => {
-  if (aspectRatio >= 1) {
-    const height = BACKGROUND_CROP_MIN_EDGE;
-    return {
-      width: height * aspectRatio,
-      height,
-    };
-  }
-
-  const width = BACKGROUND_CROP_MIN_EDGE;
-  return {
-    width,
-    height: width / aspectRatio,
-  };
-};
-
-const getContainRect = (stageSize: CropSize, imageSize: CropSize): CropRect => {
-  if (stageSize.width <= 0 || stageSize.height <= 0) {
-    return { left: 0, top: 0, width: 0, height: 0 };
-  }
-
-  if (imageSize.width <= 0 || imageSize.height <= 0) {
-    return {
-      left: 0,
-      top: 0,
-      width: stageSize.width,
-      height: stageSize.height,
-    };
-  }
-
-  const stageRatio = stageSize.width / stageSize.height;
-  const imageRatio = imageSize.width / imageSize.height;
-
-  if (imageRatio > stageRatio) {
-    const width = stageSize.width;
-    const height = width / imageRatio;
-    return {
-      left: 0,
-      top: (stageSize.height - height) / 2,
-      width,
-      height,
-    };
-  }
-
-  const height = stageSize.height;
-  const width = height * imageRatio;
-  return {
-    left: (stageSize.width - width) / 2,
-    top: 0,
-    width,
-    height,
-  };
-};
-
-const getMaxCropRect = (imageRect: CropRect, aspectRatio: number): CropRect => {
-  if (imageRect.width <= 0 || imageRect.height <= 0) {
-    return { ...imageRect };
-  }
-
-  const imageRatio = imageRect.width / imageRect.height;
-  if (imageRatio > aspectRatio) {
-    const height = imageRect.height;
-    const width = height * aspectRatio;
-    return {
-      left: imageRect.left + (imageRect.width - width) / 2,
-      top: imageRect.top,
-      width,
-      height,
-    };
-  }
-
-  const width = imageRect.width;
-  const height = width / aspectRatio;
-  return {
-    left: imageRect.left,
-    top: imageRect.top + (imageRect.height - height) / 2,
-    width,
-    height,
-  };
-};
-
-const clampCropRectWithinImage = (rect: CropRect, imageRect: CropRect, aspectRatio: number, maxCropRect: CropRect): CropRect => {
-  const minCropSize = getMinCropSize(aspectRatio);
-  const width = clampNumber(rect.width, minCropSize.width, maxCropRect.width);
-  const height = width / aspectRatio;
-  const minLeft = imageRect.left;
-  const maxLeft = imageRect.left + imageRect.width - width;
-  const minTop = imageRect.top;
-  const maxTop = imageRect.top + imageRect.height - height;
-
-  return {
-    left: clampNumber(rect.left, minLeft, Math.max(minLeft, maxLeft)),
-    top: clampNumber(rect.top, minTop, Math.max(minTop, maxTop)),
-    width,
-    height,
-  };
-};
-
-const getCropRectFromSettings = (
-  crop: SiteSettings[ThemeMode][BackgroundDeviceMode]['crop'],
-  imageRect: CropRect,
-  aspectRatio: number,
-): CropRect => {
-  const maxCropRect = getMaxCropRect(imageRect, aspectRatio);
-  if (maxCropRect.width <= 0 || maxCropRect.height <= 0) {
-    return maxCropRect;
-  }
-
-  const width = maxCropRect.width * (100 / clampNumber(crop.scale, 100, 240));
-  const height = width / aspectRatio;
-  const centerX = imageRect.left + (imageRect.width * clampNumber(crop.positionX, 0, 100)) / 100;
-  const centerY = imageRect.top + (imageRect.height * clampNumber(crop.positionY, 0, 100)) / 100;
-
-  return clampCropRectWithinImage(
-    {
-      left: centerX - width / 2,
-      top: centerY - height / 2,
-      width,
-      height,
-    },
-    imageRect,
-    aspectRatio,
-    maxCropRect,
-  );
-};
-
-function BackgroundVisualEditor({
-  device,
-  deviceLabel,
-  disabled,
-  editing,
-  label,
-  onDone,
-  onEdit,
-  onRemove,
-  onUpdate,
-  settings,
-  theme,
-}: BackgroundEditorProps) {
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const interactionRef = useRef<BackgroundEditorInteraction | null>(null);
-  const [stageSize, setStageSize] = useState<CropSize>({ width: 0, height: 0 });
-  const [imageSize, setImageSize] = useState<CropSize>({ width: 0, height: 0 });
-  const cropAspectRatio = getBackgroundCropAspectRatio(device);
-  const cropRatioLabel = getBackgroundCropRatioLabel(device);
-
-  useEffect(() => {
-    const node = stageRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) {
-        return;
-      }
-
-      setStageSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      });
-    });
-
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    setImageSize({ width: 0, height: 0 });
-    interactionRef.current = null;
-  }, [settings.backgroundUrl]);
-
-  const imageRect = useMemo(() => getContainRect(stageSize, imageSize), [stageSize, imageSize]);
-  const maxCropRect = useMemo(() => getMaxCropRect(imageRect, cropAspectRatio), [imageRect, cropAspectRatio]);
-  const cropRect = useMemo(
-    () => getCropRectFromSettings(settings.crop, imageRect, cropAspectRatio),
-    [settings.crop, imageRect, cropAspectRatio],
-  );
-
-  const commitCropRect = useCallback(
-    (nextRect: CropRect) => {
-      if (imageRect.width <= 0 || imageRect.height <= 0 || maxCropRect.width <= 0) {
-        return;
-      }
-
-      const normalizedRect = clampCropRectWithinImage(nextRect, imageRect, cropAspectRatio, maxCropRect);
-      const centerX = normalizedRect.left + normalizedRect.width / 2;
-      const centerY = normalizedRect.top + normalizedRect.height / 2;
-      const positionX = clampNumber(((centerX - imageRect.left) / imageRect.width) * 100, 0, 100);
-      const positionY = clampNumber(((centerY - imageRect.top) / imageRect.height) * 100, 0, 100);
-      const scale = clampNumber((maxCropRect.width / normalizedRect.width) * 100, 100, 240);
-
-      onUpdate('positionX', String(Math.round(positionX)));
-      onUpdate('positionY', String(Math.round(positionY)));
-      onUpdate('scale', String(Math.round(scale)));
-    },
-    [cropAspectRatio, imageRect, maxCropRect, onUpdate],
-  );
-
-  const stopInteraction = useCallback((event?: ReactPointerEvent<HTMLDivElement>) => {
-    if (event && event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    interactionRef.current = null;
-  }, []);
-
-  const handleStagePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!editing || !settings.backgroundUrl || imageRect.width <= 0 || imageRect.height <= 0 || disabled) {
-      return;
-    }
-
-    const action = (event.target as HTMLElement).closest<HTMLElement>('[data-crop-action]')?.dataset.cropAction;
-    const currentRect = cropRect;
-    const stage = event.currentTarget;
-    stage.setPointerCapture(event.pointerId);
-
-    if (!action) {
-      const pointerRect = clampCropRectWithinImage(
-        {
-          left: event.clientX - stage.getBoundingClientRect().left - currentRect.width / 2,
-          top: event.clientY - stage.getBoundingClientRect().top - currentRect.height / 2,
-          width: currentRect.width,
-          height: currentRect.height,
-        },
-        imageRect,
-        cropAspectRatio,
-        maxCropRect,
-      );
-      commitCropRect(pointerRect);
-      interactionRef.current = {
-        imageRect,
-        maxCropRect,
-        mode: 'move',
-        pointerId: event.pointerId,
-        startRect: pointerRect,
-        startX: event.clientX,
-        startY: event.clientY,
-      };
-      return;
-    }
-
-    event.preventDefault();
-    interactionRef.current = {
-      imageRect,
-      maxCropRect,
-      mode: action === 'resize' ? 'resize' : 'move',
-      pointerId: event.pointerId,
-      startRect: currentRect,
-      startX: event.clientX,
-      startY: event.clientY,
-    };
-  };
-
-  const handleStagePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const interaction = interactionRef.current;
-    if (!interaction || interaction.pointerId !== event.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (interaction.mode === 'move') {
-      commitCropRect({
-        ...interaction.startRect,
-        left: interaction.startRect.left + (event.clientX - interaction.startX),
-        top: interaction.startRect.top + (event.clientY - interaction.startY),
-      });
-      return;
-    }
-
-    const aspectRatio = interaction.startRect.width / interaction.startRect.height;
-    const minCropSize = getMinCropSize(aspectRatio);
-    const widthByX = interaction.startRect.width + (event.clientX - interaction.startX);
-    const widthByY = interaction.startRect.width + (event.clientY - interaction.startY) * aspectRatio;
-    const proposedWidth = Math.max(widthByX, widthByY);
-    const maxWidthFromBounds = Math.min(
-      interaction.imageRect.left + interaction.imageRect.width - interaction.startRect.left,
-      (interaction.imageRect.top + interaction.imageRect.height - interaction.startRect.top) * aspectRatio,
-      interaction.maxCropRect.width,
-    );
-    const nextWidth = clampNumber(proposedWidth, minCropSize.width, maxWidthFromBounds);
-
-    commitCropRect({
-      left: interaction.startRect.left,
-      top: interaction.startRect.top,
-      width: nextWidth,
-      height: nextWidth / aspectRatio,
-    });
-  };
-
-  return (
-    <div className="background-device-panel stack-gap-md">
-      <div className="content-head">
-        <div>
-          <strong>{deviceLabel}</strong>
-          <p className="content-meta">只影响{deviceLabel}访问时的背景图。</p>
-        </div>
-        <div className="inline-actions wrap-mobile">
-          <button className="button secondary" disabled={!settings.backgroundUrl || disabled} onClick={onEdit} type="button">
-            编辑
-          </button>
-          <button className="button ghost" disabled={!settings.backgroundUrl || disabled} onClick={onRemove} type="button">
-            去掉背景图片
-          </button>
-        </div>
-      </div>
-
-      <label>
-        <span>{label} URL</span>
-        <input
-          value={settings.backgroundUrl}
-          onChange={(event) => {
-            onUpdate('backgroundUrl', event.target.value);
-            if (event.target.value.trim()) {
-              onEdit();
-            }
-          }}
-          onFocus={settings.backgroundUrl ? undefined : onEdit}
-          placeholder="https://example.com/background.jpg"
-        />
-      </label>
-
-      {settings.backgroundUrl ? (
-        <div className={editing ? 'background-crop-editor editing' : 'background-crop-editor'}>
-          <div className="content-meta">
-            当前裁剪比例 {cropRatioLabel}。{editing ? '拖动选框移动保留区域，拖右下角圆点可缩放，选框比例会固定。' : '点击编辑后可重新裁剪。'}
-          </div>
-          <div
-            className={`background-crop-stage ${device}`}
-            onPointerCancel={stopInteraction}
-            onPointerDown={handleStagePointerDown}
-            onPointerMove={handleStagePointerMove}
-            onPointerUp={stopInteraction}
-            ref={stageRef}
-            role="presentation"
-            style={{ '--preview-bg-overlay': settings.crop.overlayOpacity } as CSSProperties}
-          >
-            <div
-              className="background-crop-image-frame"
-              style={{
-                left: `${imageRect.left}px`,
-                top: `${imageRect.top}px`,
-                width: `${imageRect.width}px`,
-                height: `${imageRect.height}px`,
-                opacity: settings.crop.backgroundOpacity ?? 1,
-              }}
-            >
-              <img
-                alt=""
-                className="background-crop-image"
-                draggable={false}
-                onLoad={(event) =>
-                  setImageSize({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  })
-                }
-                src={settings.backgroundUrl}
-              />
-            </div>
-            <span className="background-crop-grid" />
-            {cropRect.width > 0 && cropRect.height > 0 ? (
-              <div
-                className="background-crop-selection"
-                data-crop-action="move"
-                style={{
-                  left: `${cropRect.left}px`,
-                  top: `${cropRect.top}px`,
-                  width: `${cropRect.width}px`,
-                  height: `${cropRect.height}px`,
-                }}
-              >
-                <span className="background-crop-selection-badge">{cropRatioLabel}</span>
-                {editing ? <span className="background-crop-selection-handle" data-crop-action="resize" /> : null}
-              </div>
-            ) : null}
-            <span className="background-crop-hint">{editing ? '拖动选框或右下角圆点' : '点击编辑后可重新裁剪'}</span>
-          </div>
-
-          {editing ? (
-            <div className="background-crop-controls">
-              <label>
-                <span>裁剪缩放 {settings.crop.scale}%</span>
-                <input
-                  type="range"
-                  min={100}
-                  max={240}
-                  value={settings.crop.scale}
-                  onChange={(event) => onUpdate('scale', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>图片透明度 {Math.round((settings.crop.backgroundOpacity ?? 1) * 100)}%</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={settings.crop.backgroundOpacity ?? 1}
-                  onChange={(event) => onUpdate('backgroundOpacity', event.target.value)}
-                />
-              </label>
-              <label>
-                <span>遮罩强度 {Math.round(settings.crop.overlayOpacity * 100)}%</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={0.9}
-                  step={0.05}
-                  value={settings.crop.overlayOpacity}
-                  onChange={(event) => onUpdate('overlayOpacity', event.target.value)}
-                />
-              </label>
-              <button className="button primary" disabled={disabled} onClick={onDone} type="button">
-                完成调节
-              </button>
-            </div>
-          ) : null}
-
-          <div className="content-meta">
-            {theme === 'light' ? '日间' : '夜间'} · {device === 'desktop' ? '电脑端' : '手机端'} · 当前裁剪比例 {cropRatioLabel} · 裁剪中心 {settings.crop.positionX}% / {settings.crop.positionY}%
-          </div>
-        </div>
-      ) : (
-        <div className="background-crop-empty">填入图床 URL 后，可直接在这里裁剪画面。</div>
-      )}
-    </div>
-  );
-}
-
-type AdminPanel = 'review' | 'repo' | 'auditLogs' | 'delete' | 'backup' | 'appearance' | 'tags' | 'duplicates' | 'moveCategory';
+type AdminPanel = 'review' | 'repo' | 'auditLogs' | 'delete' | 'backup' | 'tags' | 'duplicates' | 'moveCategory';
 type AuditLogCategory = 'plays' | 'repos';
-type ThemeMode = 'light' | 'dark';
-type BackgroundDeviceMode = 'desktop' | 'mobile';
-type BackgroundEditableField = 'backgroundUrl' | 'positionX' | 'positionY' | 'scale' | 'backgroundOpacity' | 'overlayOpacity';
-
-type BackgroundEditorProps = {
-  theme: ThemeMode;
-  device: BackgroundDeviceMode;
-  label: string;
-  deviceLabel: string;
-  settings: SiteSettings[ThemeMode][BackgroundDeviceMode];
-  editing: boolean;
-  disabled: boolean;
-  onEdit: () => void;
-  onDone: () => void;
-  onRemove: () => void;
-  onUpdate: (field: BackgroundEditableField, value: string) => void;
-};
 
 type SubmissionDiffItem = {
   label: string;
@@ -753,7 +250,6 @@ const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '删除', value: 'delete' },
   { label: '移动分类', value: 'moveCategory' },
   { label: '备份', value: 'backup' },
-  { label: '背景', value: 'appearance' },
   { label: '标签', value: 'tags' },
   { label: '重复', value: 'duplicates' },
 ];
@@ -794,11 +290,83 @@ const notifyPlaysUpdate = () => {
   window.dispatchEvent(new Event(PLAYS_UPDATED_EVENT));
 };
 
-const matchesPlayKeyword = (play: Play, normalizedKeyword: string) =>
-  [play.title, play.summary, play.authorName, play.content, play.category]
-    .join(' ')
-    .toLowerCase()
-    .includes(normalizedKeyword);
+type PlaySearchField = 'title' | 'author' | 'category' | 'content';
+type RepoSearchField = 'nickname' | 'content' | 'title' | 'author';
+
+const playSearchFieldOptions: Array<{ value: PlaySearchField; label: string }> = [
+  { value: 'title', label: '标题' },
+  { value: 'author', label: '作者' },
+  { value: 'category', label: '分类' },
+  { value: 'content', label: '正文' },
+];
+
+const repoSearchFieldOptions: Array<{ value: RepoSearchField; label: string }> = [
+  { value: 'nickname', label: '昵称' },
+  { value: 'title', label: '标题' },
+  { value: 'author', label: '作者' },
+  { value: 'content', label: '正文' },
+];
+
+const defaultPlaySearchFields: PlaySearchField[] = playSearchFieldOptions.map((item) => item.value);
+const defaultRepoSearchFields: RepoSearchField[] = repoSearchFieldOptions.map((item) => item.value);
+
+const toggleSearchField = <T extends string>(current: T[], field: T) => {
+  if (current.includes(field)) {
+    return current.filter((item) => item !== field);
+  }
+
+  return [...current, field];
+};
+
+const isSearchFieldActive = <T extends string>(current: T[], field: T) => current.includes(field);
+
+const matchesPlayKeyword = (play: Play, normalizedKeyword: string, fields: PlaySearchField[] = defaultPlaySearchFields) => {
+  if (!normalizedKeyword) {
+    return true;
+  }
+
+  const activeFields = fields.length > 0 ? fields : defaultPlaySearchFields;
+  const haystack: string[] = [];
+
+  if (activeFields.includes('title')) {
+    haystack.push(play.title);
+  }
+  if (activeFields.includes('author')) {
+    haystack.push(play.authorName);
+  }
+  if (activeFields.includes('category')) {
+    haystack.push(play.category);
+  }
+  if (activeFields.includes('content')) {
+    haystack.push(play.summary, play.content);
+  }
+
+  return haystack.join(' ').toLowerCase().includes(normalizedKeyword);
+};
+
+const matchesRepoKeyword = (repo: Repo, normalizedKeyword: string, fields: RepoSearchField[] = defaultRepoSearchFields) => {
+  if (!normalizedKeyword) {
+    return true;
+  }
+
+  const activeFields = fields.length > 0 ? fields : defaultRepoSearchFields;
+  const haystack: string[] = [];
+
+  if (activeFields.includes('nickname')) {
+    haystack.push(repo.nickname, repo.replyToNickname ?? '');
+  }
+  if (activeFields.includes('title')) {
+    haystack.push(repo.playTitle ?? '', repo.playId);
+  }
+  if (activeFields.includes('author')) {
+    haystack.push(repo.playAuthorName ?? '');
+  }
+  if (activeFields.includes('content')) {
+    haystack.push(repo.content);
+  }
+
+  return haystack.join(' ').toLowerCase().includes(normalizedKeyword);
+};
 
 export function AdminReviewPage() {
   const navigate = useNavigate();
@@ -892,17 +460,15 @@ export function AdminReviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [playSearchFields, setPlaySearchFields] = useState<PlaySearchField[]>([]);
+  const [repoKeyword, setRepoKeyword] = useState('');
+  const [repoSearchFields, setRepoSearchFields] = useState<RepoSearchField[]>([]);
   const [tagDraft, setTagDraft] = useState('');
   const [editingTagId, setEditingTagId] = useState('');
   const [editingTagName, setEditingTagName] = useState('');
   const [tagMessage, setTagMessage] = useState('');
   const [tagMessageTone, setTagMessageTone] = useState<'success' | 'error'>('success');
   const [tagSaving, setTagSaving] = useState(false);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
-  const [appearanceMessage, setAppearanceMessage] = useState('');
-  const [appearanceMessageTone, setAppearanceMessageTone] = useState<'success' | 'error'>('success');
-  const [appearanceSaving, setAppearanceSaving] = useState(false);
-  const [editingBackgroundKey, setEditingBackgroundKey] = useState('');
   const [activePanel, setActivePanel] = useState<AdminPanel>('review');
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState>(() => getDuplicateReviewState());
   const [duplicateBusy, setDuplicateBusy] = useState(false);
@@ -1073,16 +639,6 @@ export function AdminReviewPage() {
     }
   };
 
-  const loadSiteSettings = async () => {
-    try {
-      const settings = await playApi.getAdminSiteSettings();
-      setSiteSettings(settings);
-    } catch (reason) {
-      setAppearanceMessageTone('error');
-      setAppearanceMessage(reason instanceof Error ? reason.message : '站点外观配置加载失败');
-    }
-  };
-
   useEffect(() => {
     playApi.getAdminSession().then((foundSession) => {
       setSession(foundSession);
@@ -1118,7 +674,6 @@ export function AdminReviewPage() {
     void loadAllPlays();
     void loadAllRepos();
     void loadTags();
-    void loadSiteSettings();
   }, [session, selectedStatus, selectedRepoStatus]);
 
   useEffect(() => {
@@ -1157,7 +712,6 @@ export function AdminReviewPage() {
       void loadRepos(selectedRepoStatus);
       void loadAllRepos();
       void loadTags();
-      void loadSiteSettings();
       if (selectedPlayId) {
         void loadReviewLogs(selectedPlayId);
       }
@@ -1213,35 +767,51 @@ export function AdminReviewPage() {
       return plays;
     }
 
-    return plays.filter((play) => matchesPlayKeyword(play, normalizedKeyword));
-  }, [keyword, plays]);
+    const source = hasLoadedAllPlays ? allPlays : plays;
+    return source.filter((play) => matchesPlayKeyword(play, normalizedKeyword, playSearchFields));
+  }, [allPlays, hasLoadedAllPlays, keyword, playSearchFields, plays]);
   const currentPlayListCount = useMemo(() => {
     if (!hasLoadedAllPlays) {
       return filteredPlays.length;
     }
 
     const normalizedKeyword = keyword.trim().toLowerCase();
+    if (normalizedKeyword) {
+      return filteredPlays.length;
+    }
+
     const statusMatchedPlays = selectedStatus
       ? playMetricsSource.filter((play) => play.status === selectedStatus)
       : playMetricsSource;
 
+    return statusMatchedPlays.length;
+  }, [filteredPlays.length, hasLoadedAllPlays, keyword, playMetricsSource, selectedStatus]);
+  const filteredRepos = useMemo(() => {
+    const normalizedKeyword = repoKeyword.trim().toLowerCase();
     if (!normalizedKeyword) {
-      return statusMatchedPlays.length;
+      return repos;
     }
 
-    return statusMatchedPlays.filter((play) => matchesPlayKeyword(play, normalizedKeyword)).length;
-  }, [filteredPlays.length, hasLoadedAllPlays, keyword, playMetricsSource, selectedStatus]);
+    const source = hasLoadedAllRepos ? allRepos : repos;
+    return source.filter((repo) => matchesRepoKeyword(repo, normalizedKeyword, repoSearchFields));
+  }, [allRepos, hasLoadedAllRepos, repoKeyword, repoSearchFields, repos]);
   const currentRepoListCount = useMemo(() => {
     if (!hasLoadedAllRepos) {
-      return repos.length;
+      return filteredRepos.length;
+    }
+
+    const normalizedKeyword = repoKeyword.trim().toLowerCase();
+    if (normalizedKeyword) {
+      return filteredRepos.length;
     }
 
     return selectedRepoStatus
       ? repoMetricsSource.filter((repo) => repo.status === selectedRepoStatus).length
       : repoMetricsSource.length;
-  }, [hasLoadedAllRepos, repoMetricsSource, repos.length, selectedRepoStatus]);
+  }, [filteredRepos.length, hasLoadedAllRepos, repoKeyword, repoMetricsSource, selectedRepoStatus]);
 
   const pendingVisiblePlays = useMemo(() => filteredPlays.filter((play) => play.status === 'pending'), [filteredPlays]);
+  const pendingVisibleRepos = useMemo(() => filteredRepos.filter((repo) => repo.status === 'pending'), [filteredRepos]);
   const adminTotalPages = Math.max(1, Math.ceil(filteredPlays.length / adminPageSize));
   const adminPagedPlays = useMemo(() => {
     const startIndex = (adminCurrentPage - 1) * adminPageSize;
@@ -1555,7 +1125,7 @@ export function AdminReviewPage() {
   // selectedStatus 或 keyword 变化时，列表重置回第一页
   useEffect(() => {
     setAdminCurrentPage(1);
-  }, [selectedStatus, keyword]);
+  }, [selectedStatus, keyword, playSearchFields]);
 
   useEffect(() => {
     if (!successMessage) {
@@ -2297,9 +1867,9 @@ export function AdminReviewPage() {
   };
 
   const handleBulkApproveRepos = async () => {
-    const pendingRepos = repos.filter((repo) => repo.status === 'pending');
+    const pendingRepos = pendingVisibleRepos;
     if (pendingRepos.length === 0) {
-      setError('当前没有待审核 repo');
+      setError(repoKeyword.trim() ? '当前搜索结果里没有待审核 repo' : '当前没有待审核 repo');
       return;
     }
 
@@ -2495,76 +2065,6 @@ export function AdminReviewPage() {
     }
 
     setDraggingTagId('');
-  };
-
-  const updateThemeField = (
-    theme: ThemeMode,
-    device: BackgroundDeviceMode,
-    field: BackgroundEditableField,
-    value: string,
-  ) => {
-    setSiteSettings((current) => {
-      const themeConfig = current[theme];
-      const deviceConfig = themeConfig[device];
-
-      if (field === 'backgroundUrl') {
-        return {
-          ...current,
-          [theme]: {
-            ...themeConfig,
-            [device]: {
-              ...deviceConfig,
-              backgroundUrl: value,
-            },
-          },
-        };
-      }
-
-      const numericValue = Number(value);
-      const nextValue =
-        field === 'scale'
-          ? clampNumber(numericValue, 100, 240)
-          : field === 'backgroundOpacity'
-            ? clampNumber(numericValue, 0, 1)
-            : field === 'overlayOpacity'
-              ? clampNumber(numericValue, 0, 0.9)
-              : clampNumber(numericValue, 0, 100);
-
-      return {
-        ...current,
-        [theme]: {
-          ...themeConfig,
-          [device]: {
-            ...deviceConfig,
-            crop: {
-              ...deviceConfig.crop,
-              [field]: nextValue,
-            },
-          },
-        },
-      };
-    });
-  };
-
-  const removeThemeBackground = (theme: ThemeMode, device: BackgroundDeviceMode) => {
-    updateThemeField(theme, device, 'backgroundUrl', '');
-    setEditingBackgroundKey((current) => (current === `${theme}:${device}` ? '' : current));
-  };
-
-  const handleSaveAppearance = async () => {
-    setAppearanceSaving(true);
-    setAppearanceMessage('');
-    try {
-      const saved = await playApi.updateAdminSiteSettings(siteSettings);
-      setSiteSettings(saved);
-      setAppearanceMessageTone('success');
-      setAppearanceMessage('站点背景配置已保存');
-    } catch (reason) {
-      setAppearanceMessageTone('error');
-      setAppearanceMessage(reason instanceof Error ? reason.message : '站点外观配置保存失败');
-    } finally {
-      setAppearanceSaving(false);
-    }
   };
 
   const handleStatusTabChange = (nextStatus?: PlayStatus) => {
@@ -2927,10 +2427,24 @@ export function AdminReviewPage() {
             <input
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
-              placeholder="搜标题、作者、分类或正文关键词"
+              placeholder="默认从全部内容里搜标题、作者、分类或正文"
             />
           </ClearableField>
         </label>
+        <div className="inline-actions wrap-mobile admin-search-field-row" role="group" aria-label="搜索范围">
+          {playSearchFieldOptions.map((item) => (
+            <button
+              aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+              className={isSearchFieldActive(playSearchFields, item.value) ? 'tab-chip active' : 'tab-chip'}
+              key={item.value}
+              onClick={() => setPlaySearchFields((current) => toggleSearchField(current, item.value))}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
         {keyword.trim() ? (
           <div className="inline-actions admin-search-action-row">
             <button
@@ -3336,7 +2850,9 @@ export function AdminReviewPage() {
               </article>
             );
           })}
-          {!loading && filteredPlays.length === 0 ? <div className="empty-panel">这个状态下没有内容。</div> : null}
+          {!loading && filteredPlays.length === 0 ? (
+            <div className="empty-panel">{keyword.trim() ? '没有匹配的内容。' : '这个状态下没有内容。'}</div>
+          ) : null}
         </div>
           </>
         ) : null}
@@ -3375,8 +2891,13 @@ export function AdminReviewPage() {
                   <h3>repo 审核</h3>
                   <p className="sub-copy">独立于小剧场审核状态机，只处理 repo 的通过、拒绝和删除。</p>
                 </div>
-                <button className="button primary" disabled={repoBusyAction !== null} onClick={() => void handleBulkApproveRepos()} type="button">
-                  {repoBusyAction === 'approve' ? '处理中' : `通过当前待审核（${repos.filter((repo) => repo.status === 'pending').length}）`}
+                <button
+                  className="button primary"
+                  disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
+                  onClick={() => void handleBulkApproveRepos()}
+                  type="button"
+                >
+                  {repoBusyAction === 'approve' ? '处理中' : `通过当前待审核（${pendingVisibleRepos.length}）`}
                 </button>
               </div>
               <div className="inline-actions wrap-mobile">
@@ -3391,6 +2912,30 @@ export function AdminReviewPage() {
                   </button>
                 ))}
               </div>
+              <label>
+                <span>repo 搜索</span>
+                <ClearableField visible={Boolean(repoKeyword.trim())} onClear={() => setRepoKeyword('')}>
+                  <input
+                    value={repoKeyword}
+                    onChange={(event) => setRepoKeyword(event.target.value)}
+                    placeholder="默认从全部 repo 里搜昵称、标题、作者或正文"
+                  />
+                </ClearableField>
+              </label>
+              <div className="inline-actions wrap-mobile admin-search-field-row" role="group" aria-label="repo 搜索范围">
+                {repoSearchFieldOptions.map((item) => (
+                  <button
+                    aria-pressed={isSearchFieldActive(repoSearchFields, item.value)}
+                    className={isSearchFieldActive(repoSearchFields, item.value) ? 'tab-chip active' : 'tab-chip'}
+                    key={item.value}
+                    onClick={() => setRepoSearchFields((current) => toggleSearchField(current, item.value))}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
               <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
                 {repoMetrics.map((item) => (
                   <div key={item.label} className="metric-card-lite">
@@ -3412,9 +2957,9 @@ export function AdminReviewPage() {
               {error ? <div className="feedback error">{error}</div> : null}
             </div>
 
-            {repos.length > 0 ? (
+            {filteredRepos.length > 0 ? (
               <div className="stack-gap-md">
-                {repos.map((repo) => (
+                {filteredRepos.map((repo) => (
                   <article className="review-card repo-review-card" key={repo.id}>
                     <div className="content-head wrap-mobile">
                       <div className="stack-gap-xs">
@@ -3456,7 +3001,7 @@ export function AdminReviewPage() {
                 ))}
               </div>
             ) : (
-              <div className="empty-panel">当前筛选没有 repo。</div>
+              <div className="empty-panel">{repoKeyword.trim() ? '没有匹配的 repo。' : '当前筛选没有 repo。'}</div>
             )}
           </div>
         ) : null}
@@ -4042,7 +3587,7 @@ export function AdminReviewPage() {
                 <span className="content-meta">
                   关闭“保留附带信息”后，合并导出的 TXT 会去掉 Id、Status、CreatedAt、UpdatedAt、ReviewedAt、ReviewNote，只保留阅读整理需要的正文信息。
                 </span>
-                <span className="content-meta">背景图配置、审核日志不在这次 TXT 备份里。</span>
+                <span className="content-meta">审核日志不在这次 TXT 备份里。</span>
                 {backupImportName ? <span className="content-meta">已选择 {backupImportName}</span> : null}
               </div>
 
@@ -4289,55 +3834,6 @@ export function AdminReviewPage() {
                 })}
               </div>
             )}
-          </section>
-        ) : null}
-
-        {activePanel === 'appearance' ? (
-          <section className="form-panel stack-gap-md">
-            <div>
-              <p className="eyebrow">Theme Background</p>
-              <h3>站点</h3>
-              <p className="sub-copy">分别配置日间与夜间背景图 URL、位置、缩放和遮罩强度。</p>
-            </div>
-
-            {(['light', 'dark'] as const).map((theme) => {
-              const themeLabel = theme === 'light' ? '日间背景' : '夜间背景';
-              const themeSettings = siteSettings[theme];
-
-              return (
-                <div key={theme} className="stack-gap-md">
-                  <strong>{themeLabel}</strong>
-                  <div className="admin-grid-two-columns">
-                    {(['desktop', 'mobile'] as const).map((device) => {
-                      const deviceLabel = device === 'desktop' ? '电脑端' : '手机端';
-                      const deviceSettings = themeSettings[device];
-
-                      return (
-                        <BackgroundVisualEditor
-                          key={device}
-                          theme={theme}
-                          device={device}
-                          label={`${deviceLabel}背景图`}
-                          deviceLabel={deviceLabel}
-                          settings={deviceSettings}
-                          editing={editingBackgroundKey === `${theme}:${device}`}
-                          disabled={appearanceSaving}
-                          onEdit={() => setEditingBackgroundKey(`${theme}:${device}`)}
-                          onDone={() => setEditingBackgroundKey('')}
-                          onRemove={() => removeThemeBackground(theme, device)}
-                          onUpdate={(field, value) => updateThemeField(theme, device, field, value)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-
-            <button className="button primary" disabled={appearanceSaving} onClick={() => void handleSaveAppearance()} type="button">
-              保存背景配置
-            </button>
-            {appearanceMessage ? <div className={`feedback ${appearanceMessageTone}`}>{appearanceMessage}</div> : null}
           </section>
         ) : null}
 

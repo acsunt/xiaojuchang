@@ -582,7 +582,6 @@ pre {
 .toolbar-grid,
 .metric-strip,
 .tag-admin-list,
-.admin-grid-two-columns,
 .tag-cloud,
 .header-brand-row,
 .admin-panel-switcher {
@@ -600,7 +599,6 @@ pre {
 .filter-grid,
 .toolbar-grid,
 .tag-admin-list,
-.admin-grid-two-columns,
 .tag-cloud {
   gap: 16px;
 }
@@ -1266,6 +1264,16 @@ label span,
   flex-shrink: 0;
 }
 
+.admin-search-field-row {
+  gap: 8px;
+}
+
+.admin-search-field-row .tab-chip {
+  width: auto;
+  min-width: 0;
+  padding: 8px 12px;
+}
+
 .admin-bulk-review-selection-toggle-row {
   display: flex;
   align-items: center;
@@ -1284,148 +1292,6 @@ label span,
 
 .admin-bulk-review-row-compact {
   align-items: center;
-}
-
-.background-device-panel {
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 16px;
-  background: color-mix(in srgb, var(--panel) 88%, transparent);
-}
-
-.background-crop-editor {
-  display: grid;
-  gap: 12px;
-}
-
-.background-crop-stage {
-  position: relative;
-  width: min(100%, 520px);
-  min-height: 0;
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid var(--border);
-  background:
-    linear-gradient(0deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03)),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    color-mix(in srgb, var(--panel-strong) 88%, #000 12%);
-  background-size: auto, 18px 18px, 18px 18px, auto;
-  cursor: default;
-  touch-action: none;
-  margin-inline: auto;
-}
-
-.background-crop-stage.desktop {
-  aspect-ratio: 16 / 9;
-}
-
-.background-crop-stage.mobile {
-  width: min(100%, 260px);
-  aspect-ratio: 9 / 16;
-}
-
-.background-crop-image-frame,
-.background-crop-grid,
-.background-crop-selection,
-.background-crop-hint {
-  position: absolute;
-}
-
-.background-crop-image-frame {
-  overflow: hidden;
-  border-radius: 14px;
-}
-
-.background-crop-image-frame::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, var(--preview-bg-overlay));
-}
-
-.background-crop-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  user-select: none;
-  pointer-events: none;
-}
-
-.background-crop-grid {
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  background-size: 18px 18px;
-  opacity: 0.55;
-}
-
-.background-crop-editor.editing .background-crop-stage {
-  border-color: color-mix(in srgb, var(--accent) 52%, var(--border) 48%);
-}
-
-.background-crop-selection {
-  z-index: 3;
-  border: 2px solid rgba(255, 255, 255, 0.94);
-  border-radius: 12px;
-  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.38), 0 10px 26px rgba(0, 0, 0, 0.34);
-  cursor: move;
-}
-
-.background-crop-selection-badge {
-  position: absolute;
-  left: 10px;
-  top: 10px;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(8, 17, 31, 0.72);
-  color: white;
-  font-size: 12px;
-  line-height: 1;
-}
-
-.background-crop-selection-handle {
-  position: absolute;
-  right: -8px;
-  bottom: -8px;
-  width: 18px;
-  height: 18px;
-  border: 2px solid rgba(255, 255, 255, 0.92);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 70%, white 30%);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
-  cursor: nwse-resize;
-}
-
-.background-crop-hint {
-  right: 12px;
-  bottom: 12px;
-  z-index: 4;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.48);
-  color: white;
-  font-size: 12px;
-}
-
-.background-crop-controls {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 90%, white 10%);
-}
-
-.background-crop-empty {
-  padding: 18px;
-  border-radius: 16px;
-  border: 1px dashed var(--border);
-  background: color-mix(in srgb, var(--panel) 90%, white 10%);
-  color: var(--text-soft);
 }
 
 .backup-summary-grid {
@@ -1589,8 +1455,7 @@ label span,
   justify-self: center;
 }
 
-.field-grid.two-columns,
-.admin-grid-two-columns {
+.field-grid.two-columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -3280,8 +3145,7 @@ body.tag-sort-dragging {
   .feature-panel,
   .stats-grid,
   .review-layout,
-  .review-layout-wide,
-  .admin-grid-two-columns {
+  .review-layout-wide {
     grid-template-columns: 1fr;
   }
 
