@@ -2444,7 +2444,6 @@ export function AdminReviewPage() {
             </button>
           ))}
         </div>
-        <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
         {keyword.trim() ? (
           <div className="inline-actions admin-search-action-row">
             <button
@@ -2935,7 +2934,6 @@ export function AdminReviewPage() {
                   </button>
                 ))}
               </div>
-              <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
               <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
                 {repoMetrics.map((item) => (
                   <div key={item.label} className="metric-card-lite">

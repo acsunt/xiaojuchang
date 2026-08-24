@@ -2025,7 +2025,6 @@ export function PlayListPage() {
               </button>
             ))}
           </div>
-          <p className="content-meta">未点选时从全部字段搜索，点选后只搜选中字段。</p>
         </div>
         ) : null}
 

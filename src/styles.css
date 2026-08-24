@@ -1,7 +1,8 @@
 :root {
   color-scheme: dark;
   font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.45;
   font-weight: 400;
   color: #e8ecf4;
   background: #08111f;
@@ -114,8 +115,8 @@ input,
 select,
 textarea {
   width: 100%;
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 11px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel-strong) 88%, #000 12%);
   color: var(--text);
@@ -188,30 +189,30 @@ select option {
 }
 
 .plaza-page-shell {
-  gap: 18px;
+  gap: 12px;
 }
 
 .plaza-layout {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 12px;
 }
 
 .hero-panel-compact {
-  padding-top: 20px;
-  padding-bottom: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .plaza-controls-panel {
   position: relative;
   z-index: 40;
-  gap: 14px;
+  gap: 10px;
 }
 
 .plaza-calendar-panel,
 .plaza-derived-panel {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .plaza-calendar-intro {
@@ -378,8 +379,8 @@ select option {
 .plaza-calendar-play-item {
   width: 100%;
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 6px;
+  padding: 12px;
   text-align: left;
   border-radius: 16px;
   border: 1px solid var(--border);
@@ -409,7 +410,7 @@ select option {
 
 .plaza-derived-group-list {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   max-height: 620px;
   overflow: auto;
   padding-right: 4px;
@@ -417,8 +418,8 @@ select option {
 
 .plaza-derived-group {
   display: grid;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 92%, white 8%);
@@ -430,7 +431,7 @@ select option {
 }
 
 .plaza-filter-header {
-  gap: 10px;
+  gap: 8px;
 }
 
 .plaza-category-strip {
@@ -453,7 +454,7 @@ select option {
 }
 
 .plaza-random-panel {
-  gap: 12px;
+  gap: 10px;
 }
 
 .custom-select {
@@ -473,8 +474,8 @@ select option {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 11px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel-strong) 88%, #000 12%);
   color: var(--text);
@@ -514,7 +515,7 @@ select option {
 .custom-select-option {
   width: 100%;
   text-align: left;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -555,11 +556,11 @@ pre {
 }
 
 .app-shell {
-  width: min(1280px, calc(100% - 40px));
+  width: min(1280px, calc(100% - 32px));
   margin: 0 auto;
   padding:
-    calc(env(safe-area-inset-top, 0px) + 18px) 0
-    calc(env(safe-area-inset-bottom, 0px) + 48px);
+    calc(env(safe-area-inset-top, 0px) + 12px) 0
+    calc(env(safe-area-inset-bottom, 0px) + 32px);
   padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 }
 
@@ -605,7 +606,7 @@ pre {
 
 .page-shell,
 .stack-gap-lg {
-  gap: 24px;
+  gap: 16px;
 }
 
 .stack-gap-md,
@@ -615,12 +616,12 @@ pre {
 .toolbar-grid,
 .tag-admin-list,
 .tag-cloud {
-  gap: 16px;
+  gap: 12px;
 }
 
 .stack-gap-sm {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .app-header,
@@ -646,11 +647,11 @@ pre {
 .app-header {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   align-items: center;
-  border-radius: 28px;
-  padding: 28px;
-  margin-bottom: 16px;
+  border-radius: 18px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
 }
 
 .header-brand-row {
@@ -676,7 +677,7 @@ pre {
 .title-row,
 .tag-chip-row {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -803,15 +804,15 @@ p {
 }
 
 h1 {
-  font-size: clamp(28px, 4vw, 44px);
+  font-size: clamp(20px, 2.8vw, 28px);
 }
 
 h2 {
-  font-size: clamp(24px, 3vw, 34px);
+  font-size: clamp(18px, 2.3vw, 23px);
 }
 
 h3 {
-  font-size: 22px;
+  font-size: 16px;
 }
 
 .sub-copy,
@@ -836,6 +837,32 @@ label span,
   color: var(--text-soft);
 }
 
+.meta-line,
+.meta-row,
+.log-item span,
+.hint-panel span,
+.stat-card span,
+.card-topline,
+label span,
+.content-meta,
+.filter-summary,
+.field-hint,
+.char-count,
+.metric-row,
+.login-meta,
+.section-note,
+.template-code {
+  font-size: 13px;
+}
+
+.sub-copy,
+.summary,
+.preview-copy,
+.feature-side p,
+.play-detail-copy {
+  font-size: 14px;
+}
+
 .nav-pill,
 .tab-chip,
 .button,
@@ -854,10 +881,11 @@ label span,
   align-items: center;
   justify-content: center;
   margin: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
+  font-size: 14px;
   line-height: 1.2;
   text-decoration: none;
   vertical-align: middle;
@@ -911,8 +939,9 @@ label span,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 46px;
-  padding: 0 18px;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
   font-weight: 600;
 }
 
@@ -953,17 +982,18 @@ label span,
 }
 
 .tag-chip {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .icon-button {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
   padding: 0;
 }
 
@@ -985,8 +1015,9 @@ label span,
 }
 
 .text-button {
-  min-height: 42px;
-  padding: 0 14px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .button:disabled {
@@ -1068,7 +1099,7 @@ label span,
 .plaza-refresh-modal {
   width: min(520px, calc(100vw - 32px));
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .plaza-refresh-modal-actions {
@@ -1085,19 +1116,19 @@ label span,
 .log-panel,
 .empty-panel,
 .hint-panel {
-  border-radius: 24px;
-  padding: 24px;
+  border-radius: 16px;
+  padding: 14px;
 }
 
 .compact-panel {
-  padding: 18px 24px;
+  padding: 12px 14px;
 }
 
 .stats-grid,
 .card-grid,
 .filter-grid,
 .toolbar-grid {
-  gap: 18px;
+  gap: 12px;
 }
 
 .stats-grid {
@@ -1110,14 +1141,14 @@ label span,
 }
 
 .plaza-stat-card {
-  border-radius: 20px;
-  padding: 18px 20px;
+  border-radius: 16px;
+  padding: 14px 16px;
   background: color-mix(in srgb, var(--panel) 86%, white 14%);
   border: 1px solid color-mix(in srgb, var(--border) 84%, white 16%);
 }
 
 .card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .card-grid.custom-grid {
@@ -1133,7 +1164,7 @@ label span,
 }
 
 .stat-card strong {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .play-card,
@@ -1141,8 +1172,8 @@ label span,
 .log-item,
 .tag-admin-card,
 .inline-detail-block {
-  border-radius: 20px;
-  padding: 18px;
+  border-radius: 16px;
+  padding: 14px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
@@ -1158,12 +1189,19 @@ label span,
 .field-note-panel,
 .tag-admin-card {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .play-card.selected {
   border-color: rgba(105, 168, 255, 0.5);
   box-shadow: inset 0 0 0 1px rgba(105, 168, 255, 0.28);
+}
+
+.play-card h3,
+.review-card h3,
+.repo-card h3 {
+  font-size: 16px;
+  line-height: 1.35;
 }
 
 .review-card {
@@ -1185,7 +1223,7 @@ label span,
 .review-card-main {
   width: 100%;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1215,8 +1253,9 @@ label span,
 
 .review-card-approve-button,
 .review-card-delete-button {
-  min-height: 36px;
-  padding: 0 14px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
   flex: 0 0 auto;
 }
 
@@ -1520,7 +1559,7 @@ label span,
 
 label {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .field-label-row {
@@ -1550,8 +1589,9 @@ label {
 }
 
 .feedback {
-  border-radius: 16px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
 }
 
 .floating-toast {
@@ -1609,17 +1649,17 @@ label {
 }
 
 .review-layout {
-  gap: 24px;
+  gap: 16px;
   align-items: start;
 }
 
 .review-sidebar,
 .review-main {
-  gap: 18px;
+  gap: 12px;
 }
 
 .split-actions {
-  gap: 16px;
+  gap: 12px;
 }
 
 .log-item {
@@ -1631,7 +1671,7 @@ label {
 .feature-panel,
 .detail-hero-grid,
 .hint-grid {
-  gap: 18px;
+  gap: 12px;
 }
 
 .hero-grid,
@@ -1648,8 +1688,8 @@ label {
 .feature-side,
 .field-note-panel,
 .metric-strip {
-  padding: 20px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
@@ -1658,7 +1698,7 @@ label {
 .field-hint {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .mini-list-item {
@@ -1678,8 +1718,8 @@ label {
 }
 
 .feature-panel {
-  border-radius: 24px;
-  padding: 24px;
+  border-radius: 18px;
+  padding: 16px;
 }
 
 .hint-grid {
@@ -1687,13 +1727,13 @@ label {
 }
 
 .upload-grid {
-  gap: 24px;
+  gap: 16px;
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
   align-items: start;
 }
 
 .login-grid {
-  gap: 24px;
+  gap: 16px;
   grid-template-columns: minmax(280px, 520px);
   justify-content: center;
 }
@@ -1723,8 +1763,8 @@ label {
 }
 
 .template-code {
-  padding: 16px;
-  border-radius: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
   overflow: auto;
@@ -1849,7 +1889,7 @@ label {
 
 .plaza-page-shell,
 .plaza-main-stack {
-  gap: 14px;
+  gap: 12px;
 }
 
 .plaza-toolbar-pair {
@@ -1870,12 +1910,12 @@ label {
 
 .hero-panel-compact {
   grid-template-columns: 1fr;
-  padding: 16px 24px;
+  padding: 12px 16px;
 }
 
 .plaza-controls-panel {
-  padding-top: 16px;
-  padding-bottom: 16px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .plaza-view-primary {
@@ -1927,7 +1967,7 @@ label {
 .compact-meta-row-small,
 .compact-meta-item,
 .tag-floor-order {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-soft);
 }
 
@@ -1955,7 +1995,7 @@ label {
   align-items: flex-start;
   gap: 6px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .plaza-card-summary::before {
@@ -1969,7 +2009,7 @@ label {
 
 .plaza-card-preview {
   --plaza-preview-lines: 3;
-  --plaza-preview-line-height: 1.72em;
+  --plaza-preview-line-height: 1.55em;
   display: -webkit-box;
   max-height: calc(var(--plaza-preview-line-height) * var(--plaza-preview-lines));
   overflow: hidden;
@@ -1980,18 +2020,18 @@ label {
 
 .play-detail-copy {
   white-space: pre-wrap;
-  line-height: 1.72;
+  line-height: 1.65;
 }
 
 .repo-panel,
 .repo-card,
 .repo-review-card {
-  gap: 14px;
+  gap: 10px;
 }
 
 .repo-card {
-  padding: 18px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 16px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
@@ -2483,7 +2523,7 @@ label {
 }
 
 .plaza-pagination-panel {
-  gap: 14px;
+  gap: 10px;
 }
 
 .plaza-pagination-toolbar {
@@ -2729,7 +2769,7 @@ label {
 }
 
 .checkbox-chip-wide {
-  min-height: 42px;
+  min-height: 36px;
 }
 
 .plaza-block-disliked-export-chip {
@@ -2992,8 +3032,8 @@ body.tag-sort-dragging {
 }
 
 .diff-panel {
-  padding: 16px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
@@ -3006,8 +3046,8 @@ body.tag-sort-dragging {
 .duplicate-summary-card,
 .duplicate-play-pane,
 .duplicate-match-row {
-  padding: 14px 16px;
-  border-radius: 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
@@ -3374,8 +3414,17 @@ body.tag-sort-dragging {
   }
 
   .app-header {
-    padding: 12px 12px;
+    padding: 10px 12px;
     border-radius: 16px;
+  }
+
+  .play-card,
+  .review-card,
+  .repo-card,
+  .log-item,
+  .tag-admin-card {
+    padding: 12px;
+    border-radius: 14px;
   }
 
   .header-actions,
@@ -3736,8 +3785,8 @@ body.tag-sort-dragging {
   .field-note-panel,
   .feature-panel,
   .tag-admin-card {
-    padding: 18px;
-    border-radius: 20px;
+    padding: 14px;
+    border-radius: 16px;
   }
 
   .app-header {
@@ -4405,15 +4454,15 @@ body.tag-sort-dragging {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 18px;
   background: rgba(4, 10, 18, 0.62);
   backdrop-filter: blur(12px);
 }
 
 .modal-panel {
   width: min(460px, calc(100vw - 32px));
-  padding: 24px;
-  border-radius: 16px;
+  padding: 16px;
+  border-radius: 14px;
   background: var(--panel);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
 }
