@@ -619,6 +619,10 @@ pre {
   gap: 12px;
 }
 
+.review-list {
+  gap: 6px;
+}
+
 .stack-gap-sm {
   display: grid;
   gap: 6px;
@@ -955,6 +959,12 @@ label span,
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   border-color: var(--border);
+}
+
+.button.secondary.active {
+  color: var(--text);
+  background: rgba(89, 143, 255, 0.18);
+  border-color: rgba(105, 168, 255, 0.36);
 }
 
 .button.warning {

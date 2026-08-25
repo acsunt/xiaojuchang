@@ -67,6 +67,7 @@ const repoActionMeta: Array<{ action: RepoReviewAction; label: string; style: st
 ];
 
 const backupStatusOrder: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
+const BACKUP_RESTORE_CONFIRM_PHRASE = '确认恢复';
 
 const actionMeta: Array<{ action: ReviewAction; label: string; style: string }> = [
   { action: 'approve', label: '通过', style: 'primary' },
@@ -381,6 +382,10 @@ export function AdminReviewPage() {
   const [selectedRepoStatus, setSelectedRepoStatus] = useState<RepoStatus | undefined>('pending');
   const [repoReviewNote, setRepoReviewNote] = useState('');
   const [repoBusyAction, setRepoBusyAction] = useState<RepoReviewAction | 'delete' | null>(null);
+  const [repoDeleteSelectedIds, setRepoDeleteSelectedIds] = useState<string[]>([]);
+  const [repoDeleteBusy, setRepoDeleteBusy] = useState(false);
+  const [repoDeleteProgress, setRepoDeleteProgress] = useState<DeleteProgress | null>(null);
+  const [isRepoMultiSelectMode, setIsRepoMultiSelectMode] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
   const [selectedPlayId, setSelectedPlayId] = useState('');
@@ -507,6 +512,8 @@ export function AdminReviewPage() {
   const [backupImportPlays, setBackupImportPlays] = useState<Play[]>([]);
   const [backupImportCounts, setBackupImportCounts] = useState<Record<PlayStatus, number> | null>(null);
   const [mergedBackupIncludeAttachedMeta, setMergedBackupIncludeAttachedMeta] = useState(true);
+  const [backupRestoreConfirmOpen, setBackupRestoreConfirmOpen] = useState(false);
+  const [backupRestoreConfirmInput, setBackupRestoreConfirmInput] = useState('');
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
   const playListLoadRequestRef = useRef(0);
   const playTotalsLoadRequestRef = useRef(0);
@@ -812,6 +819,8 @@ export function AdminReviewPage() {
 
   const pendingVisiblePlays = useMemo(() => filteredPlays.filter((play) => play.status === 'pending'), [filteredPlays]);
   const pendingVisibleRepos = useMemo(() => filteredRepos.filter((repo) => repo.status === 'pending'), [filteredRepos]);
+  const repoDeleteVisibleIds = useMemo(() => filteredRepos.map((repo) => repo.id), [filteredRepos]);
+  const repoDeleteSelectedIdSet = useMemo(() => new Set(repoDeleteSelectedIds), [repoDeleteSelectedIds]);
   const adminTotalPages = Math.max(1, Math.ceil(filteredPlays.length / adminPageSize));
   const adminPagedPlays = useMemo(() => {
     const startIndex = (adminCurrentPage - 1) * adminPageSize;
@@ -1104,6 +1113,11 @@ export function AdminReviewPage() {
   }, [deleteVisibleIds]);
 
   useEffect(() => {
+    const visibleIdSet = new Set(repoDeleteVisibleIds);
+    setRepoDeleteSelectedIds((current) => current.filter((id) => visibleIdSet.has(id)));
+  }, [repoDeleteVisibleIds]);
+
+  useEffect(() => {
     if (bulkAuthorName && !pendingAuthorOptions.includes(bulkAuthorName)) {
       setBulkAuthorName('');
     }
@@ -1253,6 +1267,8 @@ export function AdminReviewPage() {
     setBackupImportName('');
     setBackupImportPlays([]);
     setBackupImportCounts(null);
+    setBackupRestoreConfirmOpen(false);
+    setBackupRestoreConfirmInput('');
     if (backupFileInputRef.current) {
       backupFileInputRef.current.value = '';
     }
@@ -1322,10 +1338,23 @@ export function AdminReviewPage() {
       return;
     }
 
-    if (!window.confirm(`确认恢复备份吗？这会覆盖当前内容库，共导入 ${backupImportPlays.length} 篇内容。`)) {
+    setBackupMessage('');
+    setBackupRestoreConfirmInput('');
+    setBackupRestoreConfirmOpen(true);
+  };
+
+  const handleCancelRestoreBackup = () => {
+    setBackupRestoreConfirmOpen(false);
+    setBackupRestoreConfirmInput('');
+  };
+
+  const handleConfirmRestoreBackup = async () => {
+    if (backupRestoreConfirmInput.trim() !== BACKUP_RESTORE_CONFIRM_PHRASE) {
       return;
     }
 
+    setBackupRestoreConfirmOpen(false);
+    setBackupRestoreConfirmInput('');
     setBackupBusy(true);
     setBackupMessage('');
 
@@ -1537,6 +1566,30 @@ export function AdminReviewPage() {
 
   const handleClearDeleteSelection = () => {
     setDeleteSelectedIds([]);
+  };
+
+  const handleToggleRepoDeleteSelection = (repoId: string) => {
+    setRepoDeleteSelectedIds((current) =>
+      current.includes(repoId) ? current.filter((id) => id !== repoId) : [...current, repoId],
+    );
+  };
+
+  const handleSelectAllVisibleForRepoDelete = () => {
+    setRepoDeleteSelectedIds(repoDeleteVisibleIds);
+  };
+
+  const handleClearRepoDeleteSelection = () => {
+    setRepoDeleteSelectedIds([]);
+  };
+
+  const handleToggleRepoMultiSelectMode = () => {
+    setIsRepoMultiSelectMode((current) => {
+      const next = !current;
+      if (!next) {
+        setRepoDeleteSelectedIds([]);
+      }
+      return next;
+    });
   };
 
   const handleSelectTopVisibleForDelete = () => {
@@ -1863,6 +1916,55 @@ export function AdminReviewPage() {
       setError(reason instanceof Error ? reason.message : 'repo 删除失败');
     } finally {
       setRepoBusyAction(null);
+    }
+  };
+
+  const handleBatchDeleteRepos = async (repoIds: string[], label: string) => {
+    const normalizedIds = Array.from(new Set(repoIds.map((id) => id.trim()).filter(Boolean)));
+    if (normalizedIds.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`确认删除${label}吗？共 ${normalizedIds.length} 条。删除后不可恢复。`);
+    if (!confirmed) {
+      return;
+    }
+
+    setRepoDeleteBusy(true);
+    setRepoDeleteProgress({ completed: 0, total: normalizedIds.length, label });
+    setProcessingMessage(`正在删除 repo：已完成 0 / ${normalizedIds.length}`);
+    setError('');
+    setSuccessMessage('');
+
+    const deletedIds: string[] = [];
+    let completed = 0;
+
+    try {
+      for (const repoId of normalizedIds) {
+        await playApi.deleteRepo(repoId);
+        removeRepoStateLocally(repoId);
+        deletedIds.push(repoId);
+        completed += 1;
+        setRepoDeleteProgress({ completed, total: normalizedIds.length, label });
+        setProcessingMessage(`正在删除 repo：已完成 ${completed} / ${normalizedIds.length}`);
+      }
+
+      setRepoDeleteSelectedIds((current) => current.filter((id) => !deletedIds.includes(id)));
+      await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+      setProcessingMessage('');
+      setRepoDeleteProgress({ completed: normalizedIds.length, total: normalizedIds.length, label });
+      setSuccessMessage(`已删除 ${deletedIds.length} 条 repo。`);
+    } catch (reason) {
+      setProcessingMessage('');
+      setRepoDeleteProgress({ completed, total: normalizedIds.length, label });
+      setError(
+        `${label}已完成 ${completed} / ${normalizedIds.length} 条，剩余 repo 删除中断：${
+          reason instanceof Error ? reason.message : 'repo 批量删除失败'
+        }`,
+      );
+      await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+    } finally {
+      setRepoDeleteBusy(false);
     }
   };
 
@@ -2951,6 +3053,59 @@ export function AdminReviewPage() {
                   placeholder="可填写通过或拒绝说明"
                 />
               </label>
+              <div className="inline-actions admin-search-action-row">
+                <button
+                  className={isRepoMultiSelectMode ? 'button secondary active' : 'button secondary'}
+                  disabled={repoDeleteBusy}
+                  onClick={handleToggleRepoMultiSelectMode}
+                  type="button"
+                >
+                  多选
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteVisibleIds.length === 0}
+                  onClick={handleSelectAllVisibleForRepoDelete}
+                  type="button"
+                >
+                  全选
+                </button>
+                <button
+                  className="button danger"
+                  disabled={repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteSelectedIds.length === 0}
+                  onClick={() => void handleBatchDeleteRepos(repoDeleteSelectedIds, '已勾选 repo')}
+                  type="button"
+                >
+                  {repoDeleteBusy ? '删除处理中' : `删除（${repoDeleteSelectedIds.length}）`}
+                </button>
+                <button
+                  className="button ghost"
+                  disabled={repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteSelectedIds.length === 0}
+                  onClick={handleClearRepoDeleteSelection}
+                  type="button"
+                >
+                  清空已选
+                </button>
+              </div>
+              {repoDeleteProgress ? (
+                <div className="admin-bulk-review-progress" role="status">
+                  <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                    <strong>{repoDeleteBusy ? '删除中' : '删除结果'}</strong>
+                    <span className="content-meta">
+                      {repoDeleteProgress.label} · 已完成 {repoDeleteProgress.completed} / {repoDeleteProgress.total} 条
+                    </span>
+                  </div>
+                  <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                    <div
+                      className="admin-bulk-review-progress-fill"
+                      style={{
+                        width: `${repoDeleteProgress.total === 0 ? 0 : (repoDeleteProgress.completed / repoDeleteProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+              {processingMessage && repoDeleteBusy ? <div className="feedback info">{processingMessage}</div> : null}
               {successMessage ? <div className="feedback success">{successMessage}</div> : null}
               {error ? <div className="feedback error">{error}</div> : null}
             </div>
@@ -2961,6 +3116,17 @@ export function AdminReviewPage() {
                   <article className="review-card repo-review-card" key={repo.id}>
                     <div className="content-head wrap-mobile">
                       <div className="stack-gap-xs">
+                        {isRepoMultiSelectMode ? (
+                          <label className="checkbox-chip review-card-checkbox" onClick={(event) => event.stopPropagation()}>
+                            <input
+                              checked={repoDeleteSelectedIdSet.has(repo.id)}
+                              disabled={repoDeleteBusy}
+                              onChange={() => handleToggleRepoDeleteSelection(repo.id)}
+                              type="checkbox"
+                            />
+                            <span>{repoDeleteSelectedIdSet.has(repo.id) ? '已选' : '多选删除'}</span>
+                          </label>
+                        ) : null}
                         <span className={`status-tag ${repo.status}`}>{repoStatusLabelMap[repo.status]}</span>
                         <strong>{repo.nickname}</strong>
                         <span className="content-meta">
@@ -3975,6 +4141,49 @@ export function AdminReviewPage() {
         ) : null}
       </section>
     </section>
+
+      {backupRestoreConfirmOpen ? (
+        <div className="modal-overlay" role="presentation" onClick={handleCancelRestoreBackup}>
+          <div
+            aria-labelledby="backup-restore-confirm-title"
+            aria-modal="true"
+            className="modal-panel stack-gap-md"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <h3 id="backup-restore-confirm-title" className="modal-title">确认恢复备份</h3>
+            <div className="update-prompt-warning">
+              <strong>⚠ 这是一个危险操作：</strong>
+              恢复备份会先清空当前内容库，再整体导入压缩包内容，此操作无法撤销。
+            </div>
+            <p className="sub-copy">
+              即将导入 <strong>{backupImportTotal}</strong> 篇内容（{backupImportName || '未命名压缩包'}），覆盖当前库内全部内容。
+            </p>
+            <p className="sub-copy">
+              请输入「{BACKUP_RESTORE_CONFIRM_PHRASE}」以继续：
+            </p>
+            <input
+              autoFocus
+              onChange={(event) => setBackupRestoreConfirmInput(event.target.value)}
+              placeholder={BACKUP_RESTORE_CONFIRM_PHRASE}
+              value={backupRestoreConfirmInput}
+            />
+            <div className="inline-actions modal-action-row">
+              <button className="button secondary" onClick={handleCancelRestoreBackup} type="button">
+                取消
+              </button>
+              <button
+                className="button danger"
+                disabled={backupRestoreConfirmInput.trim() !== BACKUP_RESTORE_CONFIRM_PHRASE}
+                onClick={() => void handleConfirmRestoreBackup()}
+                type="button"
+              >
+                确认覆盖并恢复
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {updateAvailable ? (
         <UpdatePromptModal onCancel={dismissUpdate} onRefresh={refreshUpdate} />

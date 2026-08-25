@@ -33,3 +33,6 @@ Thumbs.db
 wrangler.local.toml
 wrangler.toml
 wrangler.toml.bak
+
+# 参考代码（本地素材，不上传到 GitHub）
+docs/参考代码/
