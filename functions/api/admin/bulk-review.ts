@@ -16,7 +16,9 @@ export const onRequestPost: PagesFunction = async ({ env, request }) => {
       note?: string;
     };
 
-    const ids = Array.isArray(body.ids) ? body.ids.map((item) => String(item ?? '').trim()).filter(Boolean) : [];
+    const ids = Array.isArray(body.ids)
+      ? body.ids.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : [];
     const action = String(body.action ?? '').trim() as ReviewAction;
     const note = String(body.note ?? '').trim();
 

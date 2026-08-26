@@ -104,13 +104,14 @@ describe('restoreBackupPlays', () => {
   });
 
   it('非法或缺失的时间戳会回退成当前时间，不会导致导入失败', async () => {
-    const result = await restoreBackupPlays(
-      db,
-      [makeDraft({ createdAt: 'not-a-date', updatedAt: '' })] as any,
-    );
+    const result = await restoreBackupPlays(db, [
+      makeDraft({ createdAt: 'not-a-date', updatedAt: '' }),
+    ] as any);
 
     expect(result.restoredCount).toBe(1);
-    const play = db.sqlite.prepare('SELECT created_at, updated_at FROM plays WHERE id = ?').get('play_1') as any;
+    const play = db.sqlite
+      .prepare('SELECT created_at, updated_at FROM plays WHERE id = ?')
+      .get('play_1') as any;
     expect(Number.isNaN(Date.parse(play.created_at))).toBe(false);
     expect(Number.isNaN(Date.parse(play.updated_at))).toBe(false);
   });

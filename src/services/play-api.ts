@@ -79,7 +79,8 @@ const normalizeErrorMessage = (rawText: string, fallback = '请求失败') => {
   }
 
   const lowered = text.toLowerCase();
-  const looksLikeHtml = lowered.startsWith('<!doctype') || lowered.startsWith('<html') || lowered.includes('<body');
+  const looksLikeHtml =
+    lowered.startsWith('<!doctype') || lowered.startsWith('<html') || lowered.includes('<body');
   if (looksLikeHtml) {
     return '接口返回了异常页面，请刷新后重试';
   }
@@ -101,12 +102,14 @@ const setStoredRemoteSession = (session: AdminSession | null) => {
   localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
 };
 
-type SiteSettingsThemeInput = SiteSettings['light'] | {
-  backgroundUrl?: string;
-  crop?: SiteSettings['light']['desktop']['crop'];
-  desktop?: SiteSettings['light']['desktop'];
-  mobile?: SiteSettings['light']['mobile'];
-};
+type SiteSettingsThemeInput =
+  | SiteSettings['light']
+  | {
+      backgroundUrl?: string;
+      crop?: SiteSettings['light']['desktop']['crop'];
+      desktop?: SiteSettings['light']['desktop'];
+      mobile?: SiteSettings['light']['mobile'];
+    };
 
 const createDefaultBackground = (overlayOpacity: number) => ({
   backgroundUrl: '',
@@ -212,7 +215,8 @@ export const getCachedPublicPlays = (): Play[] => {
   return publicPlaysCache;
 };
 
-export const getCachedPublicPlayById = (id: string) => getCachedPublicPlays().find((play) => play.id === id) ?? null;
+export const getCachedPublicPlayById = (id: string) =>
+  getCachedPublicPlays().find((play) => play.id === id) ?? null;
 
 const normalizeSubmissionFeedbackSummary = (feedback: SubmissionFeedback): SubmissionFeedback => ({
   ...feedback,
@@ -222,7 +226,7 @@ const normalizeSubmissionFeedbackSummary = (feedback: SubmissionFeedback): Submi
       : feedback.latestSummary,
 });
 
-const jsonRequest = async <T,>(input: RequestInfo | URL, init?: RequestInit) => {
+const jsonRequest = async <T>(input: RequestInfo | URL, init?: RequestInit) => {
   const remoteSession = getStoredRemoteSession();
   const response = await fetch(input, {
     headers: {
@@ -334,7 +338,9 @@ export const playApi = {
       return feedback.map(normalizeSubmissionFeedbackSummary);
     }
 
-    return Promise.resolve(mockDb.getSubmissionFeedback(normalizedIds).map(normalizeSubmissionFeedbackSummary));
+    return Promise.resolve(
+      mockDb.getSubmissionFeedback(normalizedIds).map(normalizeSubmissionFeedbackSummary),
+    );
   },
 
   async uploadPlay(draft: PlayDraft): Promise<Play> {
@@ -365,14 +371,18 @@ export const playApi = {
     }
 
     if (apiMode === 'remote') {
-      return jsonRequest<Repo[]>(`/api/repos?visitorId=${encodeURIComponent(visitorId)}&order=${order}`);
+      return jsonRequest<Repo[]>(
+        `/api/repos?visitorId=${encodeURIComponent(visitorId)}&order=${order}`,
+      );
     }
 
     return Promise.resolve(mockDb.getMyRepos(visitorId, order));
   },
 
   async getReceivedRepos(playIds: string[], visitorId: string, order: RepoOrder): Promise<Repo[]> {
-    const normalizedPlayIds = Array.from(new Set(playIds.map((playId) => playId.trim()).filter(Boolean)));
+    const normalizedPlayIds = Array.from(
+      new Set(playIds.map((playId) => playId.trim()).filter(Boolean)),
+    );
     const normalizedVisitorId = visitorId.trim();
     if (normalizedPlayIds.length === 0 && !normalizedVisitorId) {
       return [];
@@ -381,7 +391,12 @@ export const playApi = {
     if (apiMode === 'remote') {
       return jsonRequest<Repo[]>('/api/repos', {
         method: 'POST',
-        body: JSON.stringify({ mode: 'received', playIds: normalizedPlayIds, visitorId: normalizedVisitorId, order }),
+        body: JSON.stringify({
+          mode: 'received',
+          playIds: normalizedPlayIds,
+          visitorId: normalizedVisitorId,
+          order,
+        }),
       });
     }
 
@@ -414,8 +429,14 @@ export const playApi = {
     return Promise.resolve(mockDb.getRepoCounts(playIds));
   },
 
-  async getRepoNoticeSummary(playIds: string[], visitorId: string, readAt: string): Promise<RepoNoticeSummary> {
-    const normalizedPlayIds = Array.from(new Set(playIds.map((playId) => playId.trim()).filter(Boolean)));
+  async getRepoNoticeSummary(
+    playIds: string[],
+    visitorId: string,
+    readAt: string,
+  ): Promise<RepoNoticeSummary> {
+    const normalizedPlayIds = Array.from(
+      new Set(playIds.map((playId) => playId.trim()).filter(Boolean)),
+    );
     const normalizedVisitorId = visitorId.trim();
     if (normalizedPlayIds.length === 0 && !normalizedVisitorId) {
       return { receivedCount: 0, unreadCount: 0 };
@@ -424,11 +445,17 @@ export const playApi = {
     if (apiMode === 'remote') {
       return jsonRequest<RepoNoticeSummary>('/api/repos/counts', {
         method: 'POST',
-        body: JSON.stringify({ playIds: normalizedPlayIds, visitorId: normalizedVisitorId, readAt }),
+        body: JSON.stringify({
+          playIds: normalizedPlayIds,
+          visitorId: normalizedVisitorId,
+          readAt,
+        }),
       });
     }
 
-    return Promise.resolve(mockDb.getRepoNoticeSummary(normalizedPlayIds, normalizedVisitorId, readAt));
+    return Promise.resolve(
+      mockDb.getRepoNoticeSummary(normalizedPlayIds, normalizedVisitorId, readAt),
+    );
   },
 
   async adminLogin(username: string, password: string): Promise<AdminSession> {
@@ -668,7 +695,13 @@ export const playApi = {
     playId: string,
     action: ReviewAction,
     note: string,
-    edit?: { title?: string; authorName?: string; category?: string; summary?: string; content?: string },
+    edit?: {
+      title?: string;
+      authorName?: string;
+      category?: string;
+      summary?: string;
+      content?: string;
+    },
   ): Promise<Play | null> {
     if (apiMode === 'remote') {
       const play = await jsonRequest<Play | null>(`/api/admin/plays/${playId}/review`, {
@@ -692,7 +725,13 @@ export const playApi = {
 
   async updateAdminPlay(
     playId: string,
-    edit: { title?: string; authorName?: string; category?: string; summary?: string; content?: string },
+    edit: {
+      title?: string;
+      authorName?: string;
+      category?: string;
+      summary?: string;
+      content?: string;
+    },
   ): Promise<Play | null> {
     if (apiMode === 'remote') {
       const play = await jsonRequest<Play | null>(`/api/admin/plays/${playId}`, {
@@ -706,7 +745,11 @@ export const playApi = {
     return Promise.resolve(play ? normalizePlaySummary(play) : null);
   },
 
-  async bulkReviewPlays(playIds: string[], action: ReviewAction, note: string): Promise<BulkReviewResult> {
+  async bulkReviewPlays(
+    playIds: string[],
+    action: ReviewAction,
+    note: string,
+  ): Promise<BulkReviewResult> {
     const normalizedIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
     if (normalizedIds.length === 0) {
       return {

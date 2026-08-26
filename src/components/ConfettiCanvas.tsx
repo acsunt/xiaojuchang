@@ -24,31 +24,50 @@ type PType = 'rect' | 'ribbon' | 'circle' | 'spark';
 
 class Particle {
   alive = false;
-  x = 0; y = 0; vx = 0; vy = 0;
-  gravity = GRAVITY; drag = 0.993;
-  life = 1; decay = 0.008;
-  rot = 0; rotSpeed = 0;
+  x = 0;
+  y = 0;
+  vx = 0;
+  vy = 0;
+  gravity = GRAVITY;
+  drag = 0.993;
+  life = 1;
+  decay = 0.008;
+  rot = 0;
+  rotSpeed = 0;
   color = '';
   size = 4;
   type: PType = 'rect';
   // ribbon
-  length = 0; width = 0; wavePhase = 0; waveAmp = 0; waveFreq = 0;
-  flipPhase = 0; flipAmp = 0; flipSpeed = 0;
+  length = 0;
+  width = 0;
+  wavePhase = 0;
+  waveAmp = 0;
+  waveFreq = 0;
+  flipPhase = 0;
+  flipAmp = 0;
+  flipSpeed = 0;
   // spark
   radius = 1;
 
   spawn(
-    x: number, y: number,
+    x: number,
+    y: number,
     opts: {
-      vx: number; vy: number;
-      gravity?: number; drag?: number;
-      decay?: number; color: string;
-      size?: number; type?: PType;
+      vx: number;
+      vy: number;
+      gravity?: number;
+      drag?: number;
+      decay?: number;
+      color: string;
+      size?: number;
+      type?: PType;
       rotSpeed?: number;
     },
   ) {
-    this.x = x; this.y = y;
-    this.vx = opts.vx; this.vy = opts.vy;
+    this.x = x;
+    this.y = y;
+    this.vx = opts.vx;
+    this.vy = opts.vy;
     this.gravity = opts.gravity ?? GRAVITY;
     this.drag = opts.drag ?? 0.993;
     this.life = 1;
@@ -81,7 +100,8 @@ class Particle {
     this.vy += this.gravity;
     this.vx *= this.drag;
     this.vy *= this.drag;
-    this.x += this.vx; this.y += this.vy;
+    this.x += this.vx;
+    this.y += this.vy;
     this.rot += this.rotSpeed;
     this.life -= this.decay;
     if (this.type === 'ribbon') {
@@ -103,28 +123,44 @@ class Particle {
 
     if (this.type === 'rect') {
       ctx.fillStyle = this.color;
-      const w = this.size, h = this.size * 1.5;
-      ctx.fillRect(-w/2, -h/2, w, h);
+      const w = this.size,
+        h = this.size * 1.5;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
       ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      ctx.fillRect(-w/2, -h/2, w, h*0.3);
+      ctx.fillRect(-w / 2, -h / 2, w, h * 0.3);
     } else if (this.type === 'ribbon') {
-      const L = this.length, w = this.width;
+      const L = this.length,
+        w = this.width;
       const wave = Math.sin(this.wavePhase) * this.waveAmp;
       const flip = Math.sin(this.flipPhase) * this.flipAmp;
       ctx.fillStyle = this.color;
       ctx.beginPath();
-      ctx.moveTo(-L/2, -w/2);
-      ctx.bezierCurveTo(-L/4, -w/2 + wave*2, L/4, w/2 + wave*2 - flip*w*1.5, L/2, w/2);
-      ctx.lineTo(L/2 + 2, -w/2 + 2);
-      ctx.bezierCurveTo(L/4, -w/2 + wave*2 - flip*w*1.5, -L/4, w/2 + wave*2, -L/2, w/2);
+      ctx.moveTo(-L / 2, -w / 2);
+      ctx.bezierCurveTo(
+        -L / 4,
+        -w / 2 + wave * 2,
+        L / 4,
+        w / 2 + wave * 2 - flip * w * 1.5,
+        L / 2,
+        w / 2,
+      );
+      ctx.lineTo(L / 2 + 2, -w / 2 + 2);
+      ctx.bezierCurveTo(
+        L / 4,
+        -w / 2 + wave * 2 - flip * w * 1.5,
+        -L / 4,
+        w / 2 + wave * 2,
+        -L / 2,
+        w / 2,
+      );
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.35)';
       ctx.lineWidth = w * 0.3;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-L/2 + 2, 0);
-      ctx.bezierCurveTo(-L/4, wave*1.2, L/4, wave*1.2 - flip*w*1.2, L/2 - 2, 0);
+      ctx.moveTo(-L / 2 + 2, 0);
+      ctx.bezierCurveTo(-L / 4, wave * 1.2, L / 4, wave * 1.2 - flip * w * 1.2, L / 2 - 2, 0);
       ctx.stroke();
     } else if (this.type === 'circle') {
       ctx.fillStyle = this.color;
@@ -151,15 +187,16 @@ class Particle {
 
 const POOL_SIZE = 600;
 
-export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle, {}>(
-  function ConfettiCanvas(_, ref) {
-    const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const poolRef = useRef<Particle[]>([]);
-    const sizeRef = useRef({ W: 0, H: 0, DPR: 1 });
-    const rafRef = useRef<number | null>(null);
-    const audioCtxRef = useRef<AudioContext | null>(null);
+export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle>(function ConfettiCanvas(_, ref) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const poolRef = useRef<Particle[]>([]);
+  const sizeRef = useRef({ W: 0, H: 0, DPR: 1 });
+  const rafRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
-    useImperativeHandle(ref, () => ({
+  useImperativeHandle(
+    ref,
+    () => ({
       celebrate(visuals: boolean, sound: boolean, origin?: ConfettiOrigin) {
         if (sound) {
           ensureAudio();
@@ -174,8 +211,14 @@ export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle, {}>(
           const burstX2 = Math.min(W - 20, origin.x + origin.width);
           sideBurstAt(burstX1, burstY, 'left');
           sideBurstAt(burstX2, burstY, 'right');
-          setTimeout(() => { sideBurstAt(burstX1, burstY, 'left'); sideBurstAt(burstX2, burstY, 'right'); }, 160);
-          setTimeout(() => { sideBurstAt(burstX1, burstY, 'left'); sideBurstAt(burstX2, burstY, 'right'); }, 340);
+          setTimeout(() => {
+            sideBurstAt(burstX1, burstY, 'left');
+            sideBurstAt(burstX2, burstY, 'right');
+          }, 160);
+          setTimeout(() => {
+            sideBurstAt(burstX1, burstY, 'left');
+            sideBurstAt(burstX2, burstY, 'right');
+          }, 340);
           // 卡片上方点缀小烟花
           for (let i = 0; i < 3; i++) {
             const fx = rand(origin.x + origin.width * 0.15, origin.x + origin.width * 0.85);
@@ -185,8 +228,14 @@ export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle, {}>(
         } else {
           sideBurst('left');
           sideBurst('right');
-          setTimeout(() => { sideBurst('left'); sideBurst('right'); }, 160);
-          setTimeout(() => { sideBurst('left'); sideBurst('right'); }, 340);
+          setTimeout(() => {
+            sideBurst('left');
+            sideBurst('right');
+          }, 160);
+          setTimeout(() => {
+            sideBurst('left');
+            sideBurst('right');
+          }, 340);
           for (let i = 0; i < 3; i++) {
             const fx = rand(W * 0.25, W * 0.75);
             const fy = rand(H * 0.18, H * 0.4);
@@ -194,193 +243,205 @@ export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle, {}>(
           }
         }
       },
-    }), []);
+    }),
+    [],
+  );
 
-    function ensureAudio() {
-      if (!audioCtxRef.current) {
-        try {
-          audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-        } catch { /* ignore */ }
-      }
-      if (audioCtxRef.current?.state === 'suspended') {
-        void audioCtxRef.current.resume();
-      }
-    }
-
-    function playLaunchSound() {
-      const audioCtx = audioCtxRef.current;
-      if (!audioCtx) return;
-      const t = audioCtx.currentTime;
-      const noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      const noise = audioCtx.createBufferSource();
-      noise.buffer = noiseBuf;
-      const filter = audioCtx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(2800, t);
-      filter.frequency.exponentialRampToValueAtTime(500, t + 0.4);
-      filter.Q.value = 0.6;
-      const gain = audioCtx.createGain();
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.08, t + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
-      noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
-      noise.start(t);
-
-      const osc = audioCtx.createOscillator();
-      const og = audioCtx.createGain();
-      osc.frequency.setValueAtTime(85, t);
-      osc.frequency.exponentialRampToValueAtTime(35, t + 0.16);
-      og.gain.setValueAtTime(0.0001, t);
-      og.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-      og.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-      osc.connect(og); og.connect(audioCtx.destination);
-      osc.start(t); osc.stop(t + 0.25);
-
-      for (let i = 0; i < 2; i++) {
-        const ot = t + 0.1 + i * 0.1;
-        const o = audioCtx.createOscillator();
-        const g = audioCtx.createGain();
-        o.type = 'triangle';
-        o.frequency.setValueAtTime(pick([1318, 1568, 1976]), ot);
-        g.gain.setValueAtTime(0.0001, ot);
-        g.gain.exponentialRampToValueAtTime(0.06, ot + 0.01);
-        g.gain.exponentialRampToValueAtTime(0.0001, ot + 0.2);
-        o.connect(g); g.connect(audioCtx.destination);
-        o.start(ot); o.stop(ot + 0.22);
+  function ensureAudio() {
+    if (!audioCtxRef.current) {
+      try {
+        audioCtxRef.current = new (
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+        )();
+      } catch {
+        /* ignore */
       }
     }
+    if (audioCtxRef.current?.state === 'suspended') {
+      void audioCtxRef.current.resume();
+    }
+  }
 
-    function getParticle(): Particle {
+  function playLaunchSound() {
+    const audioCtx = audioCtxRef.current;
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.4, audioCtx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = noiseBuf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2800, t);
+    filter.frequency.exponentialRampToValueAtTime(500, t + 0.4);
+    filter.Q.value = 0.6;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.08, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(t);
+
+    const osc = audioCtx.createOscillator();
+    const og = audioCtx.createGain();
+    osc.frequency.setValueAtTime(85, t);
+    osc.frequency.exponentialRampToValueAtTime(35, t + 0.16);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    osc.connect(og);
+    og.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.25);
+
+    for (let i = 0; i < 2; i++) {
+      const ot = t + 0.1 + i * 0.1;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(pick([1318, 1568, 1976]), ot);
+      g.gain.setValueAtTime(0.0001, ot);
+      g.gain.exponentialRampToValueAtTime(0.06, ot + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, ot + 0.2);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(ot);
+      o.stop(ot + 0.22);
+    }
+  }
+
+  function getParticle(): Particle {
+    const pool = poolRef.current;
+    for (let i = 0; i < pool.length; i++) {
+      if (!pool[i].alive) return pool[i];
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function sideBurst(side: 'left' | 'right') {
+    const { W, H } = sizeRef.current;
+    const isLeft = side === 'left';
+    const x = isLeft ? 0 : W;
+    const y = H * 0.58;
+    const cx = W * 0.5;
+    const cy = H * 0.28;
+    const count = Math.floor(clamp(W * 0.05, 28, 60));
+    const baseAngle = Math.atan2(cy - y, cx - x);
+    const spread = Math.PI * 0.16;
+    for (let i = 0; i < count; i++) {
+      const p = getParticle();
+      const angle = baseAngle + rand(-spread, spread);
+      const speed = rand(6, 12);
+      const r = Math.random();
+      const type: PType = r < 0.45 ? 'ribbon' : r < 0.6 ? 'spark' : r < 0.8 ? 'circle' : 'rect';
+      p.spawn(x, y + rand(-20, 20), {
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: type === 'ribbon' ? pick(RIBBON_COLORS) : pick(COLORS),
+        size: type === 'ribbon' ? rand(1.5, 3) : rand(3, 6),
+        type,
+        decay: rand(0.006, 0.01),
+        rotSpeed: rand(-0.15, 0.15),
+      });
+    }
+  }
+
+  // 从指定坐标向卡片中央喷射
+  function sideBurstAt(x: number, y: number, side: 'left' | 'right') {
+    const { W } = sizeRef.current;
+    const isLeft = side === 'left';
+    const cx = isLeft ? x + 120 : x - 120;
+    const cy = y - 40;
+    const count = Math.floor(clamp(W * 0.04, 22, 48));
+    const baseAngle = Math.atan2(cy - y, cx - x);
+    const spread = Math.PI * 0.14;
+    for (let i = 0; i < count; i++) {
+      const p = getParticle();
+      const angle = baseAngle + rand(-spread, spread);
+      const speed = rand(5, 10);
+      const r = Math.random();
+      const type: PType = r < 0.45 ? 'ribbon' : r < 0.6 ? 'spark' : r < 0.8 ? 'circle' : 'rect';
+      p.spawn(x, y + rand(-15, 15), {
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        color: type === 'ribbon' ? pick(RIBBON_COLORS) : pick(COLORS),
+        size: type === 'ribbon' ? rand(1.5, 3) : rand(3, 6),
+        type,
+        decay: rand(0.006, 0.01),
+        rotSpeed: rand(-0.15, 0.15),
+      });
+    }
+  }
+
+  function fireworkAt(x: number, y: number) {
+    const n = Math.floor(rand(18, 32));
+    for (let i = 0; i < n; i++) {
+      const p = getParticle();
+      const angle = rand(0, TAU);
+      const speed = rand(1.5, 5);
+      p.spawn(x, y, {
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 0.8,
+        color: pick(COLORS),
+        size: rand(2, 4),
+        type: Math.random() < 0.65 ? 'spark' : 'circle',
+        decay: rand(0.015, 0.025),
+        rotSpeed: 0,
+        gravity: 0.06,
+        drag: 0.96,
+      });
+    }
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 初始化粒子池
+    if (poolRef.current.length === 0) {
+      poolRef.current = Array.from({ length: POOL_SIZE }, () => new Particle());
+    }
+
+    const resize = () => {
+      const DPR = Math.min(window.devicePixelRatio || 1, 2);
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      sizeRef.current = { W, H, DPR };
+      canvas.width = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      canvas.style.width = W + 'px';
+      canvas.style.height = H + 'px';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const loop = () => {
+      const { W, H } = sizeRef.current;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter';
       const pool = poolRef.current;
       for (let i = 0; i < pool.length; i++) {
-        if (!pool[i].alive) return pool[i];
+        const p = pool[i];
+        if (!p.alive) continue;
+        p.update(H, W);
+        p.draw(ctx);
       }
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-
-    function sideBurst(side: 'left' | 'right') {
-      const { W, H } = sizeRef.current;
-      const isLeft = side === 'left';
-      const x = isLeft ? 0 : W;
-      const y = H * 0.58;
-      const cx = W * 0.5;
-      const cy = H * 0.28;
-      const count = Math.floor(clamp(W * 0.05, 28, 60));
-      const baseAngle = Math.atan2(cy - y, cx - x);
-      const spread = Math.PI * 0.16;
-      for (let i = 0; i < count; i++) {
-        const p = getParticle();
-        const angle = baseAngle + rand(-spread, spread);
-        const speed = rand(6, 12);
-        const r = Math.random();
-        const type: PType = r < 0.45 ? 'ribbon' : (r < 0.6 ? 'spark' : (r < 0.8 ? 'circle' : 'rect'));
-        p.spawn(x, y + rand(-20, 20), {
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          color: type === 'ribbon' ? pick(RIBBON_COLORS) : pick(COLORS),
-          size: type === 'ribbon' ? rand(1.5, 3) : rand(3, 6),
-          type,
-          decay: rand(0.006, 0.01),
-          rotSpeed: rand(-0.15, 0.15),
-        });
-      }
-    }
-
-    // 从指定坐标向卡片中央喷射
-    function sideBurstAt(x: number, y: number, side: 'left' | 'right') {
-      const { W } = sizeRef.current;
-      const isLeft = side === 'left';
-      const cx = isLeft ? x + 120 : x - 120;
-      const cy = y - 40;
-      const count = Math.floor(clamp(W * 0.04, 22, 48));
-      const baseAngle = Math.atan2(cy - y, cx - x);
-      const spread = Math.PI * 0.14;
-      for (let i = 0; i < count; i++) {
-        const p = getParticle();
-        const angle = baseAngle + rand(-spread, spread);
-        const speed = rand(5, 10);
-        const r = Math.random();
-        const type: PType = r < 0.45 ? 'ribbon' : (r < 0.6 ? 'spark' : (r < 0.8 ? 'circle' : 'rect'));
-        p.spawn(x, y + rand(-15, 15), {
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          color: type === 'ribbon' ? pick(RIBBON_COLORS) : pick(COLORS),
-          size: type === 'ribbon' ? rand(1.5, 3) : rand(3, 6),
-          type,
-          decay: rand(0.006, 0.01),
-          rotSpeed: rand(-0.15, 0.15),
-        });
-      }
-    }
-
-    function fireworkAt(x: number, y: number) {
-      const n = Math.floor(rand(18, 32));
-      for (let i = 0; i < n; i++) {
-        const p = getParticle();
-        const angle = rand(0, TAU);
-        const speed = rand(1.5, 5);
-        p.spawn(x, y, {
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed - 0.8,
-          color: pick(COLORS),
-          size: rand(2, 4),
-          type: Math.random() < 0.65 ? 'spark' : 'circle',
-          decay: rand(0.015, 0.025),
-          rotSpeed: 0,
-          gravity: 0.06,
-          drag: 0.96,
-        });
-      }
-    }
-
-    useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // 初始化粒子池
-      if (poolRef.current.length === 0) {
-        poolRef.current = Array.from({ length: POOL_SIZE }, () => new Particle());
-      }
-
-      const resize = () => {
-        const DPR = Math.min(window.devicePixelRatio || 1, 2);
-        const W = window.innerWidth;
-        const H = window.innerHeight;
-        sizeRef.current = { W, H, DPR };
-        canvas.width = Math.floor(W * DPR);
-        canvas.height = Math.floor(H * DPR);
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
-        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      };
-      resize();
-      window.addEventListener('resize', resize);
-
-      const loop = () => {
-        const { W, H } = sizeRef.current;
-        ctx.clearRect(0, 0, W, H);
-        ctx.globalCompositeOperation = 'lighter';
-        const pool = poolRef.current;
-        for (let i = 0; i < pool.length; i++) {
-          const p = pool[i];
-          if (!p.alive) continue;
-          p.update(H, W);
-          p.draw(ctx);
-        }
-        rafRef.current = requestAnimationFrame(loop);
-      };
       rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
 
-      return () => {
-        window.removeEventListener('resize', resize);
-        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      };
-    }, []);
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
-    return <canvas ref={canvasRef} className="confetti-canvas" aria-hidden="true" />;
-  },
-);
+  return <canvas ref={canvasRef} className="confetti-canvas" aria-hidden="true" />;
+});

@@ -71,9 +71,13 @@ export default function App() {
   const navigate = useNavigate();
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
-  const [repoNoticeSettings, setRepoNoticeSettingsState] = useState<RepoNoticeSettings>(() => getRepoNoticeSettings());
+  const [repoNoticeSettings, setRepoNoticeSettingsState] = useState<RepoNoticeSettings>(() =>
+    getRepoNoticeSettings(),
+  );
   const [repoUnreadCount, setRepoUnreadCount] = useState(0);
-  const [plazaToolbarCollapsed, setPlazaToolbarCollapsedState] = useState(() => getPlazaToolbarCollapsed());
+  const [plazaToolbarCollapsed, setPlazaToolbarCollapsedState] = useState(() =>
+    getPlazaToolbarCollapsed(),
+  );
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
@@ -183,7 +187,8 @@ export default function App() {
   }, [backgroundDevice, siteSettings, theme]);
 
   const themeLabel = useMemo(() => (theme === 'dark' ? '切换日间' : '切换夜间'), [theme]);
-  const plazaPanel = location.pathname === '/plays' ? new URLSearchParams(location.search).get('panel') : '';
+  const plazaPanel =
+    location.pathname === '/plays' ? new URLSearchParams(location.search).get('panel') : '';
   const calendarNavActive = plazaPanel === 'calendar';
   const derivedNavActive = plazaPanel === 'derived';
   const openPlazaPanel = (panel: 'calendar' | 'derived') => {
@@ -198,19 +203,32 @@ export default function App() {
           <nav className="top-nav">
             <button
               aria-label={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
-              className={plazaToolbarCollapsed ? 'icon-button header-toolbar-toggle active' : 'icon-button header-toolbar-toggle'}
-              onClick={() => setPlazaToolbarCollapsedState(setPlazaToolbarCollapsed(!plazaToolbarCollapsed))}
+              className={
+                plazaToolbarCollapsed
+                  ? 'icon-button header-toolbar-toggle active'
+                  : 'icon-button header-toolbar-toggle'
+              }
+              onClick={() =>
+                setPlazaToolbarCollapsedState(setPlazaToolbarCollapsed(!plazaToolbarCollapsed))
+              }
               title={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
               type="button"
             >
               {plazaToolbarCollapsed ? '▸' : '▾'}
             </button>
-            <NavLink to="/repos" className={({ isActive }) => (isActive ? 'nav-pill active repo-nav-pill' : 'nav-pill repo-nav-pill')}>
+            <NavLink
+              to="/repos"
+              className={({ isActive }) =>
+                isActive ? 'nav-pill active repo-nav-pill' : 'nav-pill repo-nav-pill'
+              }
+            >
               repo
               {repoNoticeSettings === 'count' && repoUnreadCount > 0 ? (
                 <span className="repo-nav-badge">{repoUnreadCount}</span>
               ) : null}
-              {repoNoticeSettings === 'dot' && repoUnreadCount > 0 ? <span className="repo-nav-dot" /> : null}
+              {repoNoticeSettings === 'dot' && repoUnreadCount > 0 ? (
+                <span className="repo-nav-dot" />
+              ) : null}
             </NavLink>
             <button
               className={derivedNavActive ? 'nav-pill active' : 'nav-pill'}

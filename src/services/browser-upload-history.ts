@@ -21,7 +21,7 @@ export type BrowserSubmissionRecord = PlayDraft & {
 const now = () => new Date().toISOString();
 const makeId = () => `local_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 
-const readStore = <T,>(key: string, fallback: T): T => {
+const readStore = <T>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') {
     return fallback;
   }
@@ -38,7 +38,7 @@ const readStore = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const writeStore = <T,>(key: string, value: T) => {
+const writeStore = <T>(key: string, value: T) => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -60,7 +60,9 @@ const normalizeSubmissionFeedbackSummary = (feedback?: SubmissionFeedback) => {
   } satisfies SubmissionFeedback;
 };
 
-const normalizeSubmissionDraftFields = <T extends { summary: string; latestFeedback?: SubmissionFeedback }>(
+const normalizeSubmissionDraftFields = <
+  T extends { summary: string; latestFeedback?: SubmissionFeedback },
+>(
   record: T,
 ): T => ({
   ...record,
@@ -79,10 +81,10 @@ export const rememberAuthorName = (authorName: string) => {
     return getAuthorHistory();
   }
 
-  const nextHistory = [normalized, ...getAuthorHistory().filter((item) => item !== normalized)].slice(
-    0,
-    MAX_AUTHOR_HISTORY,
-  );
+  const nextHistory = [
+    normalized,
+    ...getAuthorHistory().filter((item) => item !== normalized),
+  ].slice(0, MAX_AUTHOR_HISTORY);
   writeStore(AUTHOR_HISTORY_KEY, nextHistory);
   return nextHistory;
 };
@@ -136,7 +138,8 @@ export const mergeSubmissionFeedback = (feedbackItems: SubmissionFeedback[]) => 
       }
 
       // 之前已知被删除，现在又出现（恢复/重新上传）：清掉 missing 标记
-      const missingDetectedAt = previousFeedback?.status === 'missing' ? undefined : item.missingDetectedAt;
+      const missingDetectedAt =
+        previousFeedback?.status === 'missing' ? undefined : item.missingDetectedAt;
       const fallbackFeedback: SubmissionFeedback = previousFeedback ?? {
         playId: item.latestPlayId,
         status: 'pending',

@@ -134,12 +134,13 @@ export const createZipFromTextFiles = (files: ZipTextFile[]) => {
 
 const findEndOfCentralDirectoryOffset = (bytes: Uint8Array) => {
   for (let offset = bytes.length - 22; offset >= 0; offset -= 1) {
-    const value = bytes[offset]
-      | (bytes[offset + 1] << 8)
-      | (bytes[offset + 2] << 16)
-      | (bytes[offset + 3] << 24);
+    const value =
+      bytes[offset] |
+      (bytes[offset + 1] << 8) |
+      (bytes[offset + 2] << 16) |
+      (bytes[offset + 3] << 24);
 
-    if ((value >>> 0) === END_OF_CENTRAL_DIRECTORY_SIGNATURE) {
+    if (value >>> 0 === END_OF_CENTRAL_DIRECTORY_SIGNATURE) {
       return offset;
     }
   }

@@ -57,7 +57,9 @@ describe('bulkReviewPlays', () => {
 
     const logs = db.sqlite.prepare('SELECT * FROM review_logs').all();
     expect(logs).toHaveLength(2);
-    expect(logs.every((log: any) => log.action === 'approve' && log.operator === 'admin')).toBe(true);
+    expect(logs.every((log: any) => log.action === 'approve' && log.operator === 'admin')).toBe(
+      true,
+    );
   });
 
   it('批量通过时会自动创建审核动作对应的分类标签（首次出现的分类）', async () => {
@@ -87,7 +89,9 @@ describe('bulkReviewPlays', () => {
     const tag = db.sqlite.prepare('SELECT * FROM tags WHERE name = ?').get('悬疑/推理');
     expect(tag).toBeFalsy();
 
-    const play = db.sqlite.prepare('SELECT status, review_note FROM plays WHERE id = ?').get(id1) as any;
+    const play = db.sqlite
+      .prepare('SELECT status, review_note FROM plays WHERE id = ?')
+      .get(id1) as any;
     expect(play.status).toBe('rejected');
     expect(play.review_note).toBe('不符合要求');
   });

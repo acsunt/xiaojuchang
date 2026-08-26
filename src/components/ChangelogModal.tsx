@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import featureGuideMarkdown from '../../README.md?raw';
-import {
-  getChangelogCategories,
-  visitorChangelog,
-} from '../data/visitor-changelog';
+import { getChangelogCategories, visitorChangelog } from '../data/visitor-changelog';
 import { SimpleMarkdown } from './SimpleMarkdown';
 
 type ChangelogModalProps = {
@@ -33,12 +30,7 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
         onClick={(event) => event.stopPropagation()}
         role="dialog"
       >
-        <button
-          aria-label="关闭"
-          className="changelog-modal-close"
-          onClick={onClose}
-          type="button"
-        >
+        <button aria-label="关闭" className="changelog-modal-close" onClick={onClose} type="button">
           ×
         </button>
         <div className="content-head">
@@ -47,7 +39,11 @@ export function ChangelogModal({ onClose }: ChangelogModalProps) {
           </h3>
         </div>
 
-        <div className="inline-actions wrap-mobile changelog-tab-row" role="tablist" aria-label="说明分类">
+        <div
+          className="inline-actions wrap-mobile changelog-tab-row"
+          role="tablist"
+          aria-label="说明分类"
+        >
           <button
             aria-selected={activeTab === 'updates'}
             className={activeTab === 'updates' ? 'tab-chip active' : 'tab-chip'}

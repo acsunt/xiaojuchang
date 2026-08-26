@@ -17,7 +17,11 @@ type ParsedRepoMarkdown = {
 
 const isImageUrl = (url: string) => imagePattern.test(url.split('#')[0] ?? '');
 
-const pushTextWithLinks = (tokens: MarkdownToken[], images: ParsedRepoMarkdown['images'], value: string) => {
+const pushTextWithLinks = (
+  tokens: MarkdownToken[],
+  images: ParsedRepoMarkdown['images'],
+  value: string,
+) => {
   let cursor = 0;
   const matches = Array.from(value.matchAll(markdownLinkPattern));
 
@@ -43,7 +47,11 @@ const pushTextWithLinks = (tokens: MarkdownToken[], images: ParsedRepoMarkdown['
   }
 };
 
-const pushBareUrls = (tokens: MarkdownToken[], images: ParsedRepoMarkdown['images'], value: string) => {
+const pushBareUrls = (
+  tokens: MarkdownToken[],
+  images: ParsedRepoMarkdown['images'],
+  value: string,
+) => {
   let cursor = 0;
   const matches = Array.from(value.matchAll(bareUrlPattern));
 
@@ -68,7 +76,10 @@ const pushBareUrls = (tokens: MarkdownToken[], images: ParsedRepoMarkdown['image
   }
 };
 
-const parseInlineMarkdown = (images: ParsedRepoMarkdown['images'], value: string): MarkdownToken[] => {
+const parseInlineMarkdown = (
+  images: ParsedRepoMarkdown['images'],
+  value: string,
+): MarkdownToken[] => {
   const tokens: MarkdownToken[] = [];
   let cursor = 0;
   const matches = Array.from(value.matchAll(markdownImagePattern));
@@ -119,7 +130,7 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
   const touchStartXRef = useRef<number | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const parsedContent = useMemo(() => parseRepoMarkdown(content), [content]);
-  const previewImage = previewIndex === null ? null : parsedContent.images[previewIndex] ?? null;
+  const previewImage = previewIndex === null ? null : (parsedContent.images[previewIndex] ?? null);
   const hasMultipleImages = parsedContent.images.length > 1;
 
   const closePreview = () => setPreviewIndex(null);
@@ -130,7 +141,9 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
     }
 
     setPreviewIndex((currentIndex) =>
-      currentIndex === null ? currentIndex : (currentIndex - 1 + parsedContent.images.length) % parsedContent.images.length,
+      currentIndex === null
+        ? currentIndex
+        : (currentIndex - 1 + parsedContent.images.length) % parsedContent.images.length,
     );
   };
   const showNext = () => {
@@ -219,7 +232,10 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
               ×
             </button>
             {hasMultipleImages && previewIndex !== null ? (
-              <div className="repo-image-modal-counter" onClick={(event) => event.stopPropagation()}>
+              <div
+                className="repo-image-modal-counter"
+                onClick={(event) => event.stopPropagation()}
+              >
                 {previewIndex + 1} / {parsedContent.images.length}
               </div>
             ) : null}
@@ -275,7 +291,11 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
                 touchStartXRef.current = event.touches[0]?.clientX ?? null;
               }}
             >
-              <img alt={previewImage.alt || 'repo 原图'} className="repo-image-full" src={previewImage.url} />
+              <img
+                alt={previewImage.alt || 'repo 原图'}
+                className="repo-image-full"
+                src={previewImage.url}
+              />
             </div>
           </div>
         </div>

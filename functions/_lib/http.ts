@@ -117,7 +117,8 @@ export const error = (message: string, status = 400) => json({ message }, { stat
 
 export const now = () => new Date().toISOString();
 
-export const makeId = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
+export const makeId = (prefix: string) =>
+  `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
 
 export const normalizePlay = (row: Record<string, unknown>): PlayRecord => ({
   id: String(row.id),

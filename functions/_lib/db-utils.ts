@@ -1,9 +1,10 @@
 // 数据库层公用的小工具：数值裁剪、数组分片，以及 D1 批量操作的分片大小常量。
 // 被 plays.ts / repos.ts / tags.ts 共用，避免拆分后每个文件各自重复实现。
 
-export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+export const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
-export const chunkItems = <T,>(items: T[], size: number) => {
+export const chunkItems = <T>(items: T[], size: number) => {
   const chunks: T[][] = [];
 
   for (let index = 0; index < items.length; index += size) {

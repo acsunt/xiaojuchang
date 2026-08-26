@@ -1,7 +1,23 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ConfettiCanvas, type ConfettiCanvasHandle } from '../../components/ConfettiCanvas';
-import { getConfettiPrefs, setConfettiEnabled, setConfettiSound, type ConfettiPrefs } from '../../services/confetti-prefs';
+import {
+  getConfettiPrefs,
+  setConfettiEnabled,
+  setConfettiSound,
+  type ConfettiPrefs,
+} from '../../services/confetti-prefs';
 import {
   clearRandomSeen,
   getPlazaAutoRefresh,
@@ -28,18 +44,28 @@ import {
   type PlayPreferenceStore,
   type RandomMode,
 } from '../../services/browser-play-preferences';
-import { downloadBlobFile, downloadTextFile, serializePlaysToBatchText } from '../../services/play-text';
+import {
+  downloadBlobFile,
+  downloadTextFile,
+  serializePlaysToBatchText,
+} from '../../services/play-text';
 import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaDerivedPanel } from './PlazaDerivedPanel';
 import { getPlayVersionKey, sortPlayVersions } from './play-versions';
-import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT, type Play, type RepoSummary } from '../../types/play';
+import {
+  DEFAULT_CATEGORY,
+  PLAYS_UPDATED_EVENT,
+  type Play,
+  type RepoSummary,
+} from '../../types/play';
 import { openVisitorChangelog } from '../../data/visitor-changelog';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';
-type RepoSortMode = 'none' | 'count_desc' | 'count_asc' | 'first_desc' | 'first_asc' | 'last_desc' | 'last_asc';
+type RepoSortMode =
+  'none' | 'count_desc' | 'count_asc' | 'first_desc' | 'first_asc' | 'last_desc' | 'last_asc';
 type SelectionMode = 'idle' | 'export' | 'favorite' | 'disliked';
 type CategoryStat = { name: string; count: number };
 type AuthorStat = { name: string; count: number };
@@ -165,7 +191,11 @@ const orderPlaysByNewest = (items: Play[]) =>
       right.id.localeCompare(left.id),
   );
 
-const countNewPublicPlays = (currentPlays: Play[], nextPlays: Play[], snapshot: PlazaNavigationSnapshot | null) => {
+const countNewPublicPlays = (
+  currentPlays: Play[],
+  nextPlays: Play[],
+  snapshot: PlazaNavigationSnapshot | null,
+) => {
   const previousHeadId = snapshot?.latestHeadId || orderPlaysByNewest(currentPlays)[0]?.id || '';
   if (!previousHeadId) {
     return 0;
@@ -220,7 +250,8 @@ const readPlazaNumber = (key: string, fallback: number) => {
   return Number.isFinite(raw) && raw > 0 ? raw : fallback;
 };
 
-const clampPageSize = (value: number) => Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, Math.trunc(value)));
+const clampPageSize = (value: number) =>
+  Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, Math.trunc(value)));
 
 type PlaySearchField = 'title' | 'author' | 'category' | 'content';
 
@@ -294,10 +325,15 @@ const groupPlaysByExportValue = (items: Play[], pickValue: (play: Play) => strin
 const buildExportOptions = (groups: Map<string, Play[]>) =>
   [...groups.entries()]
     .map(([value, items]) => ({ value, label: value, count: items.length }))
-    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label, 'zh-CN'));
+    .sort(
+      (left, right) => right.count - left.count || left.label.localeCompare(right.label, 'zh-CN'),
+    );
 
 const safeExportFileNamePart = (value: string, fallback: string) =>
-  (value.trim() || fallback).replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').slice(0, 80) || fallback;
+  (value.trim() || fallback)
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 80) || fallback;
 
 const buildScopedExportFileName = (type: ExportTargetType, name: string, count: number) => {
   const typeLabel = type === 'author' ? '作者' : '分类';
@@ -390,21 +426,41 @@ function ExportPickerModal({
         <div className="stack-gap-sm">
           <h3 id="plaza-export-modal-title">{title}</h3>
           <p className="sub-copy">
-            可勾选单个、多个，或直接全选导出全部。当前共 {items.length} 项，已选 {selectedCount} 项。
+            可勾选单个、多个，或直接全选导出全部。当前共 {items.length} 项，已选 {selectedCount}{' '}
+            项。
           </p>
         </div>
 
         <div className="plaza-export-modal-toolbar">
-          <button className="button secondary plaza-export-modal-action" disabled={items.length === 0} onClick={onToggleAll} type="button">
+          <button
+            className="button secondary plaza-export-modal-action"
+            disabled={items.length === 0}
+            onClick={onToggleAll}
+            type="button"
+          >
             {allSelected ? '取消全选' : '全选'}
           </button>
-          <button className="button primary plaza-export-modal-action" disabled={selectedCount === 0} onClick={onExportSelected} type="button">
+          <button
+            className="button primary plaza-export-modal-action"
+            disabled={selectedCount === 0}
+            onClick={onExportSelected}
+            type="button"
+          >
             {selectedCount > 0 ? `导出已选（${selectedCount}）` : '导出已选'}
           </button>
-          <button className="button secondary plaza-export-modal-action" disabled={items.length === 0} onClick={onExportAll} type="button">
+          <button
+            className="button secondary plaza-export-modal-action"
+            disabled={items.length === 0}
+            onClick={onExportAll}
+            type="button"
+          >
             导出全部
           </button>
-          <button className="button ghost plaza-export-modal-action" onClick={onClose} type="button">
+          <button
+            className="button ghost plaza-export-modal-action"
+            onClick={onClose}
+            type="button"
+          >
             关闭
           </button>
         </div>
@@ -415,8 +471,15 @@ function ExportPickerModal({
               const checked = selectedValues.includes(item.value);
 
               return (
-                <label className="checkbox-chip checkbox-chip-wide plaza-export-modal-option" key={item.value}>
-                  <input checked={checked} onChange={() => onToggleItem(item.value)} type="checkbox" />
+                <label
+                  className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                  key={item.value}
+                >
+                  <input
+                    checked={checked}
+                    onChange={() => onToggleItem(item.value)}
+                    type="checkbox"
+                  />
                   <span>
                     {item.label} · {item.count} 篇
                   </span>
@@ -516,30 +579,47 @@ export function PlayListPage() {
   const [playSearchFields, setPlaySearchFields] = useState<PlaySearchField[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const saved = readPlazaString(PLAZA_SORT_MODE_KEY, 'created_desc');
-    return (['updated_desc', 'updated_asc', 'created_desc', 'created_asc'] as SortMode[]).includes(saved as SortMode)
+    return (['updated_desc', 'updated_asc', 'created_desc', 'created_asc'] as SortMode[]).includes(
+      saved as SortMode,
+    )
       ? (saved as SortMode)
       : 'created_desc';
   });
-  const [activeRepoFilter, setActiveRepoFilter] = useState<RepoFilterMode>(() => readPlazaString(PLAZA_REPO_FILTER_KEY, 'all') as RepoFilterMode);
-  const [repoSortMode, setRepoSortMode] = useState<RepoSortMode>(() => readPlazaString(PLAZA_REPO_SORT_KEY, 'none') as RepoSortMode);
+  const [activeRepoFilter, setActiveRepoFilter] = useState<RepoFilterMode>(
+    () => readPlazaString(PLAZA_REPO_FILTER_KEY, 'all') as RepoFilterMode,
+  );
+  const [repoSortMode, setRepoSortMode] = useState<RepoSortMode>(
+    () => readPlazaString(PLAZA_REPO_SORT_KEY, 'none') as RepoSortMode,
+  );
   const [columns, setColumns] = useState(() => readPlazaNumber(PLAZA_COLUMNS_KEY, 4));
-  const [pageSize, setPageSize] = useState(() => clampPageSize(readPlazaNumber(PLAZA_PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE)));
-  const [pageSizeInput, setPageSizeInput] = useState(() => String(clampPageSize(readPlazaNumber(PLAZA_PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE))));
+  const [pageSize, setPageSize] = useState(() =>
+    clampPageSize(readPlazaNumber(PLAZA_PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE)),
+  );
+  const [pageSizeInput, setPageSizeInput] = useState(() =>
+    String(clampPageSize(readPlazaNumber(PLAZA_PAGE_SIZE_KEY, DEFAULT_PAGE_SIZE))),
+  );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
   const [activeView, setActiveView] = useState<PlazaView>(() => {
     const saved = readPlazaString(PLAZA_ACTIVE_VIEW_KEY, 'everything');
-    return (['everything', 'all', 'favorites', 'disliked'] as PlazaView[]).includes(saved as PlazaView)
+    return (['everything', 'all', 'favorites', 'disliked'] as PlazaView[]).includes(
+      saved as PlazaView,
+    )
       ? (saved as PlazaView)
       : 'everything';
   });
-  const [activeCategory, setActiveCategory] = useState(() => readPlazaString(PLAZA_ACTIVE_CATEGORY_KEY, ''));
-  const [activeAuthor, setActiveAuthor] = useState(() => readPlazaString(PLAZA_ACTIVE_AUTHOR_KEY, ''));
+  const [activeCategory, setActiveCategory] = useState(() =>
+    readPlazaString(PLAZA_ACTIVE_CATEGORY_KEY, ''),
+  );
+  const [activeAuthor, setActiveAuthor] = useState(() =>
+    readPlazaString(PLAZA_ACTIVE_AUTHOR_KEY, ''),
+  );
   const [showPreview, setShowPreview] = useState(() => readPlazaBool(PLAZA_SHOW_PREVIEW_KEY, true));
   const [showPreferenceActions, setShowPreferenceActions] = useState(() =>
     readPlazaBool(PLAZA_SHOW_PREFERENCE_ACTIONS_KEY),
   );
-  const [preferenceStore, setPreferenceStore] = useState<PlayPreferenceStore>(initialPreferenceStore);
+  const [preferenceStore, setPreferenceStore] =
+    useState<PlayPreferenceStore>(initialPreferenceStore);
   const [viewportMode, setViewportMode] = useState<'mobile' | 'tablet' | 'desktop'>(() => {
     if (typeof window === 'undefined') {
       return 'desktop';
@@ -550,10 +630,16 @@ export function PlayListPage() {
   const [exportModalType, setExportModalType] = useState<ExportTargetType | ''>('');
   const [selectedExportAuthors, setSelectedExportAuthors] = useState<string[]>([]);
   const [selectedExportCategories, setSelectedExportCategories] = useState<string[]>([]);
-  const [categoryFilterOpen, setCategoryFilterOpen] = useState(() => readPlazaBool(PLAZA_CATEGORY_FILTER_OPEN_KEY, false));
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(() =>
+    readPlazaBool(PLAZA_CATEGORY_FILTER_OPEN_KEY, false),
+  );
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
-  const [autoRefreshOnNewPlays, setAutoRefreshOnNewPlaysState] = useState(() => getPlazaAutoRefresh());
-  const [blockDislikedOnExport, setBlockDislikedOnExport] = useState(() => readPlazaBool(PLAZA_BLOCK_DISLIKED_ON_EXPORT_KEY, false));
+  const [autoRefreshOnNewPlays, setAutoRefreshOnNewPlaysState] = useState(() =>
+    getPlazaAutoRefresh(),
+  );
+  const [blockDislikedOnExport, setBlockDislikedOnExport] = useState(() =>
+    readPlazaBool(PLAZA_BLOCK_DISLIKED_ON_EXPORT_KEY, false),
+  );
   const [pendingRefresh, setPendingRefresh] = useState<PendingRefreshState | null>(null);
   const plazaPanel = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -658,56 +744,59 @@ export function PlayListPage() {
     }
   }, [pageSize]);
 
-  const loadPublicPlays = useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
-    if (showLoading && playsRef.current.length === 0) {
-      setLoading(true);
-    }
+  const loadPublicPlays = useCallback(
+    async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
+      if (showLoading && playsRef.current.length === 0) {
+        setLoading(true);
+      }
 
-    try {
-      const items = await playApi.getPublicPlays();
-      const previousPlays = playsRef.current;
-      const snapshot = getPlazaNavigationSnapshot();
-      const orderedItems = orderPlaysByNewest(items);
-      const latestPlay = orderedItems[0];
-      const addedCount = snapshot ? countNewPublicPlays(previousPlays, items, snapshot) : 0;
+      try {
+        const items = await playApi.getPublicPlays();
+        const previousPlays = playsRef.current;
+        const snapshot = getPlazaNavigationSnapshot();
+        const orderedItems = orderPlaysByNewest(items);
+        const latestPlay = orderedItems[0];
+        const addedCount = snapshot ? countNewPublicPlays(previousPlays, items, snapshot) : 0;
 
-      if (addedCount > 0) {
-        if (autoRefreshRef.current) {
-          setPlays(items);
-          setPendingRefresh(null);
-          setCurrentPage(1);
-          setPageInput('1');
-          restoreRequestRef.current = 'top';
-          explicitRefreshTriggeredRef.current = true;
+        if (addedCount > 0) {
+          if (autoRefreshRef.current) {
+            setPlays(items);
+            setPendingRefresh(null);
+            setCurrentPage(1);
+            setPageInput('1');
+            restoreRequestRef.current = 'top';
+            explicitRefreshTriggeredRef.current = true;
+            updatePlazaNavigationSnapshot({
+              latestHeadId: latestPlay?.id ?? '',
+              latestHeadUpdatedAt: latestPlay?.updatedAt ?? '',
+              restorePending: true,
+            });
+            setMessage(`已刷新，新增 ${addedCount} 篇小剧场。`);
+          } else {
+            setPendingRefresh({ nextPlays: items, addedCount });
+            setMessage('');
+          }
+          setError('');
+          return;
+        }
+
+        setPlays(items);
+        setPendingRefresh(null);
+        if (snapshot) {
           updatePlazaNavigationSnapshot({
             latestHeadId: latestPlay?.id ?? '',
             latestHeadUpdatedAt: latestPlay?.updatedAt ?? '',
-            restorePending: true,
           });
-          setMessage(`已刷新，新增 ${addedCount} 篇小剧场。`);
-        } else {
-          setPendingRefresh({ nextPlays: items, addedCount });
-          setMessage('');
         }
         setError('');
-        return;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : '加载失败');
+      } finally {
+        setLoading(false);
       }
-
-      setPlays(items);
-      setPendingRefresh(null);
-      if (snapshot) {
-        updatePlazaNavigationSnapshot({
-          latestHeadId: latestPlay?.id ?? '',
-          latestHeadUpdatedAt: latestPlay?.updatedAt ?? '',
-        });
-      }
-      setError('');
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadPublicPlays({ showLoading: true });
@@ -887,7 +976,12 @@ export function PlayListPage() {
   const viewCounts = useMemo(
     () => ({
       everything: plays.length,
-      all: getVisiblePlays(plays, 'all', preferenceStore, preferenceStore.settings.blockDislikedGlobally).length,
+      all: getVisiblePlays(
+        plays,
+        'all',
+        preferenceStore,
+        preferenceStore.settings.blockDislikedGlobally,
+      ).length,
       favorites: favoritePlays.length,
       disliked: dislikedPlays.length,
     }),
@@ -895,7 +989,13 @@ export function PlayListPage() {
   );
 
   const viewScopedPlays = useMemo(
-    () => getVisiblePlays(plays, activeView, preferenceStore, preferenceStore.settings.blockDislikedGlobally),
+    () =>
+      getVisiblePlays(
+        plays,
+        activeView,
+        preferenceStore,
+        preferenceStore.settings.blockDislikedGlobally,
+      ),
     [activeView, plays, preferenceStore],
   );
 
@@ -910,7 +1010,9 @@ export function PlayListPage() {
   const authorScopedPlays = useMemo(
     () =>
       activeCategory
-        ? viewScopedPlays.filter((play) => (play.category?.trim() || DEFAULT_CATEGORY) === activeCategory)
+        ? viewScopedPlays.filter(
+            (play) => (play.category?.trim() || DEFAULT_CATEGORY) === activeCategory,
+          )
         : viewScopedPlays,
     [activeCategory, viewScopedPlays],
   );
@@ -924,7 +1026,9 @@ export function PlayListPage() {
 
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'));
+      .sort(
+        (left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'),
+      );
   }, [categoryScopedPlays]);
 
   const orderedCategoryStats = useMemo(() => {
@@ -943,7 +1047,9 @@ export function PlayListPage() {
 
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count }))
-      .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'));
+      .sort(
+        (left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'),
+      );
   }, [authorScopedPlays]);
 
   useEffect(() => {
@@ -1024,22 +1130,48 @@ export function PlayListPage() {
       const result = left[field].localeCompare(right[field]);
       return sortMode.endsWith('_asc') ? result : -result;
     });
-  }, [activeAuthor, activeCategory, normalizedKeyword, playSearchFields, sortMode, viewScopedPlays, repoSortMode, activeRepoFilter, repoCountMap]);
+  }, [
+    activeAuthor,
+    activeCategory,
+    normalizedKeyword,
+    playSearchFields,
+    sortMode,
+    viewScopedPlays,
+    repoSortMode,
+    activeRepoFilter,
+    repoCountMap,
+  ]);
 
-  const allPlaysByAuthor = useMemo(() => groupPlaysByExportValue(plays, getPlayAuthorName), [plays]);
+  const allPlaysByAuthor = useMemo(
+    () => groupPlaysByExportValue(plays, getPlayAuthorName),
+    [plays],
+  );
 
-  const allPlaysByCategory = useMemo(() => groupPlaysByExportValue(plays, getPlayCategoryName), [plays]);
+  const allPlaysByCategory = useMemo(
+    () => groupPlaysByExportValue(plays, getPlayCategoryName),
+    [plays],
+  );
 
-  const exportAuthorOptions = useMemo(() => buildExportOptions(allPlaysByAuthor), [allPlaysByAuthor]);
+  const exportAuthorOptions = useMemo(
+    () => buildExportOptions(allPlaysByAuthor),
+    [allPlaysByAuthor],
+  );
 
-  const exportCategoryOptions = useMemo(() => buildExportOptions(allPlaysByCategory), [allPlaysByCategory]);
+  const exportCategoryOptions = useMemo(
+    () => buildExportOptions(allPlaysByCategory),
+    [allPlaysByCategory],
+  );
 
   useEffect(() => {
-    setSelectedExportAuthors((current) => current.filter((value) => exportAuthorOptions.some((item) => item.value === value)));
+    setSelectedExportAuthors((current) =>
+      current.filter((value) => exportAuthorOptions.some((item) => item.value === value)),
+    );
   }, [exportAuthorOptions]);
 
   useEffect(() => {
-    setSelectedExportCategories((current) => current.filter((value) => exportCategoryOptions.some((item) => item.value === value)));
+    setSelectedExportCategories((current) =>
+      current.filter((value) => exportCategoryOptions.some((item) => item.value === value)),
+    );
   }, [exportCategoryOptions]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPlays.length / pageSize));
@@ -1062,8 +1194,7 @@ export function PlayListPage() {
   const hasVisibleControls =
     !toolbarCollapsed || categoryFilterOpen || authorFilterOpen || activeView === 'favorites';
   // 工具栏收起时，分类/作者筛选区可能仍有可见内容，单独判定；皆无则不渲染空筛选头。
-  const hasFilterHeaderContent =
-    !toolbarCollapsed || categoryFilterOpen || authorFilterOpen;
+  const hasFilterHeaderContent = !toolbarCollapsed || categoryFilterOpen || authorFilterOpen;
 
   useEffect(() => {
     if (loading) {
@@ -1094,7 +1225,9 @@ export function PlayListPage() {
       return;
     }
 
-    const anchorIndex = snapshot.anchorPlayId ? filteredPlays.findIndex((play) => play.id === snapshot.anchorPlayId) : -1;
+    const anchorIndex = snapshot.anchorPlayId
+      ? filteredPlays.findIndex((play) => play.id === snapshot.anchorPlayId)
+      : -1;
     if (anchorIndex >= 0) {
       const anchorPage = Math.floor(anchorIndex / pageSize) + 1;
       if (currentPage !== anchorPage) {
@@ -1188,7 +1321,8 @@ export function PlayListPage() {
     { value: 'repeatable', label: '完全随机' },
     { value: 'unique', label: '不重复随机' },
   ];
-  const allSelectedOnPage = pagedPlays.length > 0 && pagedPlays.every((play) => selectedIds.includes(play.id));
+  const allSelectedOnPage =
+    pagedPlays.length > 0 && pagedPlays.every((play) => selectedIds.includes(play.id));
 
   const persistStore = (store: PlayPreferenceStore) => {
     setPreferenceStore(store);
@@ -1268,7 +1402,9 @@ export function PlayListPage() {
     emptyMessage: string,
     successLabel: string,
   ) => {
-    const normalizedValues = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+    const normalizedValues = Array.from(
+      new Set(values.map((value) => value.trim()).filter(Boolean)),
+    );
     if (normalizedValues.length === 0) {
       setError(emptyMessage);
       return;
@@ -1297,7 +1433,10 @@ export function PlayListPage() {
 
     if (matchedGroups.length === 1) {
       const [group] = matchedGroups;
-      downloadTextFile(buildScopedExportFileName(type, group.value, group.items.length), serializePlaysToBatchText(group.items));
+      downloadTextFile(
+        buildScopedExportFileName(type, group.value, group.items.length),
+        serializePlaysToBatchText(group.items),
+      );
     } else {
       const archive = createZipFromTextFiles(
         matchedGroups.map((group) => ({
@@ -1335,18 +1474,28 @@ export function PlayListPage() {
   };
 
   const exportCategories = (categoryNames: string[]) => {
-    exportGroupedPlays('category', categoryNames, allPlaysByCategory, '请先选择至少一个分类', '分类');
+    exportGroupedPlays(
+      'category',
+      categoryNames,
+      allPlaysByCategory,
+      '请先选择至少一个分类',
+      '分类',
+    );
   };
 
   const handleToggleAllAuthors = () => {
     setSelectedExportAuthors((current) =>
-      current.length === exportAuthorOptions.length ? [] : exportAuthorOptions.map((item) => item.value),
+      current.length === exportAuthorOptions.length
+        ? []
+        : exportAuthorOptions.map((item) => item.value),
     );
   };
 
   const handleToggleAllCategories = () => {
     setSelectedExportCategories((current) =>
-      current.length === exportCategoryOptions.length ? [] : exportCategoryOptions.map((item) => item.value),
+      current.length === exportCategoryOptions.length
+        ? []
+        : exportCategoryOptions.map((item) => item.value),
     );
   };
 
@@ -1440,7 +1589,9 @@ export function PlayListPage() {
     if (randomMode !== 'unique') {
       return;
     }
-    const confirmed = window.confirm('确认清空当前视图的不重复抽取记录吗？清空后可以重新开始抽取。');
+    const confirmed = window.confirm(
+      '确认清空当前视图的不重复抽取记录吗？清空后可以重新开始抽取。',
+    );
     if (!confirmed) {
       return;
     }
@@ -1526,7 +1677,7 @@ export function PlayListPage() {
     setPlays(pendingRefresh.nextPlays);
     setPendingRefresh(null);
     restoreRequestRef.current = restoreMode;
-    explicitRefreshTriggeredRef.current = true;  // 标记为用户显式触发，允许 effect 执行 scroll 恢复
+    explicitRefreshTriggeredRef.current = true; // 标记为用户显式触发，允许 effect 执行 scroll 恢复
     setError('');
     setMessage(`已加载 ${pendingRefresh.addedCount} 篇新增小剧场。`);
 
@@ -1593,7 +1744,12 @@ export function PlayListPage() {
           title={favorite ? '取消收藏' : '收藏'}
           type="button"
         >
-          <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="marker-star-icon">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className="marker-star-icon"
+          >
             <path d="M12 2l2.95 7.36L22 10l-5.92 4.43L18.18 22 12 17.77 5.82 22l2.1-7.57L2 10l7.05-.64L12 2z" />
           </svg>
         </button>
@@ -1604,7 +1760,9 @@ export function PlayListPage() {
           title={disliked ? '取消不喜欢' : '不喜欢'}
           type="button"
         >
-          <span aria-hidden="true" className="marker-broken-heart-icon">💔</span>
+          <span aria-hidden="true" className="marker-broken-heart-icon">
+            💔
+          </span>
         </button>
       </div>
     );
@@ -1636,717 +1794,953 @@ export function PlayListPage() {
         {sidePanelVisible ? (
           <aside className="plaza-sidebar">
             {plazaPanel === 'derived' ? (
-              <PlazaDerivedPanel plays={filteredPlays} onOpenPlay={(play) => openPlayDetail(play, 'derived')} />
+              <PlazaDerivedPanel
+                plays={filteredPlays}
+                onOpenPlay={(play) => openPlayDetail(play, 'derived')}
+              />
             ) : (
-              <PlazaCalendarPanel plays={filteredPlays} onOpenPlay={(play) => openPlayDetail(play, 'calendar')} />
+              <PlazaCalendarPanel
+                plays={filteredPlays}
+                onOpenPlay={(play) => openPlayDetail(play, 'calendar')}
+              />
             )}
           </aside>
         ) : null}
 
         <div className="stack-gap-lg plaza-main-stack">
-      {!toolbarCollapsed ? (
-      <div className="hero-panel hero-grid hero-panel-compact">
-        <div className="stack-gap-sm plaza-toolbar-stack">
-          <div className="plaza-toolbar-row plaza-toolbar-row-desktop" role="group" aria-label="广场桌面端操作">
-            <button
-              aria-label={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
-              className={controlsCollapsed ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setControlsCollapsed((current) => !current)}
-              title={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
-              type="button"
-            >
-              {controlsCollapsed ? '展开' : '折叠'}
-            </button>
-            <button
-              className={randomPanelOpen ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setRandomPanelOpen((current) => !current)}
-              type="button"
-            >
-              随机
-            </button>
-            <button
-              className={categoryFilterOpen || activeCategory ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setCategoryFilterOpen((current) => !current)}
-              type="button"
-            >
-              分类
-            </button>
-            <button
-              className={authorFilterOpen || activeAuthor ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setAuthorFilterOpen((current) => !current)}
-              type="button"
-            >
-              作者
-            </button>
-            <button
-              className={autoRefreshOnNewPlays ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={handleToggleAutoRefresh}
-              type="button"
-            >
-              {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={openVisitorChangelog} type="button">
-              更新日志
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={handleExportAll} type="button">
-              导出全部
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={handleExportSelected} type="button">
-              {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={() => handleOpenExportModal('author')} type="button">
-              导出作者
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={() => handleOpenExportModal('category')} type="button">
-              导出分类
-            </button>
-            <button
-              className="button secondary plaza-toolbar-button"
-              disabled={favoritePlays.length === 0}
-              onClick={handleExportFavorites}
-              type="button"
-            >
-              导出收藏
-            </button>
-            <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
-              <input
-                checked={blockDislikedOnExport}
-                onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
-                type="checkbox"
-              />
-              <span>屏蔽不喜欢</span>
-            </label>
-          </div>
-
-          <div className="plaza-toolbar-row plaza-toolbar-row-mobile-main" role="group" aria-label="广场手机端主操作">
-            <button
-              aria-label={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
-              className={controlsCollapsed ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setControlsCollapsed((current) => !current)}
-              title={controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'}
-              type="button"
-            >
-              {controlsCollapsed ? '展开' : '折叠'}
-            </button>
-            <button
-              className={randomPanelOpen ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setRandomPanelOpen((current) => !current)}
-              type="button"
-            >
-              随机
-            </button>
-            <button
-              className={categoryFilterOpen || activeCategory ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setCategoryFilterOpen((current) => !current)}
-              type="button"
-            >
-              分类
-            </button>
-            <button
-              className={authorFilterOpen || activeAuthor ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={() => setAuthorFilterOpen((current) => !current)}
-              type="button"
-            >
-              作者
-            </button>
-            <button
-              className={autoRefreshOnNewPlays ? 'button primary plaza-toolbar-button' : 'button secondary plaza-toolbar-button'}
-              onClick={handleToggleAutoRefresh}
-              type="button"
-            >
-              {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={openVisitorChangelog} type="button">
-              更新日志
-            </button>
-          </div>
-
-          <div className="plaza-toolbar-row plaza-toolbar-row-mobile-export" role="group" aria-label="广场手机端导出操作">
-            <button className="button secondary plaza-toolbar-button" onClick={handleExportAll} type="button">
-              导出全部
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={handleExportSelected} type="button">
-              {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={() => handleOpenExportModal('author')} type="button">
-              导出作者
-            </button>
-            <button className="button secondary plaza-toolbar-button" onClick={() => handleOpenExportModal('category')} type="button">
-              导出分类
-            </button>
-            <button
-              className="button secondary plaza-toolbar-button"
-              disabled={favoritePlays.length === 0}
-              onClick={handleExportFavorites}
-              type="button"
-            >
-              导出收藏
-            </button>
-            <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
-              <input
-                checked={blockDislikedOnExport}
-                onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
-                type="checkbox"
-              />
-              <span>屏蔽不喜欢</span>
-            </label>
-          </div>
-
-          {selectionMode === 'export' ? (
-            <div className="inline-actions plaza-export-cancel-row">
-              <button className="button ghost" onClick={() => setSelectionMode('idle')} type="button">
-                取消
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      ) : null}
-
-      {pendingRefresh ? (
-        <div className="plaza-refresh-modal-backdrop" role="presentation">
-          <div aria-modal="true" className="detail-panel plaza-refresh-modal" role="dialog" aria-labelledby="plaza-refresh-title">
-            <div className="stack-gap-sm">
-              <h3 id="plaza-refresh-title">发现新增内容</h3>
-              <p className="sub-copy">新增了 {pendingRefresh.addedCount} 条小剧场。你要跳到开头，还是继续之前的浏览位置？</p>
-            </div>
-            <div className="inline-actions wrap-mobile plaza-refresh-modal-actions">
-              <button className="button primary" onClick={() => applyPendingRefresh('top')} type="button">
-                跳转到开头
-              </button>
-              <button className="button secondary" onClick={() => applyPendingRefresh('anchor')} type="button">
-                继续之前浏览位置
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {exportModalType === 'author' ? (
-        <ExportPickerModal
-          items={exportAuthorOptions}
-          onClose={closeExportModal}
-          onExportAll={() => exportAuthors(exportAuthorOptions.map((item) => item.value))}
-          onExportSelected={() => exportAuthors(selectedExportAuthors)}
-          onToggleAll={handleToggleAllAuthors}
-          onToggleItem={(value) => setSelectedExportAuthors((current) => toggleExportValue(current, value))}
-          selectedValues={selectedExportAuthors}
-          title="导出作者"
-        />
-      ) : null}
-
-      {exportModalType === 'category' ? (
-        <ExportPickerModal
-          items={exportCategoryOptions}
-          onClose={closeExportModal}
-          onExportAll={() => exportCategories(exportCategoryOptions.map((item) => item.value))}
-          onExportSelected={() => exportCategories(selectedExportCategories)}
-          onToggleAll={handleToggleAllCategories}
-          onToggleItem={(value) => setSelectedExportCategories((current) => toggleExportValue(current, value))}
-          selectedValues={selectedExportCategories}
-          title="导出分类"
-        />
-      ) : null}
-
-      {!controlsCollapsed && hasVisibleControls ? (
-        <div className="form-panel compact-panel stack-gap-md plaza-controls-panel">
-        {hasFilterHeaderContent ? (
-        <div className="stack-gap-sm plaza-filter-header">
           {!toolbarCollapsed ? (
-          <div className="plaza-view-primary">
-            {(['everything', 'all', 'favorites', 'disliked'] as const).map((view) => (
-              <button
-                key={view}
-                className={activeView === view ? 'tab-chip active' : 'tab-chip'}
-                onClick={() => {
-                  setActiveView(view);
-                  setActiveCategory('');
-                  setActiveAuthor('');
-                  setSelectionMode('idle');
-                  setRandomMessage('');
-                  setCurrentPage(1);
-                }}
-                type="button"
-              >
-                {viewLabels[view]} {viewCounts[view]}
-              </button>
-            ))}
-          </div>
-          ) : null}
-          {categoryFilterOpen ? (
-            <div className="plaza-category-strip">
-              <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
-                <button
-                  className={activeCategory === '' ? 'tab-chip active' : 'tab-chip'}
-                  onClick={() => {
-                    setActiveCategory('');
-                    setCurrentPage(1);
-                  }}
-                  type="button"
+            <div className="hero-panel hero-grid hero-panel-compact">
+              <div className="stack-gap-sm plaza-toolbar-stack">
+                <div
+                  className="plaza-toolbar-row plaza-toolbar-row-desktop"
+                  role="group"
+                  aria-label="广场桌面端操作"
                 >
-                  全部分类 {categoryScopedPlays.length}
-                </button>
-                {orderedCategoryStats.map((item) => (
                   <button
-                    key={item.name}
-                    className={activeCategory === item.name ? 'tab-chip active' : 'tab-chip'}
-                    onClick={() => {
-                      setActiveCategory(item.name);
-                      setCurrentPage(1);
-                    }}
+                    aria-label={
+                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                    }
+                    className={
+                      controlsCollapsed
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setControlsCollapsed((current) => !current)}
+                    title={
+                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                    }
                     type="button"
                   >
-                    {item.name} {item.count}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {categoryFilterOpen && authorFilterOpen ? <div className="plaza-filter-divider" aria-hidden="true" /> : null}
-          {authorFilterOpen ? (
-            <div className="plaza-category-strip">
-              <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
-                <button
-                  className={activeAuthor === '' ? 'tab-chip active' : 'tab-chip'}
-                  onClick={() => {
-                    setActiveAuthor('');
-                    setCurrentPage(1);
-                  }}
-                  type="button"
-                >
-                  全部作者 {authorScopedPlays.length}
-                </button>
-                {authorStats.map((item) => (
-                  <button
-                    key={item.name}
-                    className={activeAuthor === item.name ? 'tab-chip active' : 'tab-chip'}
-                    onClick={() => {
-                      setActiveAuthor(item.name);
-                      setCurrentPage(1);
-                    }}
-                    type="button"
-                  >
-                    {item.name} {item.count}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
-        ) : null}
-
-        {!toolbarCollapsed ? (
-        <div className="toolbar-grid plaza-filter-grid">
-          <div className="plaza-toolbar-row-selects">
-          <CustomSelect
-            label="时间排序"
-            onChange={(nextValue) => {
-              setSortMode(nextValue as SortMode);
-              setCurrentPage(1);
-            }}
-            options={sortModeOptions}
-            value={sortMode}
-          />
-          <CustomSelect
-            label="评论筛选"
-            onChange={(nextValue) => {
-              setActiveRepoFilter(nextValue as RepoFilterMode);
-              setCurrentPage(1);
-              try { window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue); } catch {}
-            }}
-            options={[{ value: 'all', label: '全部' }, { value: 'with', label: '有评论' }, { value: 'without', label: '无评论' }]}
-            value={activeRepoFilter}
-          />
-          <CustomSelect
-            label="评论排序"
-            onChange={(nextValue) => {
-              setRepoSortMode(nextValue as RepoSortMode);
-              try { window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue); } catch {}
-            }}
-            options={[
-              { value: 'none', label: '默认(时间)' },
-              { value: 'count_desc', label: '评论数 ↓' },
-              { value: 'count_asc', label: '评论数 ↑' },
-              { value: 'first_desc', label: '首评时间 ↓' },
-              { value: 'first_asc', label: '首评时间 ↑' },
-              { value: 'last_desc', label: '最新评论 ↓' },
-              { value: 'last_asc', label: '最新评论 ↑' },
-            ]}
-            value={repoSortMode}
-          />
-          <CustomSelect
-            label="一行几个"
-            onChange={(nextValue) => setColumns(Number(nextValue))}
-            options={columnOptions}
-            value={String(renderColumns)}
-          />
-       </div>
-          <div className="toolbar-toggle-field">
-            <span>列表操作</span>
-            <div className="inline-actions wrap-mobile toolbar-toggle-row">
-              <button className="button secondary" onClick={() => setShowPreview((current) => !current)} type="button">
-                {showPreview ? '收起正文' : '展开正文'}
-              </button>
-              <button className="button secondary" onClick={() => setShowPreferenceActions((current) => !current)} type="button">
-                {showPreferenceActions ? '收起标记' : '展开标记'}
-              </button>
-            </div>
-          </div>
-        </div>
-        ) : null}
-        {!toolbarCollapsed ? (
-        <div className="plaza-search-row">
-          <label>
-            <span>搜索</span>
-            <ClearableField visible={Boolean(keyword.trim())} onClear={() => { setKeyword(''); setCurrentPage(1); }}>
-              <input
-                value={keyword}
-                onChange={(event) => {
-                  setKeyword(event.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="默认搜标题、作者、分类或正文"
-              />
-            </ClearableField>
-          </label>
-          <div className="inline-actions wrap-mobile admin-search-field-row" role="group" aria-label="搜索范围">
-            {playSearchFieldOptions.map((item) => (
-              <button
-                aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
-                className={isSearchFieldActive(playSearchFields, item.value) ? 'tab-chip active' : 'tab-chip'}
-                key={item.value}
-                onClick={() => {
-                  setPlaySearchFields((current) => toggleSearchField(current, item.value));
-                  setCurrentPage(1);
-                }}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        ) : null}
-
-        {!toolbarCollapsed ? (
-        <div className="filter-summary wrap-mobile">
-          <span>
-            当前 {filteredPlays.length} 篇，第 {currentPage} / {totalPages} 页
-            {selectionMode !== 'idle' ? `，已选 ${selectedIds.length} 篇` : ''}
-          </span>
-          {selectionMode !== 'idle' ? (
-            <button
-              className="text-button"
-              onClick={() =>
-                setSelectedIds((current) => {
-                  if (allSelectedOnPage) {
-                    return current.filter((id) => !pagedPlays.some((play) => play.id === id));
-                  }
-
-                  const next = new Set(current);
-                  pagedPlays.forEach((play) => next.add(play.id));
-                  return [...next];
-                })
-              }
-              type="button"
-            >
-              {allSelectedOnPage ? '清空本页选择' : '全选本页'}
-            </button>
-          ) : null}
-        </div>
-        ) : null}
-
-        {!toolbarCollapsed ? (
-        <div className="inline-actions wrap-mobile plaza-bulk-action-row">
-          <button className="button secondary" onClick={() => applyBatchPreference('favorite')} type="button">
-            {selectionMode === 'favorite'
-              ? activeView === 'favorites'
-                ? `取消收藏已选（${selectedIds.length}）`
-                : `收藏已选（${selectedIds.length}）`
-              : activeView === 'favorites'
-                ? '多选取消收藏'
-                : '多选收藏'}
-          </button>
-          <button className="button secondary" onClick={() => applyBatchPreference('disliked')} type="button">
-            {selectionMode === 'disliked'
-              ? activeView === 'disliked'
-                ? `取消不喜欢已选（${selectedIds.length}）`
-                : `不喜欢已选（${selectedIds.length}）`
-              : activeView === 'disliked'
-                ? '多选取消不喜欢'
-                : '多选不喜欢'}
-          </button>
-          {(selectionMode === 'favorite' || selectionMode === 'disliked') ? (
-            <button className="button ghost" onClick={() => setSelectionMode('idle')} type="button">
-              取消多选
-            </button>
-          ) : null}
-          <label className="checkbox-chip checkbox-chip-wide">
-            <input
-              checked={preferenceStore.settings.blockDislikedGlobally}
-              onChange={(event) => handleToggleSetting('blockDislikedGlobally', event.target.checked)}
-              type="checkbox"
-            />
-            <span>屏蔽不喜欢内容</span>
-          </label>
-        </div>
-        ) : null}
-
-        {activeView === 'favorites' ? (
-          <div className="inline-actions wrap-mobile plaza-random-options-row">
-            <label className="checkbox-chip checkbox-chip-wide">
-              <input
-                checked={preferenceStore.settings.favoriteOnlyRandom}
-                onChange={(event) => handleToggleSetting('favoriteOnlyRandom', event.target.checked)}
-                type="checkbox"
-              />
-              <span>仅从收藏池随机</span>
-            </label>
-            <label className="checkbox-chip checkbox-chip-wide">
-              <input
-                checked={preferenceStore.settings.favoriteWeightedRandom}
-                onChange={(event) => handleToggleSetting('favoriteWeightedRandom', event.target.checked)}
-                type="checkbox"
-              />
-              <span>提高收藏出现比重</span>
-            </label>
-          </div>
-        ) : null}
-      </div>
-      ) : null}
-
-      {!toolbarCollapsed && randomPanelOpen ? (
-        <section className="form-panel stack-gap-md plaza-random-panel">
-          <div className="content-head">
-            <div>
-              <h3>随机抽小剧场</h3>
-            </div>
-            <span className="content-meta">
-              当前范围：{viewLabels[activeView]}
-              {activeCategory ? ` / ${activeCategory}` : ''}
-              {activeAuthor ? ` / ${activeAuthor}` : ''}
-            </span>
-          </div>
-
-          <div className="inline-actions wrap-mobile plaza-random-actions">
-            <CustomSelect
-              label="抽选模式"
-              onChange={(nextValue) => setRandomMode(nextValue as RandomMode)}
-              options={randomModeOptions}
-              value={randomMode}
-            />
-            <div className="inline-actions wrap-mobile plaza-random-trailing">
-              {randomMode === 'unique' ? (
-                <button className="button ghost plaza-random-clear-button" onClick={handleClearRandomSeen} type="button">
-                  清空记录
-                </button>
-              ) : null}
-              <button className="button primary plaza-random-pick-button" onClick={handlePickRandom} type="button">
-                抽一篇
-              </button>
-            </div>
-          </div>
-
-          <div className="inline-actions wrap-mobile plaza-confetti-toggles">
-            <label className="checkbox-chip checkbox-chip-wide">
-              <input
-                checked={confettiPrefs.enabled}
-                onChange={(event) => setConfettiPrefsState(setConfettiEnabled(event.target.checked))}
-                type="checkbox"
-              />
-              <span>礼花特效</span>
-            </label>
-            <label className="checkbox-chip checkbox-chip-wide">
-              <input
-                checked={confettiPrefs.sound}
-                onChange={(event) => setConfettiPrefsState(setConfettiSound(event.target.checked))}
-                type="checkbox"
-              />
-              <span>礼花音效</span>
-            </label>
-          </div>
-
-          {randomMessage ? <div className="feedback success">{randomMessage}</div> : null}
-
-          {randomPickedPlay ? (
-            <article
-              className="play-card random-picked-card play-card-shell play-card-clickable"
-              onClick={() => openPlayDetail(randomPickedPlay)}
-              onKeyDown={(event) => handleCardKeyDown(event, randomPickedPlay)}
-              ref={randomPickedCardRef}
-              role="link"
-              tabIndex={0}
-            >
-              <div className="card-topline wrap-mobile align-start">
-                {renderCompactMeta(randomPickedPlay)}
-              </div>
-              <h3>{randomPickedPlay.title}</h3>
-              {randomPickedPlay.summary ? <p className="summary">{randomPickedPlay.summary}</p> : null}
-              <div className="content-head wrap-mobile" onClick={stopCardAction}>
-                <span className="content-meta">正文约 {randomPickedPlay.content.length} 字</span>
-                {renderPreferenceActions(randomPickedPlay)}
-                <button
-                  aria-label="复制正文"
-                  className="icon-button"
-                  onClick={(event) => void handleCopyRandomContent(event)}
-                  title="复制正文"
-                  type="button"
-                >
-                  ⧉
-                </button>
-              </div>
-              <p className="preview-copy">{randomPickedPlay.content}</p>
-              {randomCopyMessage ? <div className="feedback success">{randomCopyMessage}</div> : null}
-            </article>
-          ) : null}
-        </section>
-      ) : null}
-
-      {pendingRefresh ? (
-        <div className="plaza-refresh-modal-backdrop" role="presentation">
-          <section
-            aria-labelledby="plaza-refresh-modal-title"
-            aria-modal="true"
-            className="form-panel plaza-refresh-modal"
-            role="dialog"
-          >
-            <div className="stack-gap-sm">
-              <h3 id="plaza-refresh-modal-title">新增了 {pendingRefresh.addedCount} 条小剧场</h3>
-              <p className="sub-copy">你可以跳到最新内容，也可以保持现在的浏览位置继续看。</p>
-            </div>
-            <div className="inline-actions wrap-mobile plaza-refresh-modal-actions">
-              <button className="button secondary" onClick={() => applyPendingRefresh('scroll')} type="button">
-                继续之前浏览位置
-              </button>
-              <button className="button primary" onClick={() => applyPendingRefresh('top')} type="button">
-                跳转到开头
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {message ? <div className="feedback success">{message}</div> : null}
-      {loading ? <div className="empty-panel">正在加载公开内容…</div> : null}
-      {error ? <div className="empty-panel error">{error}</div> : null}
-
-      {!loading && !error && !(!toolbarCollapsed && randomPanelOpen && randomPickedPlay) ? (
-        filteredPlays.length > 0 ? (
-          <>
-            <div
-              className="card-grid custom-grid"
-              style={{ ['--card-columns' as string]: renderColumns } as CSSProperties}
-            >
-              {pagedPlays.map((play) => {
-                const checked = selectedIds.includes(play.id);
-
-                return (
-                  <article
-                    key={play.id}
-                    className={`play-card play-card-shell play-card-clickable ${checked ? 'selected' : ''}`}
-                    data-play-id={play.id}
-                    onClick={() => openPlayDetail(play)}
-                    onKeyDown={(event) => handleCardKeyDown(event, play)}
-                    role="link"
-                    tabIndex={0}
-                  >
-                    <div className="card-topline wrap-mobile align-start">
-                      <div className="inline-actions wrap-mobile align-start">
-                        {selectionMode !== 'idle' ? (
-                          <label className="checkbox-chip" onClick={stopCardAction}>
-                            <input checked={checked} onChange={() => toggleSelect(play.id)} type="checkbox" />
-                            <span>{selectionMode === 'export' ? '导出' : '选择'}</span>
-                          </label>
-                        ) : null}
-                        {renderCompactMeta(play)}
-                      </div>
-                    </div>
-                    <h3>{play.title}</h3>
-                    {play.summary ? <p className="summary plaza-card-summary">{play.summary}</p> : null}
-                    {showPreview ? <p className="preview-copy plaza-card-preview">{play.content}</p> : null}
-                    {showPreferenceActions ? renderPreferenceActions(play) : null}
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="form-panel compact-panel stack-gap-md plaza-pagination-panel">
-              <div className="plaza-pagination-toolbar">
-                <div className="inline-actions plaza-pagination-nav">
-                  <button className="button secondary icon-page-button" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="第一页" type="button">
-                    ≪
+                    {controlsCollapsed ? '展开' : '折叠'}
                   </button>
                   <button
-                    className="button secondary icon-page-button"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                    title="上一页"
+                    className={
+                      randomPanelOpen
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setRandomPanelOpen((current) => !current)}
                     type="button"
                   >
-                    ‹
-                  </button>
-                </div>
-                <span className="content-meta plaza-page-indicator">第 {currentPage} / {totalPages} 页</span>
-                <div className="inline-actions plaza-pagination-nav plaza-pagination-nav-end">
-                  <button
-                    className="button secondary icon-page-button"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                    title="下一页"
-                    type="button"
-                  >
-                    ›
+                    随机
                   </button>
                   <button
-                    className="button secondary icon-page-button"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                    title="最后一页"
+                    className={
+                      categoryFilterOpen || activeCategory
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setCategoryFilterOpen((current) => !current)}
                     type="button"
                   >
-                    ≫
+                    分类
                   </button>
-                </div>
-                <div className="inline-actions plaza-page-control-inline">
-                  <label className="plaza-page-size-field" htmlFor="plaza-page-size-input">
-                    <span className="content-meta plaza-page-size-copy">每页</span>
+                  <button
+                    className={
+                      authorFilterOpen || activeAuthor
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setAuthorFilterOpen((current) => !current)}
+                    type="button"
+                  >
+                    作者
+                  </button>
+                  <button
+                    className={
+                      autoRefreshOnNewPlays
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={handleToggleAutoRefresh}
+                    type="button"
+                  >
+                    {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={openVisitorChangelog}
+                    type="button"
+                  >
+                    更新日志
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={handleExportAll}
+                    type="button"
+                  >
+                    导出全部
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={handleExportSelected}
+                    type="button"
+                  >
+                    {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={() => handleOpenExportModal('author')}
+                    type="button"
+                  >
+                    导出作者
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={() => handleOpenExportModal('category')}
+                    type="button"
+                  >
+                    导出分类
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    disabled={favoritePlays.length === 0}
+                    onClick={handleExportFavorites}
+                    type="button"
+                  >
+                    导出收藏
+                  </button>
+                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
                     <input
-                      id="plaza-page-size-input"
-                      inputMode="numeric"
-                      min={MIN_PAGE_SIZE}
-                      max={MAX_PAGE_SIZE}
-                      onBlur={handlePageSizeInputBlur}
-                      onChange={(event) => handlePageSizeInputChange(event.target.value)}
-                      value={pageSizeInput}
+                      checked={blockDislikedOnExport}
+                      onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
+                      type="checkbox"
                     />
-                    <span className="content-meta plaza-page-size-copy">个</span>
+                    <span>屏蔽不喜欢</span>
                   </label>
-                  <div className="inline-actions plaza-page-jump-inline">
-                    <span className="content-meta plaza-page-jump-copy">第</span>
-                    <label className="page-jump-field page-jump-field-compact">
-                      <input
-                        inputMode="numeric"
-                        min={1}
-                        max={totalPages}
-                        onChange={(event) => setPageInput(event.target.value)}
-                        value={pageInput}
-                      />
-                    </label>
-                    <span className="content-meta plaza-page-jump-copy">页</span>
-                    <button className="button primary plaza-page-jump-button" onClick={jumpToPage} type="button">
-                      跳转
+                </div>
+
+                <div
+                  className="plaza-toolbar-row plaza-toolbar-row-mobile-main"
+                  role="group"
+                  aria-label="广场手机端主操作"
+                >
+                  <button
+                    aria-label={
+                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                    }
+                    className={
+                      controlsCollapsed
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setControlsCollapsed((current) => !current)}
+                    title={
+                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                    }
+                    type="button"
+                  >
+                    {controlsCollapsed ? '展开' : '折叠'}
+                  </button>
+                  <button
+                    className={
+                      randomPanelOpen
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setRandomPanelOpen((current) => !current)}
+                    type="button"
+                  >
+                    随机
+                  </button>
+                  <button
+                    className={
+                      categoryFilterOpen || activeCategory
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setCategoryFilterOpen((current) => !current)}
+                    type="button"
+                  >
+                    分类
+                  </button>
+                  <button
+                    className={
+                      authorFilterOpen || activeAuthor
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={() => setAuthorFilterOpen((current) => !current)}
+                    type="button"
+                  >
+                    作者
+                  </button>
+                  <button
+                    className={
+                      autoRefreshOnNewPlays
+                        ? 'button primary plaza-toolbar-button'
+                        : 'button secondary plaza-toolbar-button'
+                    }
+                    onClick={handleToggleAutoRefresh}
+                    type="button"
+                  >
+                    {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={openVisitorChangelog}
+                    type="button"
+                  >
+                    更新日志
+                  </button>
+                </div>
+
+                <div
+                  className="plaza-toolbar-row plaza-toolbar-row-mobile-export"
+                  role="group"
+                  aria-label="广场手机端导出操作"
+                >
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={handleExportAll}
+                    type="button"
+                  >
+                    导出全部
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={handleExportSelected}
+                    type="button"
+                  >
+                    {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={() => handleOpenExportModal('author')}
+                    type="button"
+                  >
+                    导出作者
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={() => handleOpenExportModal('category')}
+                    type="button"
+                  >
+                    导出分类
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    disabled={favoritePlays.length === 0}
+                    onClick={handleExportFavorites}
+                    type="button"
+                  >
+                    导出收藏
+                  </button>
+                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
+                    <input
+                      checked={blockDislikedOnExport}
+                      onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>屏蔽不喜欢</span>
+                  </label>
+                </div>
+
+                {selectionMode === 'export' ? (
+                  <div className="inline-actions plaza-export-cancel-row">
+                    <button
+                      className="button ghost"
+                      onClick={() => setSelectionMode('idle')}
+                      type="button"
+                    >
+                      取消
                     </button>
                   </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {pendingRefresh ? (
+            <div className="plaza-refresh-modal-backdrop" role="presentation">
+              <div
+                aria-modal="true"
+                className="detail-panel plaza-refresh-modal"
+                role="dialog"
+                aria-labelledby="plaza-refresh-title"
+              >
+                <div className="stack-gap-sm">
+                  <h3 id="plaza-refresh-title">发现新增内容</h3>
+                  <p className="sub-copy">
+                    新增了 {pendingRefresh.addedCount}{' '}
+                    条小剧场。你要跳到开头，还是继续之前的浏览位置？
+                  </p>
+                </div>
+                <div className="inline-actions wrap-mobile plaza-refresh-modal-actions">
+                  <button
+                    className="button primary"
+                    onClick={() => applyPendingRefresh('top')}
+                    type="button"
+                  >
+                    跳转到开头
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => applyPendingRefresh('anchor')}
+                    type="button"
+                  >
+                    继续之前浏览位置
+                  </button>
                 </div>
               </div>
             </div>
-          </>
-        ) : plays.length > 0 ? (
-          <div className="empty-panel">当前条件下没有结果，换个关键词试试。</div>
-        ) : (
-          <div className="empty-panel">当前还没有公开的小剧场。</div>
-        )
-      ) : null}
+          ) : null}
+
+          {exportModalType === 'author' ? (
+            <ExportPickerModal
+              items={exportAuthorOptions}
+              onClose={closeExportModal}
+              onExportAll={() => exportAuthors(exportAuthorOptions.map((item) => item.value))}
+              onExportSelected={() => exportAuthors(selectedExportAuthors)}
+              onToggleAll={handleToggleAllAuthors}
+              onToggleItem={(value) =>
+                setSelectedExportAuthors((current) => toggleExportValue(current, value))
+              }
+              selectedValues={selectedExportAuthors}
+              title="导出作者"
+            />
+          ) : null}
+
+          {exportModalType === 'category' ? (
+            <ExportPickerModal
+              items={exportCategoryOptions}
+              onClose={closeExportModal}
+              onExportAll={() => exportCategories(exportCategoryOptions.map((item) => item.value))}
+              onExportSelected={() => exportCategories(selectedExportCategories)}
+              onToggleAll={handleToggleAllCategories}
+              onToggleItem={(value) =>
+                setSelectedExportCategories((current) => toggleExportValue(current, value))
+              }
+              selectedValues={selectedExportCategories}
+              title="导出分类"
+            />
+          ) : null}
+
+          {!controlsCollapsed && hasVisibleControls ? (
+            <div className="form-panel compact-panel stack-gap-md plaza-controls-panel">
+              {hasFilterHeaderContent ? (
+                <div className="stack-gap-sm plaza-filter-header">
+                  {!toolbarCollapsed ? (
+                    <div className="plaza-view-primary">
+                      {(['everything', 'all', 'favorites', 'disliked'] as const).map((view) => (
+                        <button
+                          key={view}
+                          className={activeView === view ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => {
+                            setActiveView(view);
+                            setActiveCategory('');
+                            setActiveAuthor('');
+                            setSelectionMode('idle');
+                            setRandomMessage('');
+                            setCurrentPage(1);
+                          }}
+                          type="button"
+                        >
+                          {viewLabels[view]} {viewCounts[view]}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {categoryFilterOpen ? (
+                    <div className="plaza-category-strip">
+                      <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
+                        <button
+                          className={activeCategory === '' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => {
+                            setActiveCategory('');
+                            setCurrentPage(1);
+                          }}
+                          type="button"
+                        >
+                          全部分类 {categoryScopedPlays.length}
+                        </button>
+                        {orderedCategoryStats.map((item) => (
+                          <button
+                            key={item.name}
+                            className={
+                              activeCategory === item.name ? 'tab-chip active' : 'tab-chip'
+                            }
+                            onClick={() => {
+                              setActiveCategory(item.name);
+                              setCurrentPage(1);
+                            }}
+                            type="button"
+                          >
+                            {item.name} {item.count}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {categoryFilterOpen && authorFilterOpen ? (
+                    <div className="plaza-filter-divider" aria-hidden="true" />
+                  ) : null}
+                  {authorFilterOpen ? (
+                    <div className="plaza-category-strip">
+                      <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
+                        <button
+                          className={activeAuthor === '' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => {
+                            setActiveAuthor('');
+                            setCurrentPage(1);
+                          }}
+                          type="button"
+                        >
+                          全部作者 {authorScopedPlays.length}
+                        </button>
+                        {authorStats.map((item) => (
+                          <button
+                            key={item.name}
+                            className={activeAuthor === item.name ? 'tab-chip active' : 'tab-chip'}
+                            onClick={() => {
+                              setActiveAuthor(item.name);
+                              setCurrentPage(1);
+                            }}
+                            type="button"
+                          >
+                            {item.name} {item.count}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!toolbarCollapsed ? (
+                <div className="toolbar-grid plaza-filter-grid">
+                  <div className="plaza-toolbar-row-selects">
+                    <CustomSelect
+                      label="时间排序"
+                      onChange={(nextValue) => {
+                        setSortMode(nextValue as SortMode);
+                        setCurrentPage(1);
+                      }}
+                      options={sortModeOptions}
+                      value={sortMode}
+                    />
+                    <CustomSelect
+                      label="评论筛选"
+                      onChange={(nextValue) => {
+                        setActiveRepoFilter(nextValue as RepoFilterMode);
+                        setCurrentPage(1);
+                        try {
+                          window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue);
+                        } catch {
+                          /* ignore storage errors */
+                        }
+                      }}
+                      options={[
+                        { value: 'all', label: '全部' },
+                        { value: 'with', label: '有评论' },
+                        { value: 'without', label: '无评论' },
+                      ]}
+                      value={activeRepoFilter}
+                    />
+                    <CustomSelect
+                      label="评论排序"
+                      onChange={(nextValue) => {
+                        setRepoSortMode(nextValue as RepoSortMode);
+                        try {
+                          window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue);
+                        } catch {
+                          /* ignore storage errors */
+                        }
+                      }}
+                      options={[
+                        { value: 'none', label: '默认(时间)' },
+                        { value: 'count_desc', label: '评论数 ↓' },
+                        { value: 'count_asc', label: '评论数 ↑' },
+                        { value: 'first_desc', label: '首评时间 ↓' },
+                        { value: 'first_asc', label: '首评时间 ↑' },
+                        { value: 'last_desc', label: '最新评论 ↓' },
+                        { value: 'last_asc', label: '最新评论 ↑' },
+                      ]}
+                      value={repoSortMode}
+                    />
+                    <CustomSelect
+                      label="一行几个"
+                      onChange={(nextValue) => setColumns(Number(nextValue))}
+                      options={columnOptions}
+                      value={String(renderColumns)}
+                    />
+                  </div>
+                  <div className="toolbar-toggle-field">
+                    <span>列表操作</span>
+                    <div className="inline-actions wrap-mobile toolbar-toggle-row">
+                      <button
+                        className="button secondary"
+                        onClick={() => setShowPreview((current) => !current)}
+                        type="button"
+                      >
+                        {showPreview ? '收起正文' : '展开正文'}
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => setShowPreferenceActions((current) => !current)}
+                        type="button"
+                      >
+                        {showPreferenceActions ? '收起标记' : '展开标记'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {!toolbarCollapsed ? (
+                <div className="plaza-search-row">
+                  <label>
+                    <span>搜索</span>
+                    <ClearableField
+                      visible={Boolean(keyword.trim())}
+                      onClear={() => {
+                        setKeyword('');
+                        setCurrentPage(1);
+                      }}
+                    >
+                      <input
+                        value={keyword}
+                        onChange={(event) => {
+                          setKeyword(event.target.value);
+                          setCurrentPage(1);
+                        }}
+                        placeholder="默认搜标题、作者、分类或正文"
+                      />
+                    </ClearableField>
+                  </label>
+                  <div
+                    className="inline-actions wrap-mobile admin-search-field-row"
+                    role="group"
+                    aria-label="搜索范围"
+                  >
+                    {playSearchFieldOptions.map((item) => (
+                      <button
+                        aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+                        className={
+                          isSearchFieldActive(playSearchFields, item.value)
+                            ? 'tab-chip active'
+                            : 'tab-chip'
+                        }
+                        key={item.value}
+                        onClick={() => {
+                          setPlaySearchFields((current) => toggleSearchField(current, item.value));
+                          setCurrentPage(1);
+                        }}
+                        type="button"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!toolbarCollapsed ? (
+                <div className="filter-summary wrap-mobile">
+                  <span>
+                    当前 {filteredPlays.length} 篇，第 {currentPage} / {totalPages} 页
+                    {selectionMode !== 'idle' ? `，已选 ${selectedIds.length} 篇` : ''}
+                  </span>
+                  {selectionMode !== 'idle' ? (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        setSelectedIds((current) => {
+                          if (allSelectedOnPage) {
+                            return current.filter(
+                              (id) => !pagedPlays.some((play) => play.id === id),
+                            );
+                          }
+
+                          const next = new Set(current);
+                          pagedPlays.forEach((play) => next.add(play.id));
+                          return [...next];
+                        })
+                      }
+                      type="button"
+                    >
+                      {allSelectedOnPage ? '清空本页选择' : '全选本页'}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {!toolbarCollapsed ? (
+                <div className="inline-actions wrap-mobile plaza-bulk-action-row">
+                  <button
+                    className="button secondary"
+                    onClick={() => applyBatchPreference('favorite')}
+                    type="button"
+                  >
+                    {selectionMode === 'favorite'
+                      ? activeView === 'favorites'
+                        ? `取消收藏已选（${selectedIds.length}）`
+                        : `收藏已选（${selectedIds.length}）`
+                      : activeView === 'favorites'
+                        ? '多选取消收藏'
+                        : '多选收藏'}
+                  </button>
+                  <button
+                    className="button secondary"
+                    onClick={() => applyBatchPreference('disliked')}
+                    type="button"
+                  >
+                    {selectionMode === 'disliked'
+                      ? activeView === 'disliked'
+                        ? `取消不喜欢已选（${selectedIds.length}）`
+                        : `不喜欢已选（${selectedIds.length}）`
+                      : activeView === 'disliked'
+                        ? '多选取消不喜欢'
+                        : '多选不喜欢'}
+                  </button>
+                  {selectionMode === 'favorite' || selectionMode === 'disliked' ? (
+                    <button
+                      className="button ghost"
+                      onClick={() => setSelectionMode('idle')}
+                      type="button"
+                    >
+                      取消多选
+                    </button>
+                  ) : null}
+                  <label className="checkbox-chip checkbox-chip-wide">
+                    <input
+                      checked={preferenceStore.settings.blockDislikedGlobally}
+                      onChange={(event) =>
+                        handleToggleSetting('blockDislikedGlobally', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>屏蔽不喜欢内容</span>
+                  </label>
+                </div>
+              ) : null}
+
+              {activeView === 'favorites' ? (
+                <div className="inline-actions wrap-mobile plaza-random-options-row">
+                  <label className="checkbox-chip checkbox-chip-wide">
+                    <input
+                      checked={preferenceStore.settings.favoriteOnlyRandom}
+                      onChange={(event) =>
+                        handleToggleSetting('favoriteOnlyRandom', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>仅从收藏池随机</span>
+                  </label>
+                  <label className="checkbox-chip checkbox-chip-wide">
+                    <input
+                      checked={preferenceStore.settings.favoriteWeightedRandom}
+                      onChange={(event) =>
+                        handleToggleSetting('favoriteWeightedRandom', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>提高收藏出现比重</span>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!toolbarCollapsed && randomPanelOpen ? (
+            <section className="form-panel stack-gap-md plaza-random-panel">
+              <div className="content-head">
+                <div>
+                  <h3>随机抽小剧场</h3>
+                </div>
+                <span className="content-meta">
+                  当前范围：{viewLabels[activeView]}
+                  {activeCategory ? ` / ${activeCategory}` : ''}
+                  {activeAuthor ? ` / ${activeAuthor}` : ''}
+                </span>
+              </div>
+
+              <div className="inline-actions wrap-mobile plaza-random-actions">
+                <CustomSelect
+                  label="抽选模式"
+                  onChange={(nextValue) => setRandomMode(nextValue as RandomMode)}
+                  options={randomModeOptions}
+                  value={randomMode}
+                />
+                <div className="inline-actions wrap-mobile plaza-random-trailing">
+                  {randomMode === 'unique' ? (
+                    <button
+                      className="button ghost plaza-random-clear-button"
+                      onClick={handleClearRandomSeen}
+                      type="button"
+                    >
+                      清空记录
+                    </button>
+                  ) : null}
+                  <button
+                    className="button primary plaza-random-pick-button"
+                    onClick={handlePickRandom}
+                    type="button"
+                  >
+                    抽一篇
+                  </button>
+                </div>
+              </div>
+
+              <div className="inline-actions wrap-mobile plaza-confetti-toggles">
+                <label className="checkbox-chip checkbox-chip-wide">
+                  <input
+                    checked={confettiPrefs.enabled}
+                    onChange={(event) =>
+                      setConfettiPrefsState(setConfettiEnabled(event.target.checked))
+                    }
+                    type="checkbox"
+                  />
+                  <span>礼花特效</span>
+                </label>
+                <label className="checkbox-chip checkbox-chip-wide">
+                  <input
+                    checked={confettiPrefs.sound}
+                    onChange={(event) =>
+                      setConfettiPrefsState(setConfettiSound(event.target.checked))
+                    }
+                    type="checkbox"
+                  />
+                  <span>礼花音效</span>
+                </label>
+              </div>
+
+              {randomMessage ? <div className="feedback success">{randomMessage}</div> : null}
+
+              {randomPickedPlay ? (
+                <article
+                  className="play-card random-picked-card play-card-shell play-card-clickable"
+                  onClick={() => openPlayDetail(randomPickedPlay)}
+                  onKeyDown={(event) => handleCardKeyDown(event, randomPickedPlay)}
+                  ref={randomPickedCardRef}
+                  role="link"
+                  tabIndex={0}
+                >
+                  <div className="card-topline wrap-mobile align-start">
+                    {renderCompactMeta(randomPickedPlay)}
+                  </div>
+                  <h3>{randomPickedPlay.title}</h3>
+                  {randomPickedPlay.summary ? (
+                    <p className="summary">{randomPickedPlay.summary}</p>
+                  ) : null}
+                  <div className="content-head wrap-mobile" onClick={stopCardAction}>
+                    <span className="content-meta">
+                      正文约 {randomPickedPlay.content.length} 字
+                    </span>
+                    {renderPreferenceActions(randomPickedPlay)}
+                    <button
+                      aria-label="复制正文"
+                      className="icon-button"
+                      onClick={(event) => void handleCopyRandomContent(event)}
+                      title="复制正文"
+                      type="button"
+                    >
+                      ⧉
+                    </button>
+                  </div>
+                  <p className="preview-copy">{randomPickedPlay.content}</p>
+                  {randomCopyMessage ? (
+                    <div className="feedback success">{randomCopyMessage}</div>
+                  ) : null}
+                </article>
+              ) : null}
+            </section>
+          ) : null}
+
+          {pendingRefresh ? (
+            <div className="plaza-refresh-modal-backdrop" role="presentation">
+              <section
+                aria-labelledby="plaza-refresh-modal-title"
+                aria-modal="true"
+                className="form-panel plaza-refresh-modal"
+                role="dialog"
+              >
+                <div className="stack-gap-sm">
+                  <h3 id="plaza-refresh-modal-title">
+                    新增了 {pendingRefresh.addedCount} 条小剧场
+                  </h3>
+                  <p className="sub-copy">你可以跳到最新内容，也可以保持现在的浏览位置继续看。</p>
+                </div>
+                <div className="inline-actions wrap-mobile plaza-refresh-modal-actions">
+                  <button
+                    className="button secondary"
+                    onClick={() => applyPendingRefresh('scroll')}
+                    type="button"
+                  >
+                    继续之前浏览位置
+                  </button>
+                  <button
+                    className="button primary"
+                    onClick={() => applyPendingRefresh('top')}
+                    type="button"
+                  >
+                    跳转到开头
+                  </button>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {message ? <div className="feedback success">{message}</div> : null}
+          {loading ? <div className="empty-panel">正在加载公开内容…</div> : null}
+          {error ? <div className="empty-panel error">{error}</div> : null}
+
+          {!loading && !error && !(!toolbarCollapsed && randomPanelOpen && randomPickedPlay) ? (
+            filteredPlays.length > 0 ? (
+              <>
+                <div
+                  className="card-grid custom-grid"
+                  style={{ ['--card-columns' as string]: renderColumns } as CSSProperties}
+                >
+                  {pagedPlays.map((play) => {
+                    const checked = selectedIds.includes(play.id);
+
+                    return (
+                      <article
+                        key={play.id}
+                        className={`play-card play-card-shell play-card-clickable ${checked ? 'selected' : ''}`}
+                        data-play-id={play.id}
+                        onClick={() => openPlayDetail(play)}
+                        onKeyDown={(event) => handleCardKeyDown(event, play)}
+                        role="link"
+                        tabIndex={0}
+                      >
+                        <div className="card-topline wrap-mobile align-start">
+                          <div className="inline-actions wrap-mobile align-start">
+                            {selectionMode !== 'idle' ? (
+                              <label className="checkbox-chip" onClick={stopCardAction}>
+                                <input
+                                  checked={checked}
+                                  onChange={() => toggleSelect(play.id)}
+                                  type="checkbox"
+                                />
+                                <span>{selectionMode === 'export' ? '导出' : '选择'}</span>
+                              </label>
+                            ) : null}
+                            {renderCompactMeta(play)}
+                          </div>
+                        </div>
+                        <h3>{play.title}</h3>
+                        {play.summary ? (
+                          <p className="summary plaza-card-summary">{play.summary}</p>
+                        ) : null}
+                        {showPreview ? (
+                          <p className="preview-copy plaza-card-preview">{play.content}</p>
+                        ) : null}
+                        {showPreferenceActions ? renderPreferenceActions(play) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+
+                <div className="form-panel compact-panel stack-gap-md plaza-pagination-panel">
+                  <div className="plaza-pagination-toolbar">
+                    <div className="inline-actions plaza-pagination-nav">
+                      <button
+                        className="button secondary icon-page-button"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(1)}
+                        title="第一页"
+                        type="button"
+                      >
+                        ≪
+                      </button>
+                      <button
+                        className="button secondary icon-page-button"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                        title="上一页"
+                        type="button"
+                      >
+                        ‹
+                      </button>
+                    </div>
+                    <span className="content-meta plaza-page-indicator">
+                      第 {currentPage} / {totalPages} 页
+                    </span>
+                    <div className="inline-actions plaza-pagination-nav plaza-pagination-nav-end">
+                      <button
+                        className="button secondary icon-page-button"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                        title="下一页"
+                        type="button"
+                      >
+                        ›
+                      </button>
+                      <button
+                        className="button secondary icon-page-button"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage(totalPages)}
+                        title="最后一页"
+                        type="button"
+                      >
+                        ≫
+                      </button>
+                    </div>
+                    <div className="inline-actions plaza-page-control-inline">
+                      <label className="plaza-page-size-field" htmlFor="plaza-page-size-input">
+                        <span className="content-meta plaza-page-size-copy">每页</span>
+                        <input
+                          id="plaza-page-size-input"
+                          inputMode="numeric"
+                          min={MIN_PAGE_SIZE}
+                          max={MAX_PAGE_SIZE}
+                          onBlur={handlePageSizeInputBlur}
+                          onChange={(event) => handlePageSizeInputChange(event.target.value)}
+                          value={pageSizeInput}
+                        />
+                        <span className="content-meta plaza-page-size-copy">个</span>
+                      </label>
+                      <div className="inline-actions plaza-page-jump-inline">
+                        <span className="content-meta plaza-page-jump-copy">第</span>
+                        <label className="page-jump-field page-jump-field-compact">
+                          <input
+                            inputMode="numeric"
+                            min={1}
+                            max={totalPages}
+                            onChange={(event) => setPageInput(event.target.value)}
+                            value={pageInput}
+                          />
+                        </label>
+                        <span className="content-meta plaza-page-jump-copy">页</span>
+                        <button
+                          className="button primary plaza-page-jump-button"
+                          onClick={jumpToPage}
+                          type="button"
+                        >
+                          跳转
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : plays.length > 0 ? (
+              <div className="empty-panel">当前条件下没有结果，换个关键词试试。</div>
+            ) : (
+              <div className="empty-panel">当前还没有公开的小剧场。</div>
+            )
+          ) : null}
         </div>
       </div>
     </section>

@@ -13,7 +13,15 @@ export type DuplicateScanScope = 'all' | 'approved';
 
 export type DuplicatePlaySnapshot = Pick<
   Play,
-  'id' | 'title' | 'authorName' | 'category' | 'summary' | 'content' | 'status' | 'createdAt' | 'updatedAt'
+  | 'id'
+  | 'title'
+  | 'authorName'
+  | 'category'
+  | 'summary'
+  | 'content'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
 >;
 
 export type DuplicateMatch = {
@@ -92,7 +100,8 @@ const readStore = (): DuplicateReviewState => {
       groups: Array.isArray(parsed.groups) ? parsed.groups : [],
       selectedIds: Array.isArray(parsed.selectedIds) ? parsed.selectedIds : [],
       activeGroupId: typeof parsed.activeGroupId === 'string' ? parsed.activeGroupId : '',
-      activeComparedPlayId: typeof parsed.activeComparedPlayId === 'string' ? parsed.activeComparedPlayId : '',
+      activeComparedPlayId:
+        typeof parsed.activeComparedPlayId === 'string' ? parsed.activeComparedPlayId : '',
       scannedAt: typeof parsed.scannedAt === 'string' ? parsed.scannedAt : '',
       scannedCount: typeof parsed.scannedCount === 'number' ? parsed.scannedCount : 0,
     };
@@ -116,7 +125,10 @@ export const clearDuplicateReviewState = (
   currentState?: Pick<DuplicateReviewState, 'threshold' | 'scanScope'>,
 ) =>
   saveDuplicateReviewState(
-    createEmptyState(currentState?.threshold ?? DEFAULT_THRESHOLD, currentState?.scanScope ?? 'all'),
+    createEmptyState(
+      currentState?.threshold ?? DEFAULT_THRESHOLD,
+      currentState?.scanScope ?? 'all',
+    ),
   );
 
 export const setDuplicateThreshold = (threshold: number) => {
@@ -159,7 +171,9 @@ const getScopedPlays = (plays: Play[], scanScope: DuplicateScanScope) =>
 const sortByCreatedAt = (items: Play[]) =>
   [...items].sort(
     (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) || left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id),
+      left.createdAt.localeCompare(right.createdAt) ||
+      left.updatedAt.localeCompare(right.updatedAt) ||
+      left.id.localeCompare(right.id),
   );
 
 const normalizeTextForSimilarity = (value: string) =>
@@ -221,7 +235,11 @@ const notifyProgress = (
 
 const yieldToMainThread = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
-export const scanDuplicateGroups = async (plays: Play[], threshold: number, options: DuplicateScanOptions = {}) => {
+export const scanDuplicateGroups = async (
+  plays: Play[],
+  threshold: number,
+  options: DuplicateScanOptions = {},
+) => {
   const scanScope = options.scanScope ?? 'all';
   const sortedPlays = sortByCreatedAt(getScopedPlays(plays, scanScope));
   const preparedPlays = sortedPlays.map(preparePlay);
@@ -242,7 +260,13 @@ export const scanDuplicateGroups = async (plays: Play[], threshold: number, opti
     const anchorPlay = preparedPlays[anchorIndex];
     if (consumed.has(anchorPlay.play.id)) {
       completedAnchors = anchorIndex + 1;
-      notifyProgress(totalAnchors, completedAnchors, processedPairs, totalPairs, options.onProgress);
+      notifyProgress(
+        totalAnchors,
+        completedAnchors,
+        processedPairs,
+        totalPairs,
+        options.onProgress,
+      );
       continue;
     }
 
@@ -268,7 +292,13 @@ export const scanDuplicateGroups = async (plays: Play[], threshold: number, opti
       }
 
       if (processedPairs % SCAN_YIELD_INTERVAL === 0) {
-        notifyProgress(totalAnchors, completedAnchors, processedPairs, totalPairs, options.onProgress);
+        notifyProgress(
+          totalAnchors,
+          completedAnchors,
+          processedPairs,
+          totalPairs,
+          options.onProgress,
+        );
         await yieldToMainThread();
       }
     }
@@ -277,7 +307,11 @@ export const scanDuplicateGroups = async (plays: Play[], threshold: number, opti
       groups.push({
         id: anchorPlay.play.id,
         anchor: anchorPlay.snapshot,
-        duplicates: duplicates.sort((left, right) => right.similarity - left.similarity || left.play.createdAt.localeCompare(right.play.createdAt)),
+        duplicates: duplicates.sort(
+          (left, right) =>
+            right.similarity - left.similarity ||
+            left.play.createdAt.localeCompare(right.play.createdAt),
+        ),
       });
     }
 
@@ -315,10 +349,14 @@ export const pruneDuplicateReviewState = (state: DuplicateReviewState, plays: Pl
     ...state,
     groups: nextGroups,
     selectedIds: state.selectedIds.filter((id) => validIds.has(id)),
-    activeGroupId: nextGroups.some((group) => group.id === state.activeGroupId) ? state.activeGroupId : nextGroups[0]?.id ?? '',
-    activeComparedPlayId: nextGroups.some((group) => group.duplicates.some((item) => item.play.id === state.activeComparedPlayId))
+    activeGroupId: nextGroups.some((group) => group.id === state.activeGroupId)
+      ? state.activeGroupId
+      : (nextGroups[0]?.id ?? ''),
+    activeComparedPlayId: nextGroups.some((group) =>
+      group.duplicates.some((item) => item.play.id === state.activeComparedPlayId),
+    )
       ? state.activeComparedPlayId
-      : nextGroups[0]?.duplicates[0]?.play.id ?? '',
+      : (nextGroups[0]?.duplicates[0]?.play.id ?? ''),
     scannedCount: scopedPlays.length,
   };
 
@@ -336,14 +374,19 @@ export const toggleDuplicateSelection = (state: DuplicateReviewState, playId: st
   });
 };
 
-export const setDuplicateCompareTarget = (state: DuplicateReviewState, groupId: string, playId: string) =>
+export const setDuplicateCompareTarget = (
+  state: DuplicateReviewState,
+  groupId: string,
+  playId: string,
+) =>
   saveDuplicateReviewState({
     ...state,
     activeGroupId: groupId,
     activeComparedPlayId: playId,
   });
 
-export const collectAllDuplicateIds = (groups: DuplicateGroup[]) => groups.flatMap((group) => group.duplicates.map((item) => item.play.id));
+export const collectAllDuplicateIds = (groups: DuplicateGroup[]) =>
+  groups.flatMap((group) => group.duplicates.map((item) => item.play.id));
 
 export const collectSecondDuplicateIds = (groups: DuplicateGroup[]) =>
   groups.map((group) => group.duplicates[0]?.play.id).filter(Boolean) as string[];
@@ -351,7 +394,9 @@ export const collectSecondDuplicateIds = (groups: DuplicateGroup[]) =>
 const tokenizeWords = (value: string) => value.match(/\S+\s*/g) ?? [];
 
 const buildLcsMatrix = (left: string[], right: string[]) => {
-  const matrix = Array.from({ length: left.length + 1 }, () => Array.from<number>({ length: right.length + 1 }).fill(0));
+  const matrix = Array.from({ length: left.length + 1 }, () =>
+    Array.from<number>({ length: right.length + 1 }).fill(0),
+  );
 
   for (let leftIndex = left.length - 1; leftIndex >= 0; leftIndex -= 1) {
     for (let rightIndex = right.length - 1; rightIndex >= 0; rightIndex -= 1) {

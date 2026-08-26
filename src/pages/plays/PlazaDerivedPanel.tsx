@@ -26,7 +26,9 @@ export function PlazaDerivedPanel({ plays, onOpenPlay }: PlazaDerivedPanelProps)
       <div className="sidebar-head plaza-derived-head">
         <div className="stack-gap-sm">
           <h3>衍生版本</h3>
-          <p className="sub-copy">按当前筛选范围汇总同标题、同分类的小剧场。最早发布的是原文，后续为衍生版本。</p>
+          <p className="sub-copy">
+            按当前筛选范围汇总同标题、同分类的小剧场。最早发布的是原文，后续为衍生版本。
+          </p>
         </div>
       </div>
 
@@ -44,7 +46,12 @@ export function PlazaDerivedPanel({ plays, onOpenPlay }: PlazaDerivedPanelProps)
 
               <div className="plaza-derived-version-list">
                 {group.plays.map((play, index) => (
-                  <button className="plaza-calendar-play-item" key={play.id} onClick={() => onOpenPlay(play)} type="button">
+                  <button
+                    className="plaza-calendar-play-item"
+                    key={play.id}
+                    onClick={() => onOpenPlay(play)}
+                    type="button"
+                  >
                     <div className="card-topline wrap-mobile">
                       <strong>{getPlayVersionLabel(index)}</strong>
                       <span>{formatDate(play.createdAt)}</span>
@@ -53,7 +60,9 @@ export function PlazaDerivedPanel({ plays, onOpenPlay }: PlazaDerivedPanelProps)
                       <span>{play.authorName || '匿名'}</span>
                       <span>{play.category?.trim() || DEFAULT_CATEGORY}</span>
                     </div>
-                    {play.summary ? <span className="sub-copy plaza-calendar-play-summary">{play.summary}</span> : null}
+                    {play.summary ? (
+                      <span className="sub-copy plaza-calendar-play-summary">{play.summary}</span>
+                    ) : null}
                   </button>
                 ))}
               </div>

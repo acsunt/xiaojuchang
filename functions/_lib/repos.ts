@@ -93,7 +93,11 @@ const repoSelect = `SELECT repos.*,
        JOIN plays ON plays.id = repos.play_id
        LEFT JOIN repos parent ON parent.id = repos.parent_id`;
 
-export const listPublicReposByPlayId = async (db: D1Database, playId: string, order: 'asc' | 'desc' = 'asc') => {
+export const listPublicReposByPlayId = async (
+  db: D1Database,
+  playId: string,
+  order: 'asc' | 'desc' = 'asc',
+) => {
   await ensureReposSchema(db);
   const result = await db
     .prepare(
@@ -107,7 +111,11 @@ export const listPublicReposByPlayId = async (db: D1Database, playId: string, or
   return result.results.map(normalizeRepo);
 };
 
-export const listReposByVisitorId = async (db: D1Database, visitorId: string, order: 'asc' | 'desc' = 'desc') => {
+export const listReposByVisitorId = async (
+  db: D1Database,
+  visitorId: string,
+  order: 'asc' | 'desc' = 'desc',
+) => {
   await ensureReposSchema(db);
   const result = await db
     .prepare(
@@ -187,10 +195,18 @@ export const listRepoCountsByPlayIds = async (db: D1Database, playIds: string[])
   await ensureReposSchema(db);
   const normalizedIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
   if (normalizedIds.length === 0) {
-    return [] as Array<{ playId: string; count: number; firstCreatedAt?: string; lastCreatedAt?: string }>;
+    return [] as Array<{
+      playId: string;
+      count: number;
+      firstCreatedAt?: string;
+      lastCreatedAt?: string;
+    }>;
   }
 
-  const summaryMap = new Map<string, { count: number; firstCreatedAt?: string; lastCreatedAt?: string }>();
+  const summaryMap = new Map<
+    string,
+    { count: number; firstCreatedAt?: string; lastCreatedAt?: string }
+  >();
   for (const idChunk of chunkItems(normalizedIds, D1_SELECT_CHUNK_SIZE)) {
     const placeholders = idChunk.map(() => '?').join(', ');
     const result = await db
@@ -236,7 +252,8 @@ export const getRepoNoticeSummary = async (
   const readTime = readAt ? new Date(readAt).getTime() : 0;
   return {
     receivedCount: receivedRepos.length,
-    unreadCount: receivedRepos.filter((repo) => new Date(repo.createdAt).getTime() > readTime).length,
+    unreadCount: receivedRepos.filter((repo) => new Date(repo.createdAt).getTime() > readTime)
+      .length,
   };
 };
 
@@ -270,7 +287,10 @@ export const createRepo = async (db: D1Database, draft: RepoDraft) => {
     )
     .run();
 
-  const row = await db.prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`).bind(id).first<Record<string, unknown>>();
+  const row = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(id)
+    .first<Record<string, unknown>>();
   if (!row) {
     throw new Error('repo 写入后读取失败');
   }
@@ -286,7 +306,9 @@ export const parseRepoStatus = (value?: string | null): RepoStatus | undefined =
     return undefined;
   }
 
-  return validRepoStatuses.includes(normalized as RepoStatus) ? (normalized as RepoStatus) : undefined;
+  return validRepoStatuses.includes(normalized as RepoStatus)
+    ? (normalized as RepoStatus)
+    : undefined;
 };
 
 export const listAdminRepos = async (db: D1Database, status?: RepoStatus) => {
@@ -308,7 +330,10 @@ export const reviewRepo = async (
 ) => {
   await ensureReposSchema(db);
   await ensureRepoAuditLogsSchema(db);
-  const currentRepo = await db.prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`).bind(repoId).first<Record<string, unknown>>();
+  const currentRepo = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(repoId)
+    .first<Record<string, unknown>>();
   if (!currentRepo) {
     return null;
   }
@@ -344,14 +369,20 @@ export const reviewRepo = async (
       ),
   ]);
 
-  const row = await db.prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`).bind(repoId).first<Record<string, unknown>>();
+  const row = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(repoId)
+    .first<Record<string, unknown>>();
   return row ? normalizeRepo(row) : null;
 };
 
 export const deleteRepo = async (db: D1Database, repoId: string, operator: string) => {
   await ensureReposSchema(db);
   await ensureRepoAuditLogsSchema(db);
-  const currentRepo = await db.prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`).bind(repoId).first<Record<string, unknown>>();
+  const currentRepo = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(repoId)
+    .first<Record<string, unknown>>();
   if (!currentRepo) {
     return false;
   }

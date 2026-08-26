@@ -24,7 +24,9 @@ export function RepoPage() {
   const [receivedOrder, setReceivedOrder] = useState<RepoOrder>('desc');
   const [sentRepos, setSentRepos] = useState<Repo[]>([]);
   const [receivedRepos, setReceivedRepos] = useState<Repo[]>([]);
-  const [noticeSettings, setNoticeSettingsState] = useState<RepoNoticeSettings>(() => getRepoNoticeSettings());
+  const [noticeSettings, setNoticeSettingsState] = useState<RepoNoticeSettings>(() =>
+    getRepoNoticeSettings(),
+  );
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,9 @@ export function RepoPage() {
     if (rejectedSentCount === 0) {
       return;
     }
-    const confirmed = window.confirm(`确认清空「我发布的」里被拒绝的 ${rejectedSentCount} 条 repo？删除后不可恢复。`);
+    const confirmed = window.confirm(
+      `确认清空「我发布的」里被拒绝的 ${rejectedSentCount} 条 repo？删除后不可恢复。`,
+    );
     if (!confirmed) {
       return;
     }
@@ -77,7 +81,11 @@ export function RepoPage() {
     try {
       const deletedCount = await playApi.deleteRejectedReposByVisitor(visitorId);
       await loadRepos();
-      setMessage(deletedCount > 0 ? `已清空 ${deletedCount} 条被拒绝的 repo。` : '当前没有可清空的未通过 repo。');
+      setMessage(
+        deletedCount > 0
+          ? `已清空 ${deletedCount} 条被拒绝的 repo。`
+          : '当前没有可清空的未通过 repo。',
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '清空未通过 repo 失败');
     } finally {
@@ -87,7 +95,13 @@ export function RepoPage() {
 
   const updateNoticeSettings = (settings: RepoNoticeSettings) => {
     setNoticeSettingsState(setRepoNoticeSettings(settings));
-    setMessage(settings === 'off' ? '已关闭 repo 提醒。' : settings === 'dot' ? '已切换为小红点提醒。' : '已切换为数字提醒。');
+    setMessage(
+      settings === 'off'
+        ? '已关闭 repo 提醒。'
+        : settings === 'dot'
+          ? '已切换为小红点提醒。'
+          : '已切换为数字提醒。',
+    );
   };
 
   const visibleRepos = activeView === 'sent' ? sentRepos : receivedRepos;
@@ -100,13 +114,23 @@ export function RepoPage() {
         <div className="content-head wrap-mobile">
           <div>
             <h2>repo</h2>
-            <p className="sub-copy">这里汇总当前浏览器发出的 repo，以及你投稿作品或被回复时收到的 repo。</p>
+            <p className="sub-copy">
+              这里汇总当前浏览器发出的 repo，以及你投稿作品或被回复时收到的 repo。
+            </p>
           </div>
           <div className="inline-actions wrap-mobile repo-view-switcher-row">
-            <button className={activeView === 'received' ? 'tab-chip active' : 'tab-chip'} onClick={() => setActiveView('received')} type="button">
+            <button
+              className={activeView === 'received' ? 'tab-chip active' : 'tab-chip'}
+              onClick={() => setActiveView('received')}
+              type="button"
+            >
               我收到的 {receivedRepos.length}
             </button>
-            <button className={activeView === 'sent' ? 'tab-chip active' : 'tab-chip'} onClick={() => setActiveView('sent')} type="button">
+            <button
+              className={activeView === 'sent' ? 'tab-chip active' : 'tab-chip'}
+              onClick={() => setActiveView('sent')}
+              type="button"
+            >
               我发布的 {sentRepos.length}
             </button>
             <button
@@ -123,14 +147,26 @@ export function RepoPage() {
 
         <div className="repo-page-order-row">
           <div className="inline-actions repo-page-order-switcher">
-            <button className={activeOrder === 'asc' ? 'tab-chip active' : 'tab-chip'} onClick={() => setActiveOrder('asc')} type="button">
+            <button
+              className={activeOrder === 'asc' ? 'tab-chip active' : 'tab-chip'}
+              onClick={() => setActiveOrder('asc')}
+              type="button"
+            >
               正序
             </button>
-            <button className={activeOrder === 'desc' ? 'tab-chip active' : 'tab-chip'} onClick={() => setActiveOrder('desc')} type="button">
+            <button
+              className={activeOrder === 'desc' ? 'tab-chip active' : 'tab-chip'}
+              onClick={() => setActiveOrder('desc')}
+              type="button"
+            >
               倒序
             </button>
           </div>
-          <button className="button secondary repo-page-mark-read-button" onClick={handleMarkRead} type="button">
+          <button
+            className="button secondary repo-page-mark-read-button"
+            onClick={handleMarkRead}
+            type="button"
+          >
             标记已读
           </button>
         </div>
@@ -163,9 +199,12 @@ export function RepoPage() {
                   <div className="stack-gap-xs">
                     <strong>{repo.nickname}</strong>
                     <span className="content-meta">
-                      《{repo.playTitle ?? repo.playId}》 · {repoStatusLabelMap[repo.status]} · {formatDate(repo.createdAt)}
+                      《{repo.playTitle ?? repo.playId}》 · {repoStatusLabelMap[repo.status]} ·{' '}
+                      {formatDate(repo.createdAt)}
                     </span>
-                    {repo.replyToNickname ? <span className="content-meta">回复 {repo.replyToNickname}</span> : null}
+                    {repo.replyToNickname ? (
+                      <span className="content-meta">回复 {repo.replyToNickname}</span>
+                    ) : null}
                   </div>
                   <Link
                     aria-label="去详情"

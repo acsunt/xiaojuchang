@@ -1,4 +1,9 @@
-import { deletePlay, getAdminPlayById, getAdminSessionFromRequest, updateAdminPlay } from '../../../_lib/db';
+import {
+  deletePlay,
+  getAdminPlayById,
+  getAdminSessionFromRequest,
+  updateAdminPlay,
+} from '../../../_lib/db';
 import { error, json } from '../../../_lib/http';
 
 export const onRequestGet: PagesFunction = async ({ env, request, params }) => {

@@ -13,7 +13,12 @@ import {
 import { getCachedPublicPlayById, getCachedPublicPlays, playApi } from '../../services/play-api';
 import { DEFAULT_CATEGORY, type Play, type Repo, type RepoOrder } from '../../types/play';
 import { RepoMarkdown } from '../repos/RepoMarkdown';
-import { buildPlayVersionGroups, getPlayVersionKey, getPlayVersionLabel, sortPlayVersions } from './play-versions';
+import {
+  buildPlayVersionGroups,
+  getPlayVersionKey,
+  getPlayVersionLabel,
+  sortPlayVersions,
+} from './play-versions';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
 
@@ -60,7 +65,9 @@ export function PlayDetailPage() {
   const [repoContent, setRepoContent] = useState('');
   const [repoParentId, setRepoParentId] = useState('');
   const [repoComposerOpen, setRepoComposerOpen] = useState(false);
-  const [repoNicknameHistory, setRepoNicknameHistory] = useState<string[]>(() => getRepoNicknameHistory());
+  const [repoNicknameHistory, setRepoNicknameHistory] = useState<string[]>(() =>
+    getRepoNicknameHistory(),
+  );
   const [repoSubmitting, setRepoSubmitting] = useState(false);
   const [repoMessage, setRepoMessage] = useState('');
   const [repoError, setRepoError] = useState('');
@@ -80,7 +87,10 @@ export function PlayDetailPage() {
     if (plazaPanel === 'derived' && play) {
       const cachedPlays = getCachedPublicPlays();
       const snapshotIds = plazaSnapshot?.filteredPlayIds ?? [];
-      const filteredSource = snapshotIds.length > 0 ? cachedPlays.filter((item) => snapshotIds.includes(item.id)) : cachedPlays;
+      const filteredSource =
+        snapshotIds.length > 0
+          ? cachedPlays.filter((item) => snapshotIds.includes(item.id))
+          : cachedPlays;
       const source = filteredSource.length > 0 ? filteredSource : cachedPlays;
       const groups = buildPlayVersionGroups(source);
       const currentKey = getPlayVersionKey(play);
@@ -104,14 +114,20 @@ export function PlayDetailPage() {
   }, [plazaSnapshot, plazaPanel, play]);
   const currentIndex = navigationIds.indexOf(id);
   const previousPlayId = currentIndex > 0 ? navigationIds[currentIndex - 1] : '';
-  const nextPlayId = currentIndex >= 0 && currentIndex < navigationIds.length - 1 ? navigationIds[currentIndex + 1] : '';
+  const nextPlayId =
+    currentIndex >= 0 && currentIndex < navigationIds.length - 1
+      ? navigationIds[currentIndex + 1]
+      : '';
 
   useEffect(() => {
     updatePlazaNavigationSnapshot({ anchorPlayId: id });
   }, [id]);
 
   useEffect(() => {
-    const cachedPlay = locationState?.playSnapshot?.id === id ? locationState.playSnapshot : getCachedPublicPlayById(id);
+    const cachedPlay =
+      locationState?.playSnapshot?.id === id
+        ? locationState.playSnapshot
+        : getCachedPublicPlayById(id);
 
     setPlay(cachedPlay ?? null);
     setVersionPlays(cachedPlay ? [cachedPlay] : []);
@@ -126,10 +142,16 @@ export function PlayDetailPage() {
           throw new Error('该内容不存在，或尚未通过审核');
         }
         setPlay(item);
-        const cachedVersions = getCachedPublicPlays().filter((target) => getPlayVersionKey(target) === getPlayVersionKey(item));
+        const cachedVersions = getCachedPublicPlays().filter(
+          (target) => getPlayVersionKey(target) === getPlayVersionKey(item),
+        );
         setVersionPlays(sortPlayVersions(cachedVersions.length > 0 ? cachedVersions : [item]));
         return playApi.getPublicPlays().then((items) => {
-          setVersionPlays(sortPlayVersions(items.filter((target) => getPlayVersionKey(target) === getPlayVersionKey(item))));
+          setVersionPlays(
+            sortPlayVersions(
+              items.filter((target) => getPlayVersionKey(target) === getPlayVersionKey(item)),
+            ),
+          );
         });
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : '加载失败'))
@@ -286,7 +308,11 @@ export function PlayDetailPage() {
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
               <span>作者 {play.authorName}</span>
-              <span>{plazaSnapshot?.activeTimeField === 'createdAt' ? `上传时间 ${formatDate(play.createdAt)}` : `最近更新时间 ${formatDate(play.updatedAt)}`}</span>
+              <span>
+                {plazaSnapshot?.activeTimeField === 'createdAt'
+                  ? `上传时间 ${formatDate(play.createdAt)}`
+                  : `最近更新时间 ${formatDate(play.updatedAt)}`}
+              </span>
             </div>
             {versionItems.length > 1 ? (
               <div className="detail-version-panel">
@@ -351,7 +377,9 @@ export function PlayDetailPage() {
         <div className="content-head wrap-mobile">
           <div>
             <h3>repo</h3>
-            <p className="sub-copy">支持 Markdown、普通换行分段、图床链接缩略图。提交后进入独立审核池。</p>
+            <p className="sub-copy">
+              支持 Markdown、普通换行分段、图床链接缩略图。提交后进入独立审核池。
+            </p>
           </div>
           <div className="repo-toolbar-row">
             <div className="repo-sort-group">
@@ -402,7 +430,11 @@ export function PlayDetailPage() {
               <div className="stack-gap-sm">
                 <div className="inline-actions wrap-mobile author-history-inline">
                   <span className="content-meta">历史昵称 {repoNicknameHistory.length} 个</span>
-                  <button className="button ghost" onClick={handleClearRepoNicknameHistory} type="button">
+                  <button
+                    className="button ghost"
+                    onClick={handleClearRepoNicknameHistory}
+                    type="button"
+                  >
                     清空昵称历史
                   </button>
                 </div>
@@ -438,14 +470,21 @@ export function PlayDetailPage() {
                 rows={5}
                 value={repoContent}
                 onChange={(event) => setRepoContent(event.target.value)}
-                placeholder={'写下 repo。示例：\n普通换行会自动分段\n![图](https://example.com/a.jpg)'}
+                placeholder={
+                  '写下 repo。示例：\n普通换行会自动分段\n![图](https://example.com/a.jpg)'
+                }
               />
             </label>
             <div className="inline-actions wrap-mobile repo-composer-actions">
               <button className="button ghost" onClick={closeRepoComposer} type="button">
                 取消
               </button>
-              <button className="button primary" disabled={repoSubmitting} onClick={() => void handleSubmitRepo()} type="button">
+              <button
+                className="button primary"
+                disabled={repoSubmitting}
+                onClick={() => void handleSubmitRepo()}
+                type="button"
+              >
                 {repoSubmitting ? '提交中' : '提交 repo'}
               </button>
             </div>
@@ -467,7 +506,11 @@ export function PlayDetailPage() {
                       {formatDate(repo.createdAt)}
                     </span>
                   </div>
-                  <button className="button secondary repo-reply-button" onClick={() => openRepoComposer(repo.id)} type="button">
+                  <button
+                    className="button secondary repo-reply-button"
+                    onClick={() => openRepoComposer(repo.id)}
+                    type="button"
+                  >
                     回复
                   </button>
                 </div>

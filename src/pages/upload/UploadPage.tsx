@@ -1,5 +1,9 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { countPlayBatchItems, detectPlayTitleFromContent, parsePlayBatchText } from '../../services/play-text';
+import {
+  countPlayBatchItems,
+  detectPlayTitleFromContent,
+  parsePlayBatchText,
+} from '../../services/play-text';
 import {
   clearAuthorHistory,
   clearSubmissionHistory,
@@ -101,11 +105,15 @@ export function UploadPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
-  const [categoryTagsOpen, setCategoryTagsOpen] = useState(() => readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true));
+  const [categoryTagsOpen, setCategoryTagsOpen] = useState(() =>
+    readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true),
+  );
   const [authorHistory, setAuthorHistory] = useState<string[]>([]);
   const [submissionHistory, setSubmissionHistory] = useState<BrowserSubmissionRecord[]>([]);
   const [editingHistoryId, setEditingHistoryId] = useState('');
-  const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(
+    null,
+  );
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
 
   const singleDisabled = useMemo(
@@ -113,7 +121,10 @@ export function UploadPage() {
     [form, submitting],
   );
 
-  const batchDisabled = useMemo(() => submitting || batchItemCount === 0, [batchItemCount, submitting]);
+  const batchDisabled = useMemo(
+    () => submitting || batchItemCount === 0,
+    [batchItemCount, submitting],
+  );
 
   useEffect(() => {
     const loadTags = async () => {
@@ -231,6 +242,7 @@ export function UploadPage() {
         createdPlays.length > 0
           ? `已成功提交 ${createdPlays.length}/${items.length} 篇，剩余内容上传中断：${baseMessage}`
           : baseMessage,
+        { cause: reason },
       );
     } finally {
       setBatchProgress(null);
@@ -366,11 +378,16 @@ export function UploadPage() {
           <div className="field-grid">
             <label>
               <span>作者</span>
-              <ClearableField onClear={() => setForm((current) => ({ ...current, authorName: '' }))} visible={Boolean(form.authorName)}>
+              <ClearableField
+                onClear={() => setForm((current) => ({ ...current, authorName: '' }))}
+                visible={Boolean(form.authorName)}
+              >
                 <input
                   list="author-history"
                   value={form.authorName}
-                  onChange={(event) => setForm((current) => ({ ...current, authorName: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, authorName: event.target.value }))
+                  }
                   placeholder="在这里签下名字吧，我会乖乖记住"
                 />
               </ClearableField>
@@ -423,11 +440,16 @@ export function UploadPage() {
                     </button>
                   ) : null}
                 </div>
-                <ClearableField onClear={() => setForm((current) => ({ ...current, category: '' }))} visible={Boolean(form.category)}>
+                <ClearableField
+                  onClear={() => setForm((current) => ({ ...current, category: '' }))}
+                  visible={Boolean(form.category)}
+                >
                   <input
                     list="category-tags"
                     value={form.category}
-                    onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, category: event.target.value }))
+                    }
                     placeholder={`可自定义分类，不填会自动记为 ${DEFAULT_CATEGORY}`}
                   />
                 </ClearableField>
@@ -467,14 +489,23 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>标题</span>
-                  <button className="text-button field-inline-action" onClick={handleDetectTitle} type="button">
+                  <button
+                    className="text-button field-inline-action"
+                    onClick={handleDetectTitle}
+                    type="button"
+                  >
                     识别标题
                   </button>
                 </div>
-                <ClearableField onClear={() => setForm((current) => ({ ...current, title: '' }))} visible={Boolean(form.title)}>
+                <ClearableField
+                  onClear={() => setForm((current) => ({ ...current, title: '' }))}
+                  visible={Boolean(form.title)}
+                >
                   <input
                     value={form.title}
-                    onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, title: event.target.value }))
+                    }
                     placeholder="想给这个故事，定一个怎样的标题呢？"
                   />
                 </ClearableField>
@@ -482,10 +513,15 @@ export function UploadPage() {
 
               <label>
                 <span>简介（可空）</span>
-                <ClearableField onClear={() => setForm((current) => ({ ...current, summary: '' }))} visible={Boolean(form.summary)}>
+                <ClearableField
+                  onClear={() => setForm((current) => ({ ...current, summary: '' }))}
+                  visible={Boolean(form.summary)}
+                >
                   <input
                     value={form.summary}
-                    onChange={(event) => setForm((current) => ({ ...current, summary: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, summary: event.target.value }))
+                    }
                     placeholder="不填也可以，列表卡片会直接隐藏简介"
                   />
                 </ClearableField>
@@ -493,11 +529,16 @@ export function UploadPage() {
 
               <label>
                 <span>内容</span>
-                <ClearableField onClear={() => setForm((current) => ({ ...current, content: '' }))} visible={Boolean(form.content)}>
+                <ClearableField
+                  onClear={() => setForm((current) => ({ ...current, content: '' }))}
+                  visible={Boolean(form.content)}
+                >
                   <textarea
                     rows={12}
                     value={form.content}
-                    onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, content: event.target.value }))
+                    }
                     placeholder="把正文填在这里，我会逐字逐句地认真看"
                   />
                 </ClearableField>
@@ -520,7 +561,11 @@ export function UploadPage() {
               <div className="inline-actions wrap-mobile upload-batch-action-row">
                 <label className="button secondary file-button">
                   <span>上传 txt</span>
-                  <input accept=".txt,text/plain" onChange={(event) => void handleTextFile(event.target.files?.[0])} type="file" />
+                  <input
+                    accept=".txt,text/plain"
+                    onChange={(event) => void handleTextFile(event.target.files?.[0])}
+                    type="file"
+                  />
                 </label>
                 <button className="button primary" disabled={batchDisabled} type="submit">
                   {submitting
@@ -539,19 +584,31 @@ export function UploadPage() {
                 </p>
               ) : null}
               {submitting && batchProgress ? (
-                <p className="content-meta">正在依次上传 {batchProgress.completed}/{batchProgress.total} 篇，请先别关闭页面。</p>
+                <p className="content-meta">
+                  正在依次上传 {batchProgress.completed}/{batchProgress.total} 篇，请先别关闭页面。
+                </p>
               ) : null}
             </div>
           )}
 
-          <div className={`action-bar wrap-mobile ${editingHistoryId ? 'action-bar-half' : 'action-bar-single'}`}>
+          <div
+            className={`action-bar wrap-mobile ${editingHistoryId ? 'action-bar-half' : 'action-bar-single'}`}
+          >
             {editingHistoryId ? (
-              <button className="button ghost upload-reset-button" onClick={resetEditingState} type="button">
+              <button
+                className="button ghost upload-reset-button"
+                onClick={resetEditingState}
+                type="button"
+              >
                 取消回填
               </button>
             ) : null}
             {mode === 'single' ? (
-              <button className="button primary upload-submit-button" disabled={singleDisabled} type="submit">
+              <button
+                className="button primary upload-submit-button"
+                disabled={singleDisabled}
+                type="submit"
+              >
                 {submitting ? '提交中...' : editingHistoryId ? '重新投稿' : '上传小剧场'}
               </button>
             ) : null}
@@ -574,13 +631,19 @@ export function UploadPage() {
               </div>
               <div className="inline-actions wrap-mobile review-log-head-row">
                 {submissionHistory.length > 0 ? (
-                  <button className="button ghost upload-history-clear-button" onClick={handleClearSubmissionHistory} type="button">
+                  <button
+                    className="button ghost upload-history-clear-button"
+                    onClick={handleClearSubmissionHistory}
+                    type="button"
+                  >
                     清空
                   </button>
                 ) : null}
               </div>
             </div>
-            <p className="sub-copy">仅保存在当前浏览器，可再次回填，并自动同步最新审核结果与审核备注。</p>
+            <p className="sub-copy">
+              仅保存在当前浏览器，可再次回填，并自动同步最新审核结果与审核备注。
+            </p>
           </div>
 
           {submissionHistory.length === 0 ? (
@@ -599,11 +662,15 @@ export function UploadPage() {
                       <div className="card-topline">
                         <span>{record.category || DEFAULT_CATEGORY}</span>
                         {record.latestFeedback ? (
-                          <span className={`status-tag ${record.latestFeedback.status === 'missing' ? 'offline' : record.latestFeedback.status}`}>
+                          <span
+                            className={`status-tag ${record.latestFeedback.status === 'missing' ? 'offline' : record.latestFeedback.status}`}
+                          >
                             {feedbackLabelMap[record.latestFeedback.status]}
                           </span>
                         ) : (
-                          <span>{active ? '当前回填中' : `已投稿 ${record.submissionCount} 次`}</span>
+                          <span>
+                            {active ? '当前回填中' : `已投稿 ${record.submissionCount} 次`}
+                          </span>
                         )}
                       </div>
                       <div className="stack-gap-md">
@@ -613,7 +680,9 @@ export function UploadPage() {
                       {record.latestFeedback ? (
                         <div className="stack-gap-sm">
                           <span className="content-meta">
-                            {record.latestFeedback.status === 'pending' ? '当前还在等待审核。' : '最新处理结果'}
+                            {record.latestFeedback.status === 'pending'
+                              ? '当前还在等待审核。'
+                              : '最新处理结果'}
                           </span>
                           <p className="sub-copy">
                             {record.latestFeedback.reviewNote ||
@@ -625,7 +694,8 @@ export function UploadPage() {
                                     ? '已下线，广场已隐藏。'
                                     : '')}
                           </p>
-                          {record.latestFeedback.editedFields && record.latestFeedback.editedFields.length > 0 ? (
+                          {record.latestFeedback.editedFields &&
+                          record.latestFeedback.editedFields.length > 0 ? (
                             <p className="sub-copy">
                               后台已调整：
                               {record.latestFeedback.editedFields
@@ -648,10 +718,18 @@ export function UploadPage() {
                       </div>
                     </div>
                     <div className="inline-actions wrap-mobile submission-action-row">
-                      <button className="button secondary" onClick={() => handleReuseSubmission(record)} type="button">
+                      <button
+                        className="button secondary"
+                        onClick={() => handleReuseSubmission(record)}
+                        type="button"
+                      >
                         再次投稿
                       </button>
-                      <button className="button ghost" onClick={() => handleDeleteSubmission(record)} type="button">
+                      <button
+                        className="button ghost"
+                        onClick={() => handleDeleteSubmission(record)}
+                        type="button"
+                      >
                         删除本地记录
                       </button>
                     </div>

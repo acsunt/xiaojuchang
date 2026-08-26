@@ -1,5 +1,18 @@
-import { makeId, normalizePlay, normalizeReviewLog, now, validPlayStatuses, type PlayStatus, type ReviewAction } from './http';
-import { chunkItems, D1_BACKUP_INSERT_CHUNK_SIZE, D1_BULK_REVIEW_PLAY_CHUNK_SIZE, D1_SELECT_CHUNK_SIZE } from './db-utils';
+import {
+  makeId,
+  normalizePlay,
+  normalizeReviewLog,
+  now,
+  validPlayStatuses,
+  type PlayStatus,
+  type ReviewAction,
+} from './http';
+import {
+  chunkItems,
+  D1_BACKUP_INSERT_CHUNK_SIZE,
+  D1_BULK_REVIEW_PLAY_CHUNK_SIZE,
+  D1_SELECT_CHUNK_SIZE,
+} from './db-utils';
 import { ensureTagByName } from './tags';
 
 type PlayDraft = {
@@ -108,7 +121,10 @@ export const getPublicPlayById = async (db: D1Database, id: string) => {
 };
 
 export const listSubmissionFeedbackByIds = async (db: D1Database, ids: string[]) => {
-  const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(0, 60);
+  const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(
+    0,
+    60,
+  );
   if (normalizedIds.length === 0) {
     return [] as Array<{
       playId: string;
@@ -195,11 +211,13 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
 
 export const listAdminPlays = async (db: D1Database, status?: PlayStatus) => {
   const statement = status
-    ? db.prepare(
-        `SELECT * FROM plays
+    ? db
+        .prepare(
+          `SELECT * FROM plays
          WHERE status = ?
          ORDER BY updated_at DESC`,
-      ).bind(status)
+        )
+        .bind(status)
     : db.prepare(
         `SELECT * FROM plays
          ORDER BY updated_at DESC`,
@@ -285,7 +303,11 @@ export const clearReviewLogs = async (db: D1Database, playId: string) => {
   return true;
 };
 
-export const updateAdminPlay = async (db: D1Database, playId: string, draft: AdminPlayEditDraft) => {
+export const updateAdminPlay = async (
+  db: D1Database,
+  playId: string,
+  draft: AdminPlayEditDraft,
+) => {
   const currentPlay = await getAdminPlayById(db, playId);
   if (!currentPlay) {
     return null;
@@ -293,7 +315,8 @@ export const updateAdminPlay = async (db: D1Database, playId: string, draft: Adm
 
   const nextTitle = String(draft.title ?? currentPlay.title).trim();
   const nextAuthorName = String(draft.authorName ?? currentPlay.authorName).trim();
-  const nextCategory = String(draft.category ?? currentPlay.category).trim() || currentPlay.category;
+  const nextCategory =
+    String(draft.category ?? currentPlay.category).trim() || currentPlay.category;
   const nextSummary = normalizeImportedSummary(String(draft.summary ?? currentPlay.summary));
   const nextContent = String(draft.content ?? currentPlay.content).trim();
 
@@ -393,7 +416,8 @@ export const reviewPlay = async (
   const reviewNote = input.note || '无备注';
   const nextTitle = String(input.edit?.title ?? currentPlay.title).trim();
   const nextAuthorName = String(input.edit?.authorName ?? currentPlay.authorName).trim();
-  const nextCategory = String(input.edit?.category ?? currentPlay.category).trim() || currentPlay.category;
+  const nextCategory =
+    String(input.edit?.category ?? currentPlay.category).trim() || currentPlay.category;
   const nextSummary = normalizeImportedSummary(String(input.edit?.summary ?? currentPlay.summary));
   const nextContent = String(input.edit?.content ?? currentPlay.content).trim();
 
@@ -418,7 +442,18 @@ export const reviewPlay = async (
          SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
          WHERE id = ?`,
       )
-      .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, mappedStatus, reviewNote, timestamp, timestamp, input.playId),
+      .bind(
+        nextTitle,
+        nextAuthorName,
+        nextCategory,
+        nextSummary,
+        nextContent,
+        mappedStatus,
+        reviewNote,
+        timestamp,
+        timestamp,
+        input.playId,
+      ),
     db
       .prepare(
         `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)

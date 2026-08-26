@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { reorderTags } from '../db';
 import { CORE_SCHEMA_SQL, createTestD1 } from './test-d1';
 
-const insertTag = (db: ReturnType<typeof createTestD1>, id: string, name: string, sortOrder: number) => {
+const insertTag = (
+  db: ReturnType<typeof createTestD1>,
+  id: string,
+  name: string,
+  sortOrder: number,
+) => {
   db.sqlite
     .prepare(
       `INSERT INTO tags (id, name, sort_order, created_at, updated_at)
@@ -39,15 +44,15 @@ describe('reorderTags', () => {
   });
 
   it('传入的 id 里存在重复时应拒绝', async () => {
-    await expect(
-      reorderTags(db, { orderedIds: ['tag_a', 'tag_a', 'tag_b'] }),
-    ).rejects.toThrow('数据无效');
+    await expect(reorderTags(db, { orderedIds: ['tag_a', 'tag_a', 'tag_b'] })).rejects.toThrow(
+      '数据无效',
+    );
   });
 
   it('传入不存在的标签 id 时应拒绝', async () => {
-    await expect(
-      reorderTags(db, { orderedIds: ['tag_a', 'tag_b', 'tag_ghost'] }),
-    ).rejects.toThrow('数据无效');
+    await expect(reorderTags(db, { orderedIds: ['tag_a', 'tag_b', 'tag_ghost'] })).rejects.toThrow(
+      '数据无效',
+    );
   });
 
   it('传入的 id 带有多余空白时会被自动 trim', async () => {

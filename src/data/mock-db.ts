@@ -112,7 +112,7 @@ const seedSiteSettings: SiteSettings = {
   updatedAt: now(),
 };
 
-const readStore = <T,>(key: string, fallback: T): T => {
+const readStore = <T>(key: string, fallback: T): T => {
   const raw = localStorage.getItem(key);
   if (!raw) {
     localStorage.setItem(key, JSON.stringify(fallback));
@@ -127,7 +127,7 @@ const readStore = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const writeStore = <T,>(key: string, value: T) => {
+const writeStore = <T>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
@@ -143,7 +143,8 @@ const setPlays = (plays: Play[]) => {
 };
 const getReviewLogs = () => readStore<ReviewLog[]>(REVIEW_LOG_STORE_KEY, seedReviewLogs);
 const setReviewLogs = (logs: ReviewLog[]) => writeStore(REVIEW_LOG_STORE_KEY, logs);
-const getRepoReviewLogs = () => readStore<RepoAuditLog[]>(REPO_REVIEW_LOG_STORE_KEY, seedRepoReviewLogs);
+const getRepoReviewLogs = () =>
+  readStore<RepoAuditLog[]>(REPO_REVIEW_LOG_STORE_KEY, seedRepoReviewLogs);
 const setRepoReviewLogs = (logs: RepoAuditLog[]) => writeStore(REPO_REVIEW_LOG_STORE_KEY, logs);
 const getRepos = () => readStore<Repo[]>(REPO_STORE_KEY, []);
 const setRepos = (repos: Repo[]) => writeStore(REPO_STORE_KEY, repos);
@@ -228,7 +229,9 @@ export const mockDb = {
   },
 
   getTags() {
-    return getTags().sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'));
+    return getTags().sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'),
+    );
   },
 
   getSiteSettings() {
@@ -322,7 +325,9 @@ export const mockDb = {
       throw new Error('小剧场不存在，或尚未通过审核');
     }
 
-    const parent = draft.parentId ? getRepos().find((repo) => repo.id === draft.parentId && repo.playId === draft.playId) : null;
+    const parent = draft.parentId
+      ? getRepos().find((repo) => repo.id === draft.parentId && repo.playId === draft.playId)
+      : null;
     const createdAt = now();
     const repo: Repo = {
       id: makeId('repo'),
@@ -347,11 +352,18 @@ export const mockDb = {
 
   getRepoCounts(playIds: string[]) {
     const playIdSet = new Set(playIds);
-    const summaryMap = new Map<string, { count: number; firstCreatedAt?: string; lastCreatedAt?: string }>();
+    const summaryMap = new Map<
+      string,
+      { count: number; firstCreatedAt?: string; lastCreatedAt?: string }
+    >();
     getRepos()
       .filter((repo) => repo.status === 'approved' && playIdSet.has(repo.playId))
       .forEach((repo) => {
-        const current = summaryMap.get(repo.playId) ?? { count: 0, firstCreatedAt: undefined, lastCreatedAt: undefined };
+        const current = summaryMap.get(repo.playId) ?? {
+          count: 0,
+          firstCreatedAt: undefined,
+          lastCreatedAt: undefined,
+        };
         summaryMap.set(repo.playId, {
           count: current.count + 1,
           firstCreatedAt:
@@ -378,7 +390,8 @@ export const mockDb = {
     const readTime = readAt ? new Date(readAt).getTime() : 0;
     return {
       receivedCount: receivedRepos.length,
-      unreadCount: receivedRepos.filter((repo) => new Date(repo.createdAt).getTime() > readTime).length,
+      unreadCount: receivedRepos.filter((repo) => new Date(repo.createdAt).getTime() > readTime)
+        .length,
     };
   },
 
@@ -520,7 +533,9 @@ export const mockDb = {
       .map((tag, index) => ({ ...tag, sortOrder: index }));
     const timestamp = now();
     const nextPlays = getPlays().map((play) =>
-      play.category === target.name ? { ...play, category: DEFAULT_CATEGORY, updatedAt: timestamp } : play,
+      play.category === target.name
+        ? { ...play, category: DEFAULT_CATEGORY, updatedAt: timestamp }
+        : play,
     );
 
     setTags(nextTags);
@@ -571,7 +586,13 @@ export const mockDb = {
 
   updateAdminPlay(
     playId: string,
-    edit: { title?: string; authorName?: string; category?: string; summary?: string; content?: string },
+    edit: {
+      title?: string;
+      authorName?: string;
+      category?: string;
+      summary?: string;
+      content?: string;
+    },
   ): Play | null {
     const currentPlay = this.getAdminPlayById(playId);
     if (!currentPlay) {
@@ -580,7 +601,8 @@ export const mockDb = {
 
     const nextTitle = String(edit.title ?? currentPlay.title).trim();
     const nextAuthorName = String(edit.authorName ?? currentPlay.authorName).trim();
-    const nextCategory = String(edit.category ?? currentPlay.category).trim() || currentPlay.category;
+    const nextCategory =
+      String(edit.category ?? currentPlay.category).trim() || currentPlay.category;
     const nextSummary = normalizeImportedSummary(String(edit.summary ?? currentPlay.summary));
     const nextContent = String(edit.content ?? currentPlay.content).trim();
 
@@ -621,7 +643,13 @@ export const mockDb = {
     playId: string,
     action: ReviewAction,
     note: string,
-    edit?: { title?: string; authorName?: string; category?: string; summary?: string; content?: string },
+    edit?: {
+      title?: string;
+      authorName?: string;
+      category?: string;
+      summary?: string;
+      content?: string;
+    },
   ): Play | null {
     const session = this.getSession();
     if (!session) {
@@ -638,7 +666,8 @@ export const mockDb = {
     const timestamp = now();
     const nextTitle = String(edit?.title ?? currentPlay.title).trim();
     const nextAuthorName = String(edit?.authorName ?? currentPlay.authorName).trim();
-    const nextCategory = String(edit?.category ?? currentPlay.category).trim() || currentPlay.category;
+    const nextCategory =
+      String(edit?.category ?? currentPlay.category).trim() || currentPlay.category;
     const nextSummary = normalizeImportedSummary(String(edit?.summary ?? currentPlay.summary));
     const nextContent = String(edit?.content ?? currentPlay.content).trim();
 
@@ -760,7 +789,11 @@ export const mockDb = {
       },
       ...getRepoReviewLogs(),
     ]);
-    setRepos(getRepos().filter((repo) => repo.id !== repoId && repo.parentId !== repoId && repo.rootId !== repoId));
+    setRepos(
+      getRepos().filter(
+        (repo) => repo.id !== repoId && repo.parentId !== repoId && repo.rootId !== repoId,
+      ),
+    );
   },
 
   deleteRejectedReposByVisitor(visitorId: string): number {
@@ -769,7 +802,11 @@ export const mockDb = {
       return 0;
     }
     const before = getRepos().length;
-    setRepos(getRepos().filter((repo) => !(repo.visitorId === normalizedVisitorId && repo.status === 'rejected')));
+    setRepos(
+      getRepos().filter(
+        (repo) => !(repo.visitorId === normalizedVisitorId && repo.status === 'rejected'),
+      ),
+    );
     return before - getRepos().length;
   },
 
@@ -800,7 +837,9 @@ export const mockDb = {
       action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'offline';
 
     if (mappedStatus === 'approved') {
-      currentPlays.filter((play) => idSet.has(play.id)).forEach((play) => ensureTagName(play.category));
+      currentPlays
+        .filter((play) => idSet.has(play.id))
+        .forEach((play) => ensureTagName(play.category));
     }
 
     if (updatedIds.length > 0) {
@@ -817,17 +856,15 @@ export const mockDb = {
           : play,
       );
       const nextLogs = [
-        ...updatedIds.map(
-          (playId): ReviewLog => ({
-            id: makeId('review'),
-            playId,
-            action,
-            operator: session.username,
-            note: reviewNote,
-            createdAt: timestamp,
-            playTitle: currentPlays.find((play) => play.id === playId)?.title,
-          }),
-        ),
+        ...updatedIds.map((playId): ReviewLog => ({
+          id: makeId('review'),
+          playId,
+          action,
+          operator: session.username,
+          note: reviewNote,
+          createdAt: timestamp,
+          playTitle: currentPlays.find((play) => play.id === playId)?.title,
+        })),
         ...getReviewLogs(),
       ];
 
@@ -846,10 +883,12 @@ export const mockDb = {
 
   getReviewLogs(playId: string) {
     const playTitleMap = new Map(getPlays().map((play) => [play.id, play.title]));
-    return getReviewLogs().filter((log) => log.playId === playId).map((log) => ({
-      ...log,
-      playTitle: log.playTitle ?? playTitleMap.get(log.playId),
-    }));
+    return getReviewLogs()
+      .filter((log) => log.playId === playId)
+      .map((log) => ({
+        ...log,
+        playTitle: log.playTitle ?? playTitleMap.get(log.playId),
+      }));
   },
 
   getAllPlayReviewLogs() {

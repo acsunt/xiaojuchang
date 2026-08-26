@@ -45,9 +45,10 @@ export const onRequestPost: PagesFunction = async ({ params, request, env }) => 
     action,
     note,
     operator: session.username,
-    edit: hasTitle || hasAuthorName || hasCategory || hasSummary || hasContent
-      ? { title, authorName, category, summary, content }
-      : undefined,
+    edit:
+      hasTitle || hasAuthorName || hasCategory || hasSummary || hasContent
+        ? { title, authorName, category, summary, content }
+        : undefined,
   });
 
   if (!updatedPlay) {

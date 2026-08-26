@@ -37,7 +37,9 @@ describe('deletePlay', () => {
 
     expect(result).toBe(true);
     expect(db.sqlite.prepare('SELECT * FROM plays WHERE id = ?').get('play_1')).toBeFalsy();
-    expect(db.sqlite.prepare('SELECT * FROM review_logs WHERE play_id = ?').all('play_1')).toHaveLength(0);
+    expect(
+      db.sqlite.prepare('SELECT * FROM review_logs WHERE play_id = ?').all('play_1'),
+    ).toHaveLength(0);
   });
 
   it('删除不存在的内容时返回 false，不影响其他数据', async () => {
@@ -48,7 +50,9 @@ describe('deletePlay', () => {
 
     expect(result).toBe(false);
     expect(db.sqlite.prepare('SELECT * FROM plays WHERE id = ?').get('play_keep')).toBeTruthy();
-    expect(db.sqlite.prepare('SELECT * FROM review_logs WHERE id = ?').get('log_keep')).toBeTruthy();
+    expect(
+      db.sqlite.prepare('SELECT * FROM review_logs WHERE id = ?').get('log_keep'),
+    ).toBeTruthy();
   });
 
   it('删除一篇内容不会影响其他内容及其审核日志', async () => {

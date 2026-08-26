@@ -34,7 +34,12 @@ const DEFAULT_MERGED_BACKUP_ARCHIVE_NAME = '导出作者和分类.zip';
 
 const safeBackupPathSegment = (value: string, fallback: string) => {
   const normalized = value.trim() || fallback;
-  return normalized.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').slice(0, 80) || fallback;
+  return (
+    normalized
+      .replace(/[\\/:*?"<>|]/g, '_')
+      .replace(/\s+/g, ' ')
+      .slice(0, 80) || fallback
+  );
 };
 
 const splitBlocks = (source: string) =>
@@ -117,8 +122,17 @@ const makeBackupFileText = (status: PlayStatus, plays: Play[]) =>
 
 const makeTagsFileText = (tags: Tag[]) =>
   [...tags]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, 'zh-CN'))
-    .map((tag) => [`${MARKER_PREFIX}${tag.name}`, `${TAG_NAME_PREFIX} ${escapeInlineValue(tag.name)}`, `${TAG_SORT_ORDER_PREFIX} ${tag.sortOrder}`].join('\n'))
+    .sort(
+      (left, right) =>
+        left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, 'zh-CN'),
+    )
+    .map((tag) =>
+      [
+        `${MARKER_PREFIX}${tag.name}`,
+        `${TAG_NAME_PREFIX} ${escapeInlineValue(tag.name)}`,
+        `${TAG_SORT_ORDER_PREFIX} ${tag.sortOrder}`,
+      ].join('\n'),
+    )
     .join('\n\n');
 
 export const createBackupArchive = (plays: Play[], tags: Tag[] = []) => {
@@ -144,7 +158,9 @@ const groupPlaysBy = (plays: Play[], getKey: (play: Play) => string) => {
     groups.set(key, [...(groups.get(key) ?? []), play]);
   });
 
-  return [...groups.entries()].sort(([leftName], [rightName]) => leftName.localeCompare(rightName, 'zh-CN'));
+  return [...groups.entries()].sort(([leftName], [rightName]) =>
+    leftName.localeCompare(rightName, 'zh-CN'),
+  );
 };
 
 const makeGroupedTextFiles = (
@@ -222,12 +238,15 @@ const parseBackupText = (source: string, expectedStatus: PlayStatus) => {
       }
 
       if (line.startsWith(CATEGORY_PREFIX)) {
-        category = unescapeInlineValue(line.slice(CATEGORY_PREFIX.length).trim()) || DEFAULT_CATEGORY;
+        category =
+          unescapeInlineValue(line.slice(CATEGORY_PREFIX.length).trim()) || DEFAULT_CATEGORY;
         continue;
       }
 
       if (line.startsWith(SUMMARY_PREFIX)) {
-        summary = normalizeImportedSummary(unescapeInlineValue(line.slice(SUMMARY_PREFIX.length).trim()));
+        summary = normalizeImportedSummary(
+          unescapeInlineValue(line.slice(SUMMARY_PREFIX.length).trim()),
+        );
         continue;
       }
 
@@ -286,7 +305,9 @@ const parseBackupText = (source: string, expectedStatus: PlayStatus) => {
       status,
       createdAt: normalizeTimestamp(createdAt, timestampFallback),
       updatedAt: normalizeTimestamp(updatedAt, normalizeTimestamp(createdAt, timestampFallback)),
-      reviewedAt: reviewedAt.trim() ? normalizeTimestamp(reviewedAt, normalizeTimestamp(updatedAt, timestampFallback)) : undefined,
+      reviewedAt: reviewedAt.trim()
+        ? normalizeTimestamp(reviewedAt, normalizeTimestamp(updatedAt, timestampFallback))
+        : undefined,
       reviewNote: reviewNote.trim() || undefined,
     } satisfies Play;
   });
@@ -323,7 +344,10 @@ export const downloadBackupArchive = (plays: Play[], tags: Tag[] = []) => {
   URL.revokeObjectURL(url);
 };
 
-export const downloadMergedBackupArchive = (plays: Play[], options: BackupRecordTextOptions = {}) => {
+export const downloadMergedBackupArchive = (
+  plays: Play[],
+  options: BackupRecordTextOptions = {},
+) => {
   const archive = createMergedBackupArchive(plays, options);
   const url = URL.createObjectURL(archive);
   const anchor = document.createElement('a');

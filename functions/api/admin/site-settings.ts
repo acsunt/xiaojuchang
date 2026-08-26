@@ -22,7 +22,10 @@ type SiteSettingsPayload = {
   dark?: ThemeBackgroundPayload;
 };
 
-const normalizeBackgroundDevicePayload = (payload: BackgroundDevicePayload | undefined, overlayOpacity: number) => ({
+const normalizeBackgroundDevicePayload = (
+  payload: BackgroundDevicePayload | undefined,
+  overlayOpacity: number,
+) => ({
   backgroundUrl: String(payload?.backgroundUrl ?? ''),
   crop: {
     positionX: Number(payload?.crop?.positionX ?? 50),
@@ -33,7 +36,10 @@ const normalizeBackgroundDevicePayload = (payload: BackgroundDevicePayload | und
   },
 });
 
-const normalizeThemeBackgroundPayload = (payload: ThemeBackgroundPayload | undefined, overlayOpacity: number) => {
+const normalizeThemeBackgroundPayload = (
+  payload: ThemeBackgroundPayload | undefined,
+  overlayOpacity: number,
+) => {
   const legacyBackground = normalizeBackgroundDevicePayload(payload, overlayOpacity);
   return {
     desktop: normalizeBackgroundDevicePayload(payload?.desktop ?? legacyBackground, overlayOpacity),

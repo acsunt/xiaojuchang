@@ -9,9 +9,10 @@ const OWNED_PLAY_IDS_KEY = 'mini-theater:owned-play-ids';
 export const REPO_NOTICE_UPDATED_EVENT = 'mini-theater:repo-notice-updated';
 const MAX_REPO_NICKNAME_HISTORY = 12;
 
-const makeVisitorId = () => `visitor_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+const makeVisitorId = () =>
+  `visitor_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 
-const readJsonStore = <T,>(key: string, fallback: T): T => {
+const readJsonStore = <T>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') {
     return fallback;
   }
@@ -28,7 +29,7 @@ const readJsonStore = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const writeJsonStore = <T,>(key: string, value: T) => {
+const writeJsonStore = <T>(key: string, value: T) => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -70,10 +71,10 @@ export const rememberRepoNickname = (nickname: string) => {
     return getRepoNicknameHistory();
   }
 
-  const nextHistory = [normalized, ...getRepoNicknameHistory().filter((item) => item !== normalized)].slice(
-    0,
-    MAX_REPO_NICKNAME_HISTORY,
-  );
+  const nextHistory = [
+    normalized,
+    ...getRepoNicknameHistory().filter((item) => item !== normalized),
+  ].slice(0, MAX_REPO_NICKNAME_HISTORY);
   writeJsonStore(REPO_NICKNAME_HISTORY_KEY, nextHistory);
   return nextHistory;
 };
@@ -111,8 +112,7 @@ export const getOwnedPlayIdsFromSubmissionHistory = () =>
 // 与投稿记录不同：清空投稿记录不会清空此存储，
 // 保证用户清空投稿记录后仍能收到这些作品的 repo 提醒。
 
-const readOwnedPlayIdsStore = (): string[] =>
-  readJsonStore<string[]>(OWNED_PLAY_IDS_KEY, []);
+const readOwnedPlayIdsStore = (): string[] => readJsonStore<string[]>(OWNED_PLAY_IDS_KEY, []);
 
 const writeOwnedPlayIdsStore = (ids: string[]) => {
   writeJsonStore(OWNED_PLAY_IDS_KEY, ids);
@@ -135,6 +135,4 @@ export const rememberOwnedPlayId = (playId: string) => {
 };
 
 export const getOwnedPlayIds = () =>
-  Array.from(
-    new Set([...getOwnedPlayIdsFromSubmissionHistory(), ...readOwnedPlayIdsStore()]),
-  );
+  Array.from(new Set([...getOwnedPlayIdsFromSubmissionHistory(), ...readOwnedPlayIdsStore()]));

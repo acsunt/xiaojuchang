@@ -9,6 +9,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "deploy": "npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true"
   },
   "dependencies": {
@@ -17,11 +21,19 @@
     "react-router-dom": "latest"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
     "typescript": "latest",
+    "typescript-eslint": "^8.68.0",
     "vite": "latest",
     "vitest": "^4.1.11"
   }

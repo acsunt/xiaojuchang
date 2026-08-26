@@ -39,7 +39,7 @@ const fetchCurrentHtml = async (): Promise<string | null> => {
   }
 };
 
-const useDismissed = () => {
+const isDismissed = () => {
   if (typeof window === 'undefined') {
     return false;
   }
@@ -57,7 +57,7 @@ export function useUpdateNotifier() {
   const initialAssetsRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || useDismissed()) {
+    if (typeof window === 'undefined' || isDismissed()) {
       return;
     }
 
@@ -127,7 +127,7 @@ export function useAdminUpdateNotifier() {
   const initialAssetsRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || useDismissed()) {
+    if (typeof window === 'undefined' || isDismissed()) {
       return;
     }
 

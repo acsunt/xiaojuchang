@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 15px;
   line-height: 1.45;
   font-weight: 400;
@@ -134,7 +134,9 @@ select {
   background-position:
     calc(100% - 22px) calc(50% - 2px),
     calc(100% - 16px) calc(50% - 2px);
-  background-size: 6px 6px, 6px 6px;
+  background-size:
+    6px 6px,
+    6px 6px;
   background-repeat: no-repeat;
   padding-right: 38px;
 }
@@ -552,14 +554,13 @@ textarea {
 
 pre {
   margin: 0;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 .app-shell {
   width: min(1280px, calc(100% - 32px));
   margin: 0 auto;
-  padding:
-    calc(env(safe-area-inset-top, 0px) + 12px) 0
+  padding: calc(env(safe-area-inset-top, 0px) + 12px) 0
     calc(env(safe-area-inset-bottom, 0px) + 32px);
   padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
 }
@@ -2054,7 +2055,7 @@ label {
   padding: 10px 12px;
   border-radius: 12px;
   background: rgba(255, 95, 109, 0.12);
-  border: 1px solid rgba(255, 95, 109, 0.30);
+  border: 1px solid rgba(255, 95, 109, 0.3);
   color: #ffd0d0;
   font-size: 14px;
   line-height: 1.6;
@@ -2066,7 +2067,7 @@ label {
 }
 
 :root[data-theme='light'] .repo-reject-note {
-  background: rgba(196, 51, 71, 0.10);
+  background: rgba(196, 51, 71, 0.1);
   border-color: rgba(196, 51, 71, 0.26);
   color: #6e2330;
 }
@@ -2317,7 +2318,6 @@ label {
 .repo-image-nav-next {
   right: 16px;
 }
-
 
 @media (min-width: 721px) {
   .review-layout-wide {
@@ -2767,7 +2767,9 @@ label {
   line-height: 1;
   opacity: 0.34;
   filter: grayscale(100%);
-  transition: opacity 160ms ease, filter 160ms ease;
+  transition:
+    opacity 160ms ease,
+    filter 160ms ease;
 }
 .play-marker-menu .play-marker-icon.is-active.disliked .marker-broken-heart-icon {
   opacity: 1;

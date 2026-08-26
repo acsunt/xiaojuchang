@@ -18,7 +18,9 @@ export const sortPlayVersions = (items: Play[]) => {
 
   return [...uniqueItems.values()].sort(
     (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) || left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id),
+      left.createdAt.localeCompare(right.createdAt) ||
+      left.updatedAt.localeCompare(right.updatedAt) ||
+      left.id.localeCompare(right.id),
   );
 };
 
@@ -48,6 +50,9 @@ export const buildPlayVersionGroups = (plays: Play[]) => {
     .sort((left, right) => {
       const leftLatest = left.plays[left.plays.length - 1];
       const rightLatest = right.plays[right.plays.length - 1];
-      return rightLatest.createdAt.localeCompare(leftLatest.createdAt) || left.title.localeCompare(right.title, 'zh-CN');
+      return (
+        rightLatest.createdAt.localeCompare(leftLatest.createdAt) ||
+        left.title.localeCompare(right.title, 'zh-CN')
+      );
     });
 };

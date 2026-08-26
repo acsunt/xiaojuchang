@@ -19,7 +19,8 @@ export type CalendarCell = {
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
-const toDateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const toDateKey = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
 const getValidDate = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -103,7 +104,10 @@ export const buildPlayDayBuckets = (plays: Play[]): PlayDayBucket[] => {
     .sort((left, right) => right.dayKey.localeCompare(left.dayKey));
 };
 
-export const buildCalendarCells = (monthKey: string, dayBuckets: Map<string, PlayDayBucket>): CalendarCell[] => {
+export const buildCalendarCells = (
+  monthKey: string,
+  dayBuckets: Map<string, PlayDayBucket>,
+): CalendarCell[] => {
   const [yearText, monthText] = monthKey.split('-');
   const year = Number(yearText);
   const monthIndex = Number(monthText) - 1;

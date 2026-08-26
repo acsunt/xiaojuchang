@@ -62,7 +62,9 @@ describe('deleteRepo', () => {
     const repo = db.sqlite.prepare('SELECT * FROM repos WHERE id = ?').get('repo_1');
     expect(repo).toBeFalsy();
 
-    const log = db.sqlite.prepare('SELECT * FROM repo_review_logs WHERE repo_id = ?').get('repo_1') as any;
+    const log = db.sqlite
+      .prepare('SELECT * FROM repo_review_logs WHERE repo_id = ?')
+      .get('repo_1') as any;
     expect(log).toBeTruthy();
     expect(log.action).toBe('delete');
     expect(log.operator).toBe('admin');

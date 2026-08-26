@@ -68,7 +68,7 @@ const defaultStore: PlayPreferenceStore = {
   },
 };
 
-const readStore = <T,>(key: string, fallback: T): T => {
+const readStore = <T>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') {
     return fallback;
   }
@@ -85,7 +85,7 @@ const readStore = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const writeStore = <T,>(key: string, value: T) => {
+const writeStore = <T>(key: string, value: T) => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -93,7 +93,7 @@ const writeStore = <T,>(key: string, value: T) => {
   window.localStorage.setItem(key, JSON.stringify(value));
 };
 
-const readSessionStore = <T,>(key: string, fallback: T): T => {
+const readSessionStore = <T>(key: string, fallback: T): T => {
   if (typeof window === 'undefined') {
     return fallback;
   }
@@ -111,7 +111,7 @@ const readSessionStore = <T,>(key: string, fallback: T): T => {
   }
 };
 
-const writeSessionStore = <T,>(key: string, value: T) => {
+const writeSessionStore = <T>(key: string, value: T) => {
   if (typeof window === 'undefined') {
     return;
   }
@@ -129,7 +129,9 @@ const clearSessionStore = (key: string) => {
 
 const uniq = (items: string[]) => Array.from(new Set(items.filter(Boolean)));
 
-const sanitizeStore = (raw: Partial<PlayPreferenceStore> | null | undefined): PlayPreferenceStore => ({
+const sanitizeStore = (
+  raw: Partial<PlayPreferenceStore> | null | undefined,
+): PlayPreferenceStore => ({
   favorites: uniq(raw?.favorites ?? []),
   disliked: uniq(raw?.disliked ?? []),
   randomSeenByScope: {
@@ -159,7 +161,11 @@ const sanitizePlazaNavigationSnapshot = (
 
   const capturedAt = String(raw.capturedAt ?? '');
   const capturedAtMs = Date.parse(capturedAt);
-  if (!capturedAt || Number.isNaN(capturedAtMs) || Date.now() - capturedAtMs > PLAZA_NAVIGATION_SNAPSHOT_TTL) {
+  if (
+    !capturedAt ||
+    Number.isNaN(capturedAtMs) ||
+    Date.now() - capturedAtMs > PLAZA_NAVIGATION_SNAPSHOT_TTL
+  ) {
     clearSessionStore(PLAZA_NAVIGATION_SNAPSHOT_KEY);
     return null;
   }

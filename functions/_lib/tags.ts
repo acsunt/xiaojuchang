@@ -165,7 +165,10 @@ export const deleteTag = async (db: D1Database, tagId: string, fallbackCategory:
   ]);
 
   const remainingTags = await listTags(db);
-  for (const [chunkIndex, reorderChunk] of chunkItems(remainingTags, D1_TAG_REORDER_CHUNK_SIZE).entries()) {
+  for (const [chunkIndex, reorderChunk] of chunkItems(
+    remainingTags,
+    D1_TAG_REORDER_CHUNK_SIZE,
+  ).entries()) {
     await db.batch(
       reorderChunk.map((tag, index) =>
         db
@@ -198,7 +201,10 @@ export const reorderTags = async (db: D1Database, draft: TagReorderDraft) => {
 
   const timestamp = now();
 
-  for (const [chunkIndex, reorderChunk] of chunkItems(nextIds, D1_TAG_REORDER_CHUNK_SIZE).entries()) {
+  for (const [chunkIndex, reorderChunk] of chunkItems(
+    nextIds,
+    D1_TAG_REORDER_CHUNK_SIZE,
+  ).entries()) {
     await db.batch(
       reorderChunk.map((tagId, index) =>
         db

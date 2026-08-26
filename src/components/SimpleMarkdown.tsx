@@ -154,7 +154,10 @@ export function SimpleMarkdown({ content }: SimpleMarkdownProps) {
           return (
             <ul className="simple-markdown-list" key={`${block.type}-${index}`}>
               {block.items.map((item, itemIndex) => (
-                <li className={item.indent > 0 ? 'is-nested' : undefined} key={`${index}-${itemIndex}`}>
+                <li
+                  className={item.indent > 0 ? 'is-nested' : undefined}
+                  key={`${index}-${itemIndex}`}
+                >
                   {renderInline(item.text)}
                 </li>
               ))}
@@ -162,9 +165,7 @@ export function SimpleMarkdown({ content }: SimpleMarkdownProps) {
           );
         }
 
-        return (
-          <p key={`${block.type}-${index}`}>{renderInline(block.text)}</p>
-        );
+        return <p key={`${block.type}-${index}`}>{renderInline(block.text)}</p>;
       })}
     </div>
   );

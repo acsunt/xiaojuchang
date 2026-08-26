@@ -17,7 +17,10 @@ export const onRequestPost: PagesFunction = async ({ env, request }) => {
       return error('备份数据格式无效');
     }
 
-    const result = await restoreBackupPlays(env.DB, plays as Parameters<typeof restoreBackupPlays>[1]);
+    const result = await restoreBackupPlays(
+      env.DB,
+      plays as Parameters<typeof restoreBackupPlays>[1],
+    );
     return json(result);
   } catch (reason) {
     return error(reason instanceof Error ? reason.message : '恢复备份失败', 500);

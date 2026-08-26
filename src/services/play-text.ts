@@ -33,7 +33,10 @@ const detectQuotedTitle = (source: string) => {
   const candidates = [source.match(/"([^"\r\n]+)"/), source.match(/“([^”\r\n]+)”/)];
   const earliest = candidates
     .filter((match): match is RegExpMatchArray => Boolean(match?.[1]))
-    .sort((left, right) => (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER))[0];
+    .sort(
+      (left, right) =>
+        (left.index ?? Number.MAX_SAFE_INTEGER) - (right.index ?? Number.MAX_SAFE_INTEGER),
+    )[0];
 
   return earliest?.[1]?.trim() ?? '';
 };
@@ -67,7 +70,9 @@ export const detectPlayTitleFromContent = (source: string) => {
 
 export const countPlayBatchItems = (source: string) => splitBatchBlocks(source).length;
 
-export const serializePlayToBatchBlock = (play: Pick<Play, 'title' | 'category' | 'summary' | 'content'>) => {
+export const serializePlayToBatchBlock = (
+  play: Pick<Play, 'title' | 'category' | 'summary' | 'content'>,
+) => {
   const category = play.category?.trim() || DEFAULT_CATEGORY;
 
   return [
@@ -79,8 +84,9 @@ export const serializePlayToBatchBlock = (play: Pick<Play, 'title' | 'category' 
   ].join('\n');
 };
 
-export const serializePlaysToBatchText = (plays: Array<Pick<Play, 'title' | 'category' | 'summary' | 'content'>>) =>
-  plays.map(serializePlayToBatchBlock).join('\n\n');
+export const serializePlaysToBatchText = (
+  plays: Array<Pick<Play, 'title' | 'category' | 'summary' | 'content'>>,
+) => plays.map(serializePlayToBatchBlock).join('\n\n');
 
 export const parsePlayBatchText = (source: string, authorName: string) => {
   const normalizedAuthor = authorName.trim();
@@ -122,7 +128,8 @@ export const parsePlayBatchText = (source: string, authorName: string) => {
       }
 
       if (line.startsWith(SUMMARY_PREFIX)) {
-        summary = normalizeImportedSummary(line.slice(SUMMARY_PREFIX.length)) || BATCH_FALLBACK_SUMMARY;
+        summary =
+          normalizeImportedSummary(line.slice(SUMMARY_PREFIX.length)) || BATCH_FALLBACK_SUMMARY;
         contentStartIndex = lineIndex + 1;
         continue;
       }
