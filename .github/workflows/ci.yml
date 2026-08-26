@@ -63,6 +63,19 @@ jobs:
           name: dist
           path: dist
 
+      - name: Write wrangler.toml
+        run: |
+          cat > wrangler.toml <<EOF
+          name = "mini-theater-review-loop"
+          compatibility_date = "2026-07-08"
+          pages_build_output_dir = "dist"
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "mini-theater"
+          database_id = "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}"
+          EOF
+
       - name: Deploy to Cloudflare Pages
         run: npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true
         env:
