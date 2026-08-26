@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - '**'
+  workflow_dispatch: {}
 
 jobs:
   ci:
@@ -41,15 +42,16 @@ jobs:
         run: npm run build
 
       - name: Upload build output
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist
           retention-days: 1
 
-  deploy:
-    name: Deploy to Cloudflare Pages
+  # 每次 push 到任意分支：自动部署到预览地址（独立测试数据库，不影响正式访客）。
+  deploy-preview:
+    name: Deploy preview to Cloudflare Pages
     needs: ci
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -63,7 +65,50 @@ jobs:
           name: dist
           path: dist
 
-      - name: Write wrangler.toml
+      - name: Write wrangler.toml (preview database)
+        run: |
+          cat > wrangler.toml <<EOF
+          name = "mini-theater-review-loop"
+          compatibility_date = "2026-07-08"
+          pages_build_output_dir = "dist"
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "mini-theater-preview"
+          database_id = "${{ secrets.CLOUDFLARE_D1_PREVIEW_DATABASE_ID }}"
+          EOF
+
+      - name: Deploy preview
+        id: deploy
+        run: |
+          BRANCH_ALIAS=$(echo "${GITHUB_REF_NAME}" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+          echo "branch_alias=$BRANCH_ALIAS" >> "$GITHUB_OUTPUT"
+          npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch "$BRANCH_ALIAS" --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Print preview URL
+        run: |
+          echo "预览地址：https://${{ steps.deploy.outputs.branch_alias }}.mini-theater-review-loop.pages.dev"
+
+  # 只有手动点击 GitHub Actions 的「Run workflow」按钮才会执行，部署到正式地址（正式数据库）。
+  deploy-production:
+    name: Deploy production to Cloudflare Pages
+    needs: ci
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build output
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Write wrangler.toml (production database)
         run: |
           cat > wrangler.toml <<EOF
           name = "mini-theater-review-loop"
@@ -76,7 +121,7 @@ jobs:
           database_id = "${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}"
           EOF
 
-      - name: Deploy to Cloudflare Pages
+      - name: Deploy to production
         run: npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
