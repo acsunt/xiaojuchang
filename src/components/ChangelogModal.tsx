@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import featureGuideMarkdown from '../../功能介绍.md?raw';
+import featureGuideMarkdown from '../../README.md?raw';
 import {
   getChangelogCategories,
   visitorChangelog,
