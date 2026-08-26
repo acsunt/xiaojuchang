@@ -73,6 +73,9 @@ export function PlayDetailPage() {
   const [repoError, setRepoError] = useState('');
   const visitorId = useMemo(() => getVisitorId(), []);
 
+  // getPlazaNavigationSnapshot 从 localStorage 读取，不依赖 location，
+  // 但需要 location.key 变化（每次进入详情页）时强制重新读取最新快照。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const plazaSnapshot = useMemo(() => getPlazaNavigationSnapshot(), [location.key]);
   const plazaPanel = useMemo(() => {
     const params = new URLSearchParams(location.search);

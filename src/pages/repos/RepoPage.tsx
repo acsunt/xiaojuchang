@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   getOwnedPlayIds,
@@ -37,7 +37,7 @@ export function RepoPage() {
     [sentRepos],
   );
 
-  const loadRepos = async () => {
+  const loadRepos = useCallback(async () => {
     setLoading(true);
     setError('');
 
@@ -53,11 +53,11 @@ export function RepoPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [ownedPlayIds, receivedOrder, sentOrder, visitorId]);
 
   useEffect(() => {
     void loadRepos();
-  }, [receivedOrder, sentOrder]);
+  }, [loadRepos]);
 
   const handleMarkRead = () => {
     markRepoReadNow();

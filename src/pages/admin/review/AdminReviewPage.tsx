@@ -733,6 +733,9 @@ export function AdminReviewPage() {
     void loadAllPlays();
     void loadAllRepos();
     void loadTags();
+    // load/loadRepos/loadAllPlays/loadAllRepos/loadTags 是普通函数（每次渲染重新创建，非 useCallback），
+    // 故意不放进依赖数组，只在 session/selectedStatus/selectedRepoStatus 变化时触发，避免死循环。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedStatus, selectedRepoStatus]);
 
   useEffect(() => {
@@ -800,6 +803,9 @@ export function AdminReviewPage() {
       window.removeEventListener('pageshow', handleVisibilityRefresh);
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
     };
+    // load/loadRepos/loadTags 等是普通函数（每次渲染重新创建，非 useCallback），
+    // 故意不放进依赖数组，只在下列状态变化时重新绑定事件监听，避免死循环。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, selectedStatus, selectedRepoStatus, selectedPlayId, activePanel]);
 
   useEffect(() => {
@@ -1012,25 +1018,31 @@ export function AdminReviewPage() {
   );
 
   // 在当前过滤后的全集里取上一篇/下一篇 id；不在当前页时跳到对应页
-  const adminAdjacentPlay = (offset: -1 | 1) => {
-    if (!selectedPlayId) {
+  const findAdjacentPlayId = (plays: Play[], currentId: string, offset: -1 | 1): string => {
+    if (!currentId) {
       return '';
     }
 
-    const currentIndex = filteredPlays.findIndex((play) => play.id === selectedPlayId);
+    const currentIndex = plays.findIndex((play) => play.id === currentId);
     if (currentIndex < 0) {
       return '';
     }
 
     const targetIndex = currentIndex + offset;
-    if (targetIndex < 0 || targetIndex >= filteredPlays.length) {
+    if (targetIndex < 0 || targetIndex >= plays.length) {
       return '';
     }
 
-    return filteredPlays[targetIndex].id;
+    return plays[targetIndex].id;
   };
-  const adminPrevPlayId = useMemo(() => adminAdjacentPlay(-1), [filteredPlays, selectedPlayId]);
-  const adminNextPlayId = useMemo(() => adminAdjacentPlay(1), [filteredPlays, selectedPlayId]);
+  const adminPrevPlayId = useMemo(
+    () => findAdjacentPlayId(filteredPlays, selectedPlayId, -1),
+    [filteredPlays, selectedPlayId],
+  );
+  const adminNextPlayId = useMemo(
+    () => findAdjacentPlayId(filteredPlays, selectedPlayId, 1),
+    [filteredPlays, selectedPlayId],
+  );
 
   const selectAdminPlayById = (playId: string) => {
     if (!playId) {
@@ -1382,24 +1394,31 @@ export function AdminReviewPage() {
     setRepos((current) => current.filter((repo) => !idSet.has(repo.id)));
   }, []);
 
-  const refreshAdminAfterReviewMutation = async (nextPlayId?: string) => {
-    const { items, nextSelectedId } = await load(selectedStatus, { silent: true });
-    await Promise.all([
-      loadAllPlays(),
-      activePanel === 'auditLogs' ? loadAllAuditLogs() : Promise.resolve(),
-    ]);
+  const refreshAdminAfterReviewMutation = useCallback(
+    async (nextPlayId?: string) => {
+      const { items, nextSelectedId } = await load(selectedStatus, { silent: true });
+      await Promise.all([
+        loadAllPlays(),
+        activePanel === 'auditLogs' ? loadAllAuditLogs() : Promise.resolve(),
+      ]);
 
-    const resolvedPlayId =
-      typeof nextPlayId === 'string'
-        ? items.some((item) => item.id === nextPlayId)
-          ? nextPlayId
-          : nextSelectedId
-        : nextSelectedId;
+      const resolvedPlayId =
+        typeof nextPlayId === 'string'
+          ? items.some((item) => item.id === nextPlayId)
+            ? nextPlayId
+            : nextSelectedId
+          : nextSelectedId;
 
-    setSelectedPlayId(resolvedPlayId);
-    await syncSelectedReviewLogs(resolvedPlayId);
-    notifyPlaysUpdate();
-  };
+      setSelectedPlayId(resolvedPlayId);
+      await syncSelectedReviewLogs(resolvedPlayId);
+      notifyPlaysUpdate();
+    },
+    // load/loadAllPlays/loadAllAuditLogs/syncSelectedReviewLogs 是普通函数（每次渲染重新创建，非
+    // useCallback），故意不放进依赖数组：wrap 成 useCallback 只是为了让引用在 selectedStatus/activePanel
+    // 不变时保持稳定，避免下游 useCallback（finishBulkReviewTask）每次渲染都重建。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedStatus, activePanel],
+  );
 
   const clearBackupImportSelection = useCallback(() => {
     setBackupImportName('');
@@ -1623,7 +1642,7 @@ export function AdminReviewPage() {
           errorMessage: reason instanceof Error ? reason.message : '批量通过失败',
         });
       });
-  }, [bulkBusy, bulkTask, finishBulkReviewTask]);
+  }, [bulkBusy, bulkTask, finishBulkReviewTask, markPlaysApprovedLocally]);
 
   useEffect(() => {
     if (typeof document === 'undefined' || !draggingTagId) {

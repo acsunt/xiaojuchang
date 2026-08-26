@@ -1301,12 +1301,12 @@ export function PlayListPage() {
   const renderColumns = useMemo(() => {
     const maxColumns = viewportMode === 'mobile' ? 2 : viewportMode === 'tablet' ? 3 : 4;
     return Math.min(Math.max(columns, 1), maxColumns);
-  }, [columns, viewportMode, sidePanelVisible]);
+  }, [columns, viewportMode]);
   const availableColumnOptions = useMemo(() => {
     if (viewportMode === 'mobile') return [1, 2];
     if (viewportMode === 'tablet') return [1, 2, 3];
     return [1, 2, 3, 4];
-  }, [viewportMode, sidePanelVisible]);
+  }, [viewportMode]);
   const sortModeOptions: SelectOption[] = [
     { value: 'updated_desc', label: '更新时间倒序' },
     { value: 'updated_asc', label: '更新时间正序' },

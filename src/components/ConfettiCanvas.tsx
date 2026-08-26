@@ -244,6 +244,9 @@ export const ConfettiCanvas = forwardRef<ConfettiCanvasHandle>(function Confetti
         }
       },
     }),
+    // fireworkAt/sideBurst/sideBurstAt 只读取 ref（sizeRef/poolRef 引用稳定），
+    // 不依赖组件状态或 props，无需放进依赖数组；否则每次渲染都会重建 handle。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 

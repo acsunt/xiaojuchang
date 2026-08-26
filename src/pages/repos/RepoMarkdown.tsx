@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const imagePattern = /\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i;
 const markdownImagePattern = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -135,7 +135,7 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
 
   const closePreview = () => setPreviewIndex(null);
   const openPreview = (imageIndex: number) => setPreviewIndex(imageIndex);
-  const showPrevious = () => {
+  const showPrevious = useCallback(() => {
     if (!hasMultipleImages) {
       return;
     }
@@ -145,8 +145,8 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
         ? currentIndex
         : (currentIndex - 1 + parsedContent.images.length) % parsedContent.images.length,
     );
-  };
-  const showNext = () => {
+  }, [hasMultipleImages, parsedContent.images.length]);
+  const showNext = useCallback(() => {
     if (!hasMultipleImages) {
       return;
     }
@@ -154,7 +154,7 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
     setPreviewIndex((currentIndex) =>
       currentIndex === null ? currentIndex : (currentIndex + 1) % parsedContent.images.length,
     );
-  };
+  }, [hasMultipleImages, parsedContent.images.length]);
 
   useEffect(() => {
     if (previewIndex === null) {
@@ -184,7 +184,7 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [hasMultipleImages, previewIndex]);
+  }, [hasMultipleImages, previewIndex, showNext, showPrevious]);
 
   return (
     <div className="repo-markdown stack-gap-sm">
