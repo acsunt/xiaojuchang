@@ -19,8 +19,12 @@ export default tseslint.config(
       'react-refresh': reactRefresh,
     },
     rules: {
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+      ...reactHooks.configs['recommended-latest'].rules,
+      // set-state-in-effect / immutability 面向 React Compiler 的前瞻性重构规则，
+      // 命中的都是标准写法（effect 里加载数据、根据 props 同步状态、直接写 ref.current），
+      // 不是真实 bug；要满足这两条需要重写全站数据加载和 ref 用法，是独立的架构调整，暂不启用。
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-unused-vars': [
         'warn',
