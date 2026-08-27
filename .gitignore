@@ -41,3 +41,7 @@ docs/
 functions/_lib/__tests__/reposQueries.test.ts
 functions/_lib/__tests__/siteSettings.test.ts
 functions/_lib/__tests__/tagsQueries.test.ts
+
+# 本轮临时比对 / 输出文件（仅 git index 留痕，磁盘已不存在）
+diff_*.txt
+show_*.txt
