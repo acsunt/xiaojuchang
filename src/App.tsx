@@ -267,42 +267,37 @@ export default function App() {
             ))}
           </nav>
           <button
-            aria-label="主题"
-            className={
-              themeDropdownOpen
-                ? 'icon-button header-theme-toggle active'
-                : 'icon-button header-theme-toggle'
-            }
+            className={themeDropdownOpen ? 'nav-pill active' : 'nav-pill'}
             onClick={() => setThemeDropdownOpen((current) => !current)}
             type="button"
-            title="主题"
           >
             主题
           </button>
         </div>
-        <ThemeDropdownPanel
-          open={themeDropdownOpen}
-          themeList={DEFAULT_THEME_LIST}
-          activeThemeKey={activeThemeKey}
-          isDarkMode={theme === 'dark'}
-          layoutMode={layoutMode}
-          onSelectTheme={(key) => {
-            setActiveThemeKey(key);
-            setThemeDropdownOpen(false);
-          }}
-          onOpenAdvancedSettings={() => {
-            setAdvancedSettingsOpen(true);
-            setThemeDropdownOpen(false);
-          }}
-          onResetSettings={() => {
-            setActiveThemeKey('default');
-          }}
-          onToggleMode={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-          onToggleLayout={() =>
-            setLayoutMode((current) => (current === 'scroll' ? 'wrap' : 'scroll'))
-          }
-        />
       </header>
+
+      <ThemeDropdownPanel
+        open={themeDropdownOpen}
+        themeList={DEFAULT_THEME_LIST}
+        activeThemeKey={activeThemeKey}
+        isDarkMode={theme === 'dark'}
+        layoutMode={layoutMode}
+        onSelectTheme={(key) => {
+          setActiveThemeKey(key);
+          setThemeDropdownOpen(false);
+        }}
+        onOpenAdvancedSettings={() => {
+          setAdvancedSettingsOpen(true);
+          setThemeDropdownOpen(false);
+        }}
+        onResetSettings={() => {
+          setActiveThemeKey('default');
+        }}
+        onToggleMode={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+        onToggleLayout={() =>
+          setLayoutMode((current) => (current === 'scroll' ? 'wrap' : 'scroll'))
+        }
+      />
 
       <main className="page-shell">
         <Routes>
