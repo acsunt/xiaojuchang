@@ -5,11 +5,8 @@ import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
 import { ChangelogModal } from './components/ChangelogModal';
 import { UpdatePromptModal } from './components/UpdatePromptModal';
-import {
-  ThemeDropdownPanel,
-  DEFAULT_THEME_LIST,
-  type ThemeKey,
-} from './components/ThemeDropdownPanel';
+import { ThemeDropdownPanel } from './components/ThemeDropdownPanel';
+import { DEFAULT_THEME_LIST, type ThemeKey } from './data/theme-list';
 import { AdvancedSettingsPanel } from './components/AdvancedSettingsPanel';
 import { CropperModal } from './components/CropperModal';
 import {

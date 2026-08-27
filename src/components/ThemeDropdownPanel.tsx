@@ -1,46 +1,5 @@
 import { useMemo } from 'react';
-
-export type ThemeKey =
-  | 'default'
-  | 'minimal'
-  | 'neumorphism'
-  | 'glass'
-  | 'corporate'
-  | 'gradient'
-  | 'memphis'
-  | 'cyberpunk'
-  | 'swiss'
-  | 'editorial'
-  | 'illustration'
-  | 'isometric'
-  | 'retro'
-  | 'futuristic'
-  | 'pastel'
-  | 'brutalism';
-
-export interface ThemeEntry {
-  key: ThemeKey;
-  name: string;
-}
-
-export const DEFAULT_THEME_LIST: ThemeEntry[] = [
-  { key: 'default', name: '默认' },
-  { key: 'minimal', name: '极简主义' },
-  { key: 'neumorphism', name: '新拟态' },
-  { key: 'glass', name: '玻璃拟态' },
-  { key: 'corporate', name: '商务简约' },
-  { key: 'gradient', name: '渐变风格' },
-  { key: 'memphis', name: '孟菲斯' },
-  { key: 'cyberpunk', name: '赛博朋克' },
-  { key: 'swiss', name: '瑞士风格' },
-  { key: 'editorial', name: '杂志排版' },
-  { key: 'illustration', name: '手绘插画' },
-  { key: 'isometric', name: '等距插画' },
-  { key: 'retro', name: '复古怀旧' },
-  { key: 'futuristic', name: '未来科技' },
-  { key: 'pastel', name: '温暖治愈' },
-  { key: 'brutalism', name: '粗野主义' },
-];
+import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 
 export interface ThemeDropdownPanelProps {
   open: boolean;
@@ -57,14 +16,10 @@ export interface ThemeDropdownPanelProps {
 
 /**
  * 「主题」按钮下方的下拉控制面板。
- *
- * 结构对应参考文件 docs/参考代码/2/code.html：
- *   - 功能操作行 .topbar-row1（高级主题设置 / 恢复默认 / 切换日夜模式 / 切换滑动/换行展示）
- *   - 主题列表行 .switcher（默认按钮 + 15 个主题按钮）
  */
 export function ThemeDropdownPanel({
   open,
-  themeList = DEFAULT_THEME_LIST,
+  themeList,
   activeThemeKey,
   isDarkMode,
   layoutMode,
@@ -74,6 +29,7 @@ export function ThemeDropdownPanel({
   onToggleMode,
   onToggleLayout,
 }: ThemeDropdownPanelProps) {
+  const entries = themeList ?? [];
   const modeIconClass = useMemo(() => (isDarkMode ? 'fas fa-moon' : 'fas fa-sun'), [isDarkMode]);
   const layoutIconClass = useMemo(
     () => (layoutMode === 'scroll' ? 'fas fa-arrows-alt-h' : 'fas fa-th-large'),
@@ -137,7 +93,7 @@ export function ThemeDropdownPanel({
         </div>
       </div>
       <div className={`switcher layout-${layoutMode}`} id="switcher">
-        {themeList.map((entry) => (
+        {entries.map((entry) => (
           <button
             type="button"
             key={entry.key}
