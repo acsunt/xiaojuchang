@@ -5,7 +5,11 @@ import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
 import { ChangelogModal } from './components/ChangelogModal';
 import { UpdatePromptModal } from './components/UpdatePromptModal';
-import { ThemeDropdownPanel, DEFAULT_THEME_LIST, type ThemeKey } from './components/ThemeDropdownPanel';
+import {
+  ThemeDropdownPanel,
+  DEFAULT_THEME_LIST,
+  type ThemeKey,
+} from './components/ThemeDropdownPanel';
 import { AdvancedSettingsPanel } from './components/AdvancedSettingsPanel';
 import { CropperModal } from './components/CropperModal';
 import {
@@ -344,11 +348,7 @@ export default function App() {
 
       {cropperOpen
         ? createPortal(
-            <CropperModal
-              open={cropperOpen}
-              imageSrc=""
-              onClose={() => setCropperOpen(false)}
-            />,
+            <CropperModal open={cropperOpen} imageSrc="" onClose={() => setCropperOpen(false)} />,
             document.body,
           )
         : null}
