@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
+import { useThemeController } from './hooks/useThemeController';
 import { ChangelogModal } from './components/ChangelogModal';
 import { UpdatePromptModal } from './components/UpdatePromptModal';
 import { ThemeDropdownPanel } from './components/ThemeDropdownPanel';
-import { DEFAULT_THEME_LIST, type ThemeKey } from './data/theme-list';
 import { AdvancedSettingsPanel } from './components/AdvancedSettingsPanel';
 import { CropperModal } from './components/CropperModal';
 import {
@@ -35,9 +35,10 @@ const publicNavItems = [
   { to: '/upload', label: '上传小剧场' },
 ];
 
-const THEME_STORAGE_KEY = 'mini-theater.theme';
-type ThemeMode = 'light' | 'dark';
-
+/**
+ * 站点运行时背景设置（管理员通过 play-api 配置的应用背景）。
+ * 注意：这里的 siteSettings 仅控制应用背景图层，与主题/日夜模式互不干涉。
+ */
 const createDefaultBackground = (overlayOpacity: number) => ({
   backgroundUrl: '',
   crop: {
@@ -62,19 +63,29 @@ const defaultSiteSettings: SiteSettings = {
   updatedAt: '',
 };
 
-const readStoredTheme = (): ThemeMode => {
-  if (typeof window === 'undefined') {
-    return 'dark';
-  }
-
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === 'light' ? 'light' : 'dark';
-};
-
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
+
+  /* ======================== 主题/日夜/排版/字体 状态机 ======================== */
+  const {
+    styles: themeStyles,
+    currentStyle,
+    currentMode,
+    currentLayout,
+    themeConfig,
+    selectStyle,
+    toggleMode,
+    toggleLayout,
+    resetSettings,
+    initFontPanel,
+    changeFontSource,
+    applyCurrentThemeFontAsCustom,
+    applyCustomFont,
+    refreshCurrentFont,
+  } = useThemeController();
+
+  /* ======================== 应用运行时背景设置 ======================== */
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(defaultSiteSettings);
   const [repoNoticeSettings, setRepoNoticeSettingsState] = useState<RepoNoticeSettings>(() =>
     getRepoNoticeSettings(),
@@ -88,8 +99,7 @@ export default function App() {
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [cropperOpen, setCropperOpen] = useState(false);
-  const [activeThemeKey, setActiveThemeKey] = useState<ThemeKey>('default');
-  const [layoutMode, setLayoutMode] = useState<'scroll' | 'wrap'>('scroll');
+
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
   useEffect(() => {
@@ -171,12 +181,26 @@ export default function App() {
     };
   }, []);
 
+  /**
+   * 高级面板打开时，把当前字体配置同步进 DOM 输入框，
+   * 确保切换 source 后立即可见 url/name 的最新值。
+   */
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    if (advancedSettingsOpen) {
+      initFontPanel();
+    }
+  }, [advancedSettingsOpen, initFontPanel]);
 
-    const activeBackground = siteSettings[theme][backgroundDevice];
+  /**
+   * 把管理员配置的应用背景注入 CSS 变量，并把日夜模式映射到
+   * document.documentElement.dataset.theme，便于其他 CSS 选择器复用。
+   */
+  useEffect(() => {
+    const lightOrDark: 'light' | 'dark' = currentMode === 'night' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = lightOrDark;
+    document.documentElement.style.colorScheme = lightOrDark;
+
+    const activeBackground = siteSettings[lightOrDark][backgroundDevice];
     document.documentElement.style.setProperty(
       '--app-bg-image',
       activeBackground.backgroundUrl ? `url("${activeBackground.backgroundUrl}")` : 'none',
@@ -194,7 +218,7 @@ export default function App() {
       '--app-bg-overlay',
       `${activeBackground.crop.overlayOpacity}`,
     );
-  }, [backgroundDevice, siteSettings, theme]);
+  }, [backgroundDevice, currentMode, siteSettings]);
 
   const plazaPanel =
     location.pathname === '/plays' ? new URLSearchParams(location.search).get('panel') : '';
@@ -275,12 +299,12 @@ export default function App() {
 
       <ThemeDropdownPanel
         open={themeDropdownOpen}
-        themeList={DEFAULT_THEME_LIST}
-        activeThemeKey={activeThemeKey}
-        isDarkMode={theme === 'dark'}
-        layoutMode={layoutMode}
+        themeList={themeStyles}
+        activeThemeKey={currentStyle}
+        isDarkMode={currentMode === 'night'}
+        layoutMode={currentLayout}
         onSelectTheme={(key) => {
-          setActiveThemeKey(key);
+          selectStyle(key);
           setThemeDropdownOpen(false);
         }}
         onOpenAdvancedSettings={() => {
@@ -288,12 +312,14 @@ export default function App() {
           setThemeDropdownOpen(false);
         }}
         onResetSettings={() => {
-          setActiveThemeKey('default');
+          resetSettings();
         }}
-        onToggleMode={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-        onToggleLayout={() =>
-          setLayoutMode((current) => (current === 'scroll' ? 'wrap' : 'scroll'))
-        }
+        onToggleMode={() => {
+          toggleMode();
+        }}
+        onToggleLayout={() => {
+          toggleLayout();
+        }}
       />
 
       <main className="page-shell">
@@ -329,10 +355,22 @@ export default function App() {
               systemTextScale={false}
               lockedContent
               lockedImg
-              fontSource="theme"
-              customFontUrl=""
-              customFontName=""
+              fontSource={themeConfig.fontSource}
+              customFontUrl={themeConfig.fontUrl}
+              customFontName={themeConfig.fontName}
               onClose={() => setAdvancedSettingsOpen(false)}
+              onRefreshCurrentFont={() => {
+                refreshCurrentFont();
+              }}
+              onChangeFontSource={(value) => {
+                changeFontSource(value);
+              }}
+              onApplyCurrentThemeFontAsCustom={() => {
+                applyCurrentThemeFontAsCustom();
+              }}
+              onApplyCustomFont={(url, name) => {
+                applyCustomFont(url, name);
+              }}
             />,
             document.body,
           )

@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+﻿import { useMemo } from 'react';
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 
 export interface ThemeDropdownPanelProps {
   open: boolean;
-  themeList?: ThemeEntry[];
+  themeList?: ReadonlyArray<ThemeEntry>;
   activeThemeKey: ThemeKey;
   isDarkMode: boolean;
   layoutMode: 'scroll' | 'wrap';
@@ -61,7 +61,7 @@ export function ThemeDropdownPanel({
             onClick={onOpenAdvancedSettings}
           >
             <i className="fas fa-sliders-h" />
-          </button>
+         </button>
           <button
             type="button"
             className="toggle-btn"
@@ -70,7 +70,7 @@ export function ThemeDropdownPanel({
             onClick={onResetSettings}
           >
             <i className="fas fa-undo" />
-          </button>
+         </button>
           <div className="topbar-divider" />
           <button
             type="button"
@@ -80,7 +80,7 @@ export function ThemeDropdownPanel({
             onClick={onToggleMode}
           >
             <i className={modeIconClass} id="modeIcon" />
-          </button>
+         </button>
           <button
             type="button"
             className="toggle-btn"
@@ -89,9 +89,9 @@ export function ThemeDropdownPanel({
             onClick={onToggleLayout}
           >
             <i className={layoutIconClass} id="layoutIcon" />
-          </button>
-        </div>
-      </div>
+         </button>
+       </div>
+     </div>
       <div className={`switcher layout-${layoutMode}`} id="switcher">
         {entries.map((entry) => (
           <button
@@ -102,9 +102,9 @@ export function ThemeDropdownPanel({
             onClick={() => onSelectTheme?.(entry.key)}
           >
             {entry.name}
-          </button>
+         </button>
         ))}
-      </div>
-    </div>
+     </div>
+   </div>
   );
 }
