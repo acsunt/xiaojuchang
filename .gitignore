@@ -34,5 +34,10 @@ wrangler.local.toml
 wrangler.toml
 wrangler.toml.bak
 
-# 参考代码（本地素材，不上传到 GitHub）
-docs/参考代码/
+# 参考代码与素材（本地参考，不上传到 GitHub，也跳过 prettier 检查）
+docs/
+
+# 本地保留但不随仓库发布的有用测试代码（可手动 `npx vitest <file>` 单跑）
+functions/_lib/__tests__/reposQueries.test.ts
+functions/_lib/__tests__/siteSettings.test.ts
+functions/_lib/__tests__/tagsQueries.test.ts
