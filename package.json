@@ -13,7 +13,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "deploy": "npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true"
+    "deploy": "npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch production --commit-dirty=true"
   },
   "dependencies": {
     "react": "latest",
