@@ -197,7 +197,6 @@ export function useThemeController(): UseThemeControllerResult {
           await font.load();
           document.fonts.add(font);
         } catch (err) {
-          // eslint-disable-next-line no-console
           console.error('字体加载失败:', err);
         } finally {
           if (loadingOverlay) {
@@ -297,8 +296,7 @@ export function useThemeController(): UseThemeControllerResult {
     }
     const layoutIcon = $('layoutIcon');
     if (layoutIcon) {
-      layoutIcon.className =
-        currentLayout === 'scroll' ? 'fas fa-arrows-alt-h' : 'fas fa-th-large';
+      layoutIcon.className = currentLayout === 'scroll' ? 'fas fa-arrows-alt-h' : 'fas fa-th-large';
     }
     writeLocalStorage(LAYOUT_STORAGE_KEY, currentLayout);
   }, [currentLayout]);
@@ -362,54 +360,49 @@ export function useThemeController(): UseThemeControllerResult {
         }),
       );
     } else {
-      // eslint-disable-next-line no-alert
       alert('当前主题未配置专属字体');
     }
   }, [currentStyle, themeConfig]);
 
-  const applyCustomFont = useCallback(
-    (urlOverride?: string, nameOverride?: string): boolean => {
-      if (!SAFE_WINDOW) {
-        return false;
+  const applyCustomFont = useCallback((urlOverride?: string, nameOverride?: string): boolean => {
+    if (!SAFE_WINDOW) {
+      return false;
+    }
+    const urlInput = $<HTMLInputElement>('customFontUrl');
+    const nameInput = $<HTMLInputElement>('customFontName');
+
+    const url = (urlOverride ?? urlInput?.value ?? '').trim();
+    if (!url) {
+      alert('请输入有效的字体链接');
+      return false;
+    }
+
+    let name = (nameOverride ?? nameInput?.value ?? '').trim();
+    if (!name) {
+      try {
+        const pathname = decodeURIComponent(new URL(url).pathname);
+        name = pathname.split('/').pop()?.split('.')[0] || 'MyCustomFont';
+      } catch {
+        const decoded = decodeURIComponent(url);
+        name = decoded.split('/').pop()?.split('.')[0] || 'MyCustomFont';
       }
-      const urlInput = $<HTMLInputElement>('customFontUrl');
-      const nameInput = $<HTMLInputElement>('customFontName');
-
-      let url = (urlOverride ?? urlInput?.value ?? '').trim();
-      if (!url) {
-        // eslint-disable-next-line no-alert
-        alert('请输入有效的字体链接');
-        return false;
+      if (nameInput) {
+        nameInput.value = name;
       }
+    }
 
-      let name = (nameOverride ?? nameInput?.value ?? '').trim();
-      if (!name) {
-        try {
-          const pathname = decodeURIComponent(new URL(url).pathname);
-          name = pathname.split('/').pop()?.split('.')[0] || 'MyCustomFont';
-        } catch {
-          const decoded = decodeURIComponent(url);
-          name = decoded.split('/').pop()?.split('.')[0] || 'MyCustomFont';
-        }
-        if (nameInput) {
-          nameInput.value = name;
-        }
-      }
+    setThemeConfig((prev) => {
+      const next: ThemeConfig = {
+        ...prev,
+        fontUrl: url,
+        fontName: name,
+      };
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
 
-      setThemeConfig((prev) => {
-        const next: ThemeConfig = {
-          ...prev,
-          fontUrl: url,
-          fontName: name,
-        };
-        writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-
-      return true;
-    },
-    [],
-  );
+    return true;
+  }, []);
 
   const changeFontSource = useCallback(
     (source?: FontSource) => {
