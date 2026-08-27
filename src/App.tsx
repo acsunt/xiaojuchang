@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
 import { ChangelogModal } from './components/ChangelogModal';
 import { UpdatePromptModal } from './components/UpdatePromptModal';
+import { ThemeDropdownPanel, DEFAULT_THEME_LIST, type ThemeKey } from './components/ThemeDropdownPanel';
+import { AdvancedSettingsPanel } from './components/AdvancedSettingsPanel';
+import { CropperModal } from './components/CropperModal';
 import {
   getOwnedPlayIds,
   getRepoNoticeSettings,
@@ -80,6 +84,11 @@ export default function App() {
   );
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [activeThemeKey, setActiveThemeKey] = useState<ThemeKey>('default');
+  const [layoutMode, setLayoutMode] = useState<'scroll' | 'wrap'>('scroll');
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
   useEffect(() => {
@@ -186,7 +195,6 @@ export default function App() {
     );
   }, [backgroundDevice, siteSettings, theme]);
 
-  const themeLabel = useMemo(() => (theme === 'dark' ? '切换日间' : '切换夜间'), [theme]);
   const plazaPanel =
     location.pathname === '/plays' ? new URLSearchParams(location.search).get('panel') : '';
   const calendarNavActive = plazaPanel === 'calendar';
@@ -255,15 +263,41 @@ export default function App() {
             ))}
           </nav>
           <button
-            aria-label={themeLabel}
-            className="icon-button header-theme-toggle"
-            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+            aria-label="主题"
+            className={
+              themeDropdownOpen
+                ? 'icon-button header-theme-toggle active'
+                : 'icon-button header-theme-toggle'
+            }
+            onClick={() => setThemeDropdownOpen((current) => !current)}
             type="button"
-            title={themeLabel}
+            title="主题"
           >
-            {theme === 'dark' ? '☀' : '☾'}
+            主题
           </button>
         </div>
+        <ThemeDropdownPanel
+          open={themeDropdownOpen}
+          themeList={DEFAULT_THEME_LIST}
+          activeThemeKey={activeThemeKey}
+          isDarkMode={theme === 'dark'}
+          layoutMode={layoutMode}
+          onSelectTheme={(key) => {
+            setActiveThemeKey(key);
+            setThemeDropdownOpen(false);
+          }}
+          onOpenAdvancedSettings={() => {
+            setAdvancedSettingsOpen(true);
+            setThemeDropdownOpen(false);
+          }}
+          onResetSettings={() => {
+            setActiveThemeKey('default');
+          }}
+          onToggleMode={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+          onToggleLayout={() =>
+            setLayoutMode((current) => (current === 'scroll' ? 'wrap' : 'scroll'))
+          }
+        />
       </header>
 
       <main className="page-shell">
@@ -283,6 +317,41 @@ export default function App() {
       ) : null}
 
       {changelogOpen ? <ChangelogModal onClose={() => setChangelogOpen(false)} /> : null}
+
+      {advancedSettingsOpen
+        ? createPortal(
+            <AdvancedSettingsPanel
+              open={advancedSettingsOpen}
+              textScale={100}
+              uiScale={100}
+              themeAlpha={0}
+              textMask={0}
+              bgBlur={0}
+              bgOpacity={1}
+              bgOverlay={0}
+              bgPreviewUrl=""
+              systemTextScale={false}
+              lockedContent
+              lockedImg
+              fontSource="theme"
+              customFontUrl=""
+              customFontName=""
+              onClose={() => setAdvancedSettingsOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
+
+      {cropperOpen
+        ? createPortal(
+            <CropperModal
+              open={cropperOpen}
+              imageSrc=""
+              onClose={() => setCropperOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
