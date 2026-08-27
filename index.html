@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>小剧场上传与审核</title>
+    <!-- FontAwesome 6.4.0：主题控制面板 / 高级设置面板图标依赖 -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <!-- Cropper.js 1.5.13：自定义背景图裁剪依赖 -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/cropper/1.5.13/cropper.min.css"
+    />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/cropper/1.5.13/cropper.min.js"
+      defer
+    ></script>
     <script>
       (() => {
         const themeStorageKey = 'mini-theater.theme';
@@ -15,6 +29,13 @@
     </script>
   </head>
   <body>
+    <!-- 基础背景图层与字体加载动画DOM（插入到body最前面） -->
+    <div id="fontLoadingOverlay" class="font-loading-overlay">
+      <i class="fas fa-spinner fa-spin"></i> 正在加载字体 <span id="fontLoadingName"></span>...
+    </div>
+    <div id="custom-bg-layer"></div>
+    <div id="custom-bg-overlay"></div>
+    <div id="theme-bg-layer"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

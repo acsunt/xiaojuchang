@@ -1,15 +1,34 @@
 :root {
-  color-scheme: dark;
   font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 15px;
   line-height: 1.45;
   font-weight: 400;
-  color: #e8ecf4;
-  background: #08111f;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   系统默认主题 [data-style="default"]
+   保留原项目最原始的主题样式（浅色/深色令牌），适配新的
+   data-mode="day" / data-mode="night" 驱动方式。
+   原 body 自绘的渐变背景改为通过 --bg-color / --bg-image
+   注入新的 #theme-bg-layer 图层来呈现，不再由 body 自身绘制。
+============================================================ */
+body[data-style='default'] {
+  --font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+body[data-style='default'][data-mode='night'] {
+  color-scheme: dark;
+
+  --bg-color: #08111f;
+  --bg-image:
+    radial-gradient(circle at top left, rgba(37, 97, 255, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(39, 213, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, color-mix(in srgb, #08111f 92%, #000 8%) 0%, #08111f 100%);
+  --bg-image-opacity: 1;
 
   --bg: #08111f;
   --bg-soft: rgba(12, 23, 40, 0.88);
@@ -24,17 +43,14 @@
   --warning: #ffb454;
   --danger: #ff7575;
   --shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-  --app-bg-image: none;
-  --app-bg-position: 50% 50%;
-  --app-bg-size: 100%;
-  --app-bg-opacity: 1;
-  --app-bg-overlay: 0.32;
 }
 
-:root[data-theme='light'] {
+body[data-style='default'][data-mode='day'] {
   color-scheme: light;
-  color: #243042;
-  background: #f3eedf;
+
+  --bg-color: #f3eedf;
+  --bg-image: none;
+  --bg-image-opacity: 0;
 
   --bg: #f3eedf;
   --bg-soft: rgba(250, 246, 236, 0.9);
@@ -68,31 +84,6 @@ body {
   color: var(--text);
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(circle at top left, rgba(37, 97, 255, 0.18), transparent 30%),
-    radial-gradient(circle at top right, rgba(39, 213, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg) 92%, #000 8%) 0%, var(--bg) 100%);
-}
-
-body::before,
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-}
-
-body::before {
-  background-image: var(--app-bg-image);
-  background-position: var(--app-bg-position);
-  background-repeat: no-repeat;
-  background-size: var(--app-bg-size);
-  opacity: var(--app-bg-opacity);
-}
-
-body::after {
-  background: rgba(0, 0, 0, var(--app-bg-overlay));
 }
 
 a {
@@ -141,7 +132,7 @@ select {
   padding-right: 38px;
 }
 
-:root[data-theme='light'] select {
+body[data-style='default'][data-mode='day'] select {
   color-scheme: light;
   background: var(--panel-strong);
 }
@@ -534,11 +525,11 @@ select option {
   color: color-mix(in srgb, var(--text) 92%, white 8%);
 }
 
-:root[data-theme='light'] .custom-select-trigger {
+body[data-style='default'][data-mode='day'] .custom-select-trigger {
   background: var(--panel-strong);
 }
 
-:root[data-theme='light'] .custom-select-menu {
+body[data-style='default'][data-mode='day'] .custom-select-menu {
   background: color-mix(in srgb, var(--panel) 97%, white 3%);
   box-shadow: 0 18px 38px rgba(86, 77, 57, 0.16);
 }
@@ -980,13 +971,13 @@ label span,
   border-color: rgba(255, 117, 117, 0.34);
 }
 
-:root[data-theme='light'] .button.warning {
+body[data-style='default'][data-mode='day'] .button.warning {
   background: rgba(185, 133, 45, 0.14);
   color: #5a3d13;
   border-color: rgba(185, 133, 45, 0.26);
 }
 
-:root[data-theme='light'] .button.danger {
+body[data-style='default'][data-mode='day'] .button.danger {
   background: rgba(196, 85, 85, 0.16);
   color: #7c1f1f;
   border-color: rgba(196, 85, 85, 0.3);
@@ -2046,7 +2037,7 @@ label {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
-:root[data-theme='light'] .repo-card {
+body[data-style='default'][data-mode='day'] .repo-card {
   background: var(--panel);
 }
 
@@ -2066,13 +2057,13 @@ label {
   margin-right: 6px;
 }
 
-:root[data-theme='light'] .repo-reject-note {
+body[data-style='default'][data-mode='day'] .repo-reject-note {
   background: rgba(196, 51, 71, 0.1);
   border-color: rgba(196, 51, 71, 0.26);
   color: #6e2330;
 }
 
-:root[data-theme='light'] .repo-reject-note strong {
+body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   color: #b03342;
 }
 
@@ -4657,11 +4648,11 @@ body.tag-sort-dragging {
   color: #7aa7ff;
 }
 
-:root[data-theme='light'] .update-changelog-link {
+body[data-style='default'][data-mode='day'] .update-changelog-link {
   color: #1d6bff;
 }
 
-:root[data-theme='light'] .update-changelog-link:hover {
+body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   color: #3b82ff;
 }
 
@@ -4802,3 +4793,161 @@ body.tag-sort-dragging {
     gap: 12px;
   }
 }
+
+/* ============================================================
+   以下内容原封不动移植自参考文件 docs/发送/1/code.css
+   全局动态控制变量、解耦背景图层样式、顶部控制栏样式、
+   高级设置面板深度适配样式，以及 15 个主题的配色和字体专属变量
+============================================================ */
+/* ========================================
+   全局动态控制变量与底层架构 (完整版)
+======================================== */
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg-color: #ffffff; --bg-image: none; --bg-image-opacity: 0; --btn-bg-color: #000000; --btn-bg-image: none;
+  --radius-btn: 8px; --radius-card: 12px;
+  --font-family: "韩系低饱和苹方黑", -apple-system, sans-serif;
+  --heading-weight: 700; --heading-transform: none; --heading-style: normal; --heading-decoration: none; --heading-shadow: none;
+  --card-backdrop: none; --card-border: none; --card-shadow: 0 4px 14px rgba(0,0,0,0.06); --card-text: var(--text); --btn-border: none; --btn-shadow: none;
+  --text-scale: 1; --ui-scale: 1; --bg-blur: 0px; --bg-opacity: 1; --bg-overlay: 0; --theme-alpha: 0; --text-mask: 0;
+  --sp-bg: #f2f4f6; --sp-panel-bg: #ffffff; --sp-input-bg: #eff2f5; --sp-text: #2c3e50; --sp-text-secondary: #596b7e; --sp-border: #e1e4e8; --sp-primary: #007bff;
+}
+
+body[data-mode="night"] {
+  --sp-bg: #1a1b1e; --sp-panel-bg: #25262b; --sp-input-bg: #141517; --sp-text: #c1c2c5; --sp-text-secondary: #909296; --sp-border: #373a40; --sp-primary: #339af0;
+}
+
+html { scroll-behavior: smooth; } 
+body { position: relative; min-height: 100vh; color: var(--text); font-family: var(--font-family); transition: color 0.4s ease, font-family 0.4s ease; background: transparent; }
+
+#custom-bg-layer { position: fixed; inset: 0; z-index: -5; background-size: cover; background-position: center; filter: blur(var(--bg-blur)); opacity: var(--bg-opacity); transition: filter 0.2s, opacity 0.2s; }
+#custom-bg-overlay { position: fixed; inset: 0; z-index: -4; background-color: rgba(0, 0, 0, var(--bg-overlay)); transition: background-color 0.2s; }
+#theme-bg-layer { position: fixed; inset: 0; z-index: -3; background-color: var(--bg-color); opacity: calc(1 - var(--theme-alpha)); transition: background-color 0.4s ease, opacity 0.2s ease; }
+#theme-bg-layer::before { content: ""; position: absolute; inset: 0; background-image: var(--bg-image); opacity: var(--bg-image-opacity); transition: opacity 0.4s ease; }
+
+.font-loading-overlay { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-20px); background: rgba(0,0,0,0.85); color: #fff; padding: 10px 24px; border-radius: 30px; font-size: 13px; font-weight: 500; z-index: 100000; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.font-loading-overlay.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 控制面板/设置面板样式 */
+.topbar-row1 { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid color-mix(in srgb, var(--sp-text) 15%, transparent); }
+.actions { display: flex; gap: 8px; align-items: center; }
+.topbar-divider { width: 1px; background: color-mix(in srgb, var(--sp-text) 20%, transparent); margin: 0 4px; height: 16px; }
+.toggle-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 15px; transition: all 0.3s; background: transparent; color: var(--sp-text); border: 1px solid color-mix(in srgb, var(--sp-text) 20%, transparent); }
+.toggle-btn:hover { background: var(--btn-bg-color); color: var(--btn-color); border-color: var(--btn-bg-color); }
+.toggle-btn:active { transform: scale(0.92); }
+
+.switcher { display: flex; gap: 8px; padding: 10px 16px; -webkit-overflow-scrolling: touch; }
+.switcher.layout-scroll { flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: thin; }
+.switcher.layout-scroll::-webkit-scrollbar { height: 4px; }
+.switcher.layout-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--sp-text) 30%, transparent); border-radius: 4px; }
+.switcher.layout-wrap { flex-wrap: wrap; justify-content: flex-start; }
+.switcher button { flex-shrink: 0; padding: 7px 16px; border-radius: 20px; cursor: pointer; font-size: 13px; transition: all 0.3s ease; background: transparent; color: var(--sp-text); border: 1px solid color-mix(in srgb, var(--sp-text) 30%, transparent); }
+.switcher button:hover { background: color-mix(in srgb, var(--sp-text) 10%, transparent); }
+.switcher button.active { background: var(--btn-bg-color); background-image: var(--btn-bg-image); color: var(--btn-color); border-color: transparent; }
+
+.settings-wrapper { display: none; transition: background 0.3s, backdrop-filter 0.3s; }
+.settings-wrapper.show { display: block; position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); padding: 60px 16px 20px; overflow-y: auto; display: flex; justify-content: center; align-items: flex-start; }
+.settings-wrapper.show .settings-panel { width: 100%; max-width: 500px; }
+.settings-wrapper.show.is-dragging { background: transparent; backdrop-filter: none; }
+.d-lg-none { display: block; font-size: 20px; color: var(--sp-text-secondary); cursor: pointer; transition: color 0.3s;}
+.d-lg-none:hover { color: var(--sp-text); }
+
+.settings-panel { background: var(--sp-panel-bg); padding: 20px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); font-family: -apple-system, sans-serif; color: var(--sp-text); text-align: left; transition: background 0.3s, color 0.3s; }
+.settings-panel h2 { font-size: 18px; margin-top: 0; margin-bottom: 20px; border-bottom: 1px solid var(--sp-border); padding-bottom: 10px; color: var(--sp-text); display: flex; justify-content: space-between; align-items: center; transition: border-color 0.3s; }
+.adjust-container { background: var(--sp-input-bg); padding: 12px; border-radius: 8px; margin-bottom: 15px; transition: background 0.3s; }
+.section-label { font-weight: 600; font-size: calc(14px * var(--text-scale)); color: var(--sp-text); }
+.range-group { width: 100%; margin-bottom: 12px; }
+.range-header { display: flex; justify-content: space-between; font-size: calc(13px * var(--text-scale)); margin-bottom: 6px; }
+input[type="range"] { width: 100%; cursor: pointer; accent-color: var(--sp-primary); }
+
+.settings-panel.is-dragging { background: transparent !important; box-shadow: none !important; }
+.settings-panel.is-dragging > *:not(.active-container) { opacity: 0; pointer-events: none; }
+.settings-panel.is-dragging .active-container { background: transparent !important; }
+.settings-panel.is-dragging .active-container > *:not(.active-range) { opacity: 0; pointer-events: none; }
+.settings-panel.is-dragging .active-range { opacity: 1 !important; pointer-events: auto; background: var(--sp-panel-bg); backdrop-filter: blur(8px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); transform: scale(1.05); transition: background 0.3s; }
+
+.form-control { width: 100%; padding: 10px; border: 1px solid var(--sp-border); border-radius: 6px; outline: none; background: var(--sp-input-bg); color: var(--sp-text); font-size: calc(14px * var(--text-scale)); transition: background 0.3s, border-color 0.3s, color 0.3s;}
+.sp-btn { padding: 8px 12px; cursor: pointer; background: var(--sp-panel-bg); border: 1px solid var(--sp-border); border-radius: 6px; color: var(--sp-text); font-size: calc(14px * var(--text-scale)); display: inline-flex; align-items: center; justify-content: center; gap: 6px; transition: 0.2s; white-space: nowrap; }
+.sp-btn:hover { filter: brightness(0.95); }
+.sp-btn.primary { background: var(--sp-primary); color: white; border-color: var(--sp-primary); }
+.sp-btn.danger { background: #dc3545; color: white; border-color: #dc3545; }
+.param-lock-btn { background: none; border: none; cursor: pointer; color: var(--sp-text-secondary); transition: color 0.3s;}
+.param-lock-btn.locked { color: #dc3545; }
+
+.bg-preview-wrapper { width: 100%; height: 120px; border: 2px dashed var(--sp-border); border-radius: 8px; margin-bottom: 10px; position: relative; display: flex; align-items: center; justify-content: center; transition: border-color 0.3s;}
+#bgPreviewImage, #bgPreviewOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+#bgPreviewImage { background-size: cover; background-position: center; z-index: 0; }
+#bgPreviewOverlay { z-index: 1; pointer-events: none; }
+.bg-preview-text { z-index: 2; font-size: calc(12px * var(--text-scale)); color: var(--sp-text-secondary); transition: color 0.3s; }
+
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; justify-content: center; align-items: center; }
+.modal-content { background: var(--sp-panel-bg); color: var(--sp-text); padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; max-height: 85vh; overflow-y: auto; transition: background 0.3s, color 0.3s; }
+.modal-header { display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid var(--sp-border); padding-bottom: 10px; }
+.close-modal-btn { color: var(--sp-text-secondary); transition: color 0.3s; cursor: pointer; }
+.close-modal-btn:hover { color: var(--sp-text); }
+.cropper-container-wrapper { width: 100%; min-height: 300px; background: var(--sp-input-bg); display: flex; justify-content: center; align-items: center; transition: background 0.3s;}
+#fontPreviewText { font-family: var(--font-family); transition: font-family 0.4s ease; }
+
+/* ============================================================
+   各主题颜色及精选专属排版字体变量 (完整版)
+============================================================ */
+body[data-style="minimal"] { --font-family: "韩系低饱和苹方黑", sans-serif; }
+body[data-style="minimal"][data-mode="day"] { --bg-color:#ffffff; --text:#1a1a1a; --heading-color:#1a1a1a; --card-bg:#fafafa; --card-border:1px solid #eee; --btn-bg-color:#1a1a1a; --btn-color:#fff; --radius-btn:4px; }
+body[data-style="minimal"][data-mode="night"] { --bg-color:#121212; --text:#e5e5e5; --heading-color:#ffffff; --card-bg:#1c1c1c; --card-border:1px solid #2a2a2a; --btn-bg-color:#ffffff; --btn-color:#121212; --radius-btn:4px; }
+
+body[data-style="neumorphism"] { --font-family: "极简小奶圆", sans-serif; }
+body[data-style="neumorphism"][data-mode="day"] { --bg-color:#e0e5ec; --text:#333; --heading-color:#333; --card-bg:#e0e5ec; --card-shadow:8px 8px 16px #b8bcc4,-8px -8px 16px #ffffff; --btn-bg-color:#e0e5ec; --btn-color:#4A90D9; --btn-shadow:5px 5px 10px #b8bcc4,-5px -5px 10px #ffffff; --radius-btn:12px; --radius-card:20px; }
+body[data-style="neumorphism"][data-mode="night"] { --bg-color:#2d2f34; --text:#cfd3d8; --heading-color:#fff; --card-bg:#2d2f34; --card-shadow:8px 8px 16px #202226,-8px -8px 16px #3a3d43; --btn-bg-color:#2d2f34; --btn-color:#6fb3f2; --btn-shadow:5px 5px 10px #202226,-5px -5px 10px #3a3d43; --radius-btn:12px; --radius-card:20px; }
+
+body[data-style="glass"] { --font-family: "亲一口我的小毛咪", sans-serif; }
+body[data-style="glass"][data-mode="day"] { --bg-color:#c9e4f0; --bg-image:linear-gradient(135deg,#a8edea,#fed6e3); --bg-image-opacity:1; --text:#33475b; --heading-color:#1a1a2e; --card-bg:rgba(255,255,255,0.45); --card-border:1px solid rgba(255,255,255,0.6); --card-backdrop:blur(14px); --btn-bg-color:rgba(255,255,255,0.55); --btn-color:#1a1a2e; --btn-border:1px solid rgba(255,255,255,0.7); --radius-card:18px; --radius-btn:10px; }
+body[data-style="glass"][data-mode="night"] { --bg-color:#1a2226; --bg-image:linear-gradient(135deg,#232526,#0f2027); --bg-image-opacity:1; --text:#e8f0f2; --heading-color:#fff; --card-bg:rgba(255,255,255,0.08); --card-border:1px solid rgba(255,255,255,0.18); --card-backdrop:blur(14px); --btn-bg-color:rgba(255,255,255,0.15); --btn-color:#fff; --btn-border:1px solid rgba(255,255,255,0.3); --radius-card:18px; --radius-btn:10px; }
+
+body[data-style="corporate"] { --font-family: "方正润黑简约电子风", sans-serif; }
+body[data-style="corporate"][data-mode="day"] { --bg-color:#f5f7fa; --text:#2c3e50; --heading-color:#1a2733; --card-bg:#ffffff; --card-shadow:0 6px 20px rgba(44,62,80,0.08); --btn-bg-color:#4A90D9; --btn-color:#fff; }
+body[data-style="corporate"][data-mode="night"] { --bg-color:#121212; --text:#d5d5d5; --heading-color:#ffffff; --card-bg:#1e1e1e; --card-border:1px solid #2a2a2a; --btn-bg-color:#4A90D9; --btn-color:#fff; }
+
+body[data-style="gradient"] { --font-family: "如何忘记你的记忆", sans-serif; }
+body[data-style="gradient"][data-mode="day"] { --bg-color:#fa93b0; --bg-image:linear-gradient(135deg,#fa709a,#fee140); --bg-image-opacity:1; --text:#fff; --heading-color:#fff; --card-bg:rgba(255,255,255,0.92); --card-text:#333; --btn-bg-color:#667eea; --btn-bg-image:linear-gradient(90deg,#667eea,#764ba2); --btn-color:#fff; --btn-shadow:0 8px 20px rgba(0,0,0,0.2); --radius-btn:30px; --radius-card:16px; }
+body[data-style="gradient"][data-mode="night"] { --bg-color:#4a2a5a; --bg-image:linear-gradient(135deg,#360033,#0b8793); --bg-image-opacity:1; --text:#fff; --heading-color:#fff; --card-bg:rgba(0,0,0,0.35); --card-text:#fff; --card-border:1px solid rgba(255,255,255,0.15); --btn-bg-color:#42275a; --btn-bg-image:linear-gradient(90deg,#42275a,#734b6d); --btn-color:#fff; --radius-btn:30px; --radius-card:16px; }
+
+body[data-style="memphis"] { --font-family: "玫瑰牵绊断线风筝", sans-serif; }
+body[data-style="memphis"][data-mode="day"] { --bg-color:#FFEB3B; --text:#1a1a1a; --heading-color:#E91E63; --card-bg:#fff; --card-border:3px solid #1a1a1a; --card-shadow:6px 6px 0 #E91E63; --btn-bg-color:#00BCD4; --btn-color:#fff; --btn-border:3px solid #1a1a1a; --btn-shadow:5px 5px 0 #1a1a1a; --radius-btn:0; --radius-card:0; }
+body[data-style="memphis"][data-mode="night"] { --bg-color:#1a1a2e; --text:#f0f0f0; --heading-color:#FF4081; --card-bg:#16213e; --card-border:3px solid #FF4081; --card-shadow:6px 6px 0 #00d4ff; --btn-bg-color:#00d4ff; --btn-color:#111; --btn-border:3px solid #FF4081; --btn-shadow:5px 5px 0 #FF4081; --radius-btn:0; --radius-card:0; }
+
+body[data-style="cyberpunk"] { --font-family: "古早聊天室的像素体", monospace; }
+body[data-style="cyberpunk"][data-mode="day"] { --bg-color:#eef0fb; --text:#2b2140; --heading-color:#c400a5; --card-bg:#fff; --card-border:1px solid #c400a5; --card-shadow:0 0 12px rgba(196,0,165,0.25); --btn-bg-color:#fff; --btn-color:#0091a8; --btn-border:2px solid #0091a8; --btn-shadow:0 0 10px rgba(0,145,168,0.4); --radius-btn:0; --radius-card:4px; }
+body[data-style="cyberpunk"][data-mode="night"] { --bg-color:#0d0221; --text:#00fff0; --heading-color:#ff00de; --heading-shadow:0 0 10px #ff00de, 0 0 20px #ff00de; --card-bg:rgba(20,0,40,0.6); --card-border:1px solid #ff00de; --card-shadow:0 0 15px rgba(255,0,222,0.4); --btn-bg-color:transparent; --btn-color:#00fff0; --btn-border:2px solid #00fff0; --btn-shadow:0 0 10px #00fff0; --radius-btn:0; --radius-card:4px; }
+
+body[data-style="swiss"] { --font-family: "方正筑紫A圆体E", sans-serif; }
+body[data-style="swiss"][data-mode="day"] { --bg-color:#fff; --text:#000; --heading-color:#000; --heading-weight:700; --card-bg:#fff; --card-border:1px solid #eee; --btn-bg-color:#E53935; --btn-color:#fff; --radius-btn:0; --radius-card:0; }
+body[data-style="swiss"][data-mode="night"] { --bg-color:#111; --text:#eee; --heading-color:#fff; --heading-weight:700; --card-bg:#1a1a1a; --card-border:1px solid #2a2a2a; --btn-bg-color:#E53935; --btn-color:#fff; --radius-btn:0; --radius-card:0; }
+
+body[data-style="editorial"] { --font-family: "春山与观物 明朝体", serif; }
+body[data-style="editorial"][data-mode="day"] { --bg-color:#fdfaf5; --text:#2b2b2b; --heading-color:#2b2b2b; --card-bg:#fff; --card-border:1px solid #e5ddd0; --btn-bg-color:#2b2b2b; --btn-color:#fdfaf5; --radius-btn:0; --radius-card:0; }
+body[data-style="editorial"][data-mode="night"] { --bg-color:#1c1a17; --text:#e8dfd0; --heading-color:#fff; --card-bg:#26221e; --card-border:1px solid #3a352c; --btn-bg-color:#e8dfd0; --btn-color:#1c1a17; --radius-btn:0; --radius-card:0; }
+
+body[data-style="illustration"] { --font-family: "异次元流浪小猫", fantasy; }
+body[data-style="illustration"][data-mode="day"] { --bg-color:#FFF8E7; --text:#4A4A4A; --heading-color:#FF6B6B; --card-bg:#fff; --card-shadow:0 10px 30px rgba(255,107,107,0.15); --btn-bg-color:#FF6B6B; --btn-color:#fff; --radius-btn:50px; --radius-card:24px; }
+body[data-style="illustration"][data-mode="night"] { --bg-color:#2b2420; --text:#f0e6d2; --heading-color:#FF8A8A; --card-bg:#3a3128; --card-shadow:0 10px 30px rgba(255,107,107,0.12); --btn-bg-color:#FF6B6B; --btn-color:#fff; --radius-btn:50px; --radius-card:24px; }
+
+body[data-style="isometric"] { --font-family: "云淡风轻雅隶书", sans-serif; }
+body[data-style="isometric"][data-mode="day"] { --bg-color:#f0f4fe; --bg-image:linear-gradient(180deg,#e8f0fe,#ffffff); --bg-image-opacity:1; --text:#1a237e; --heading-color:#1a237e; --card-bg:#fff; --card-shadow:10px 10px 0 rgba(63,81,181,0.15); --btn-bg-color:#3F51B5; --btn-color:#fff; --btn-shadow:0 6px 0 #283593; --radius-btn:8px; --radius-card:16px; }
+body[data-style="isometric"][data-mode="night"] { --bg-color:#12162f; --bg-image:linear-gradient(180deg,#0a0e27,#1a1f3a); --bg-image-opacity:1; --text:#c5cae9; --heading-color:#fff; --card-bg:#1a1f3a; --card-border:1px solid rgba(121,134,203,0.3); --card-shadow:10px 10px 0 rgba(121,134,203,0.1); --btn-bg-color:#7986CB; --btn-color:#fff; --btn-shadow:0 6px 0 #5c6bc0; --radius-btn:8px; --radius-card:16px; }
+
+body[data-style="retro"] { --font-family: "古早小兔叽打字机", serif; }
+body[data-style="retro"][data-mode="day"] { --bg-color:#F4E4C1; --text:#6B4423; --heading-color:#C1440E; --card-bg:#FFF8E7; --card-border:2px solid #6B4423; --btn-bg-color:#C1440E; --btn-color:#F4E4C1; --radius-btn:4px; --radius-card:6px; }
+body[data-style="retro"][data-mode="night"] { --bg-color:#2b1f14; --text:#F4E4C1; --heading-color:#FF7A45; --card-bg:#3a2c1c; --card-border:2px solid #F4E4C1; --btn-bg-color:#FF7A45; --btn-color:#2b1f14; --radius-btn:4px; --radius-card:6px; }
+
+body[data-style="futuristic"] { --font-family: "虚拟的爱正在输入中100", monospace; }
+body[data-style="futuristic"][data-mode="day"] { --bg-color:#f4f6fb; --text:#2b2140; --heading-color:#5b2fc9; --card-bg:#fff; --card-border:1px solid #c8b6f0; --btn-bg-color:#5b8def; --btn-bg-image:linear-gradient(90deg,#5b8def,#a15bf0); --btn-color:#fff; --radius-btn:8px; }
+body[data-style="futuristic"][data-mode="night"] { --bg-color:#030014; --text:#a0e9ff; --heading-color:#00d4ff; --card-bg:rgba(123,47,247,0.1); --card-border:1px solid #7b2ff7; --btn-bg-color:#00d4ff; --btn-bg-image:linear-gradient(90deg,#00d4ff,#7b2ff7); --btn-color:#fff; --radius-btn:8px; }
+
+body[data-style="pastel"] { --font-family: "浮世万千欢喜人间", cursive; }
+body[data-style="pastel"][data-mode="day"] { --bg-color:#FFE5EC; --text:#6B4E71; --heading-color:#6B4E71; --card-bg:#FFF0F3; --btn-bg-color:#FFB3C6; --btn-color:#fff; --radius-btn:20px; --radius-card:20px; }
+body[data-style="pastel"][data-mode="night"] { --bg-color:#2a1a22; --text:#f5d9e2; --heading-color:#ffb3c6; --card-bg:#3a2530; --btn-bg-color:#e6799e; --btn-color:#fff; --radius-btn:20px; --radius-card:20px; }
+
+body[data-style="brutalism"] { --font-family: "我偏要一条路走到黑", sans-serif; --heading-decoration:underline; --heading-weight:400; }
+body[data-style="brutalism"][data-mode="day"] { --bg-color:#fff; --text:#000; --heading-color:#000; --heading-weight:400; --card-bg:#FFEB3B; --card-border:3px solid #000; --btn-bg-color:#000; --btn-color:#fff; --btn-border:2px solid #000; --radius-btn:0; --radius-card:0; }
+body[data-style="brutalism"][data-mode="night"] { --bg-color:#000; --text:#fff; --heading-color:#fff; --heading-weight:400; --card-bg:#FFEB3B; --card-border:3px solid #fff; --card-text:#000; --btn-bg-color:#fff; --btn-color:#000; --btn-border:2px solid #fff; --radius-btn:0; --radius-card:0; }
