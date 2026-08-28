@@ -152,12 +152,15 @@ const readThemeConfig = (): ThemeConfig => {
     bgType: readLocalStorage('sp-bg-type') || DEFAULT_THEME_CONFIG.bgType,
     bgValue: readLocalStorage('sp-bg-value') || DEFAULT_THEME_CONFIG.bgValue,
     fontSource:
-      (readLocalStorage('sp-font-source') as FontSource | null) ||
-      DEFAULT_THEME_CONFIG.fontSource,
+      (readLocalStorage('sp-font-source') as FontSource | null) || DEFAULT_THEME_CONFIG.fontSource,
     fontUrl: readLocalStorage('sp-font-url') || DEFAULT_THEME_CONFIG.fontUrl,
     fontName: readLocalStorage('sp-font-name') || DEFAULT_THEME_CONFIG.fontName,
   };
-  if (merged.fontSource !== 'theme' && merged.fontSource !== 'system' && merged.fontSource !== 'custom') {
+  if (
+    merged.fontSource !== 'theme' &&
+    merged.fontSource !== 'system' &&
+    merged.fontSource !== 'custom'
+  ) {
     merged.fontSource = 'theme';
   }
   return merged;
@@ -682,20 +685,17 @@ export function useThemeController(): UseThemeControllerResult {
     applyLockState('content');
   }, [applyLockState]);
 
-  const toggleThemeLock = useCallback(
-    (type: 'img' | 'content') => {
-      setThemeConfig((prev) => {
-        const next: ThemeConfig = {
-          ...prev,
-          lockedImg: type === 'img' ? !prev.lockedImg : prev.lockedImg,
-          lockedContent: type === 'content' ? !prev.lockedContent : prev.lockedContent,
-        };
-        writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleThemeLock = useCallback((type: 'img' | 'content') => {
+    setThemeConfig((prev) => {
+      const next: ThemeConfig = {
+        ...prev,
+        lockedImg: type === 'img' ? !prev.lockedImg : prev.lockedImg,
+        lockedContent: type === 'content' ? !prev.lockedContent : prev.lockedContent,
+      };
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const toggleSystemTextScale = useCallback(() => {
     const sysCheck = $<HTMLInputElement>('systemTextScaleCheck');
@@ -792,7 +792,11 @@ export function useThemeController(): UseThemeControllerResult {
   }, []);
 
   const updateBgAdjustmentFromValue = useCallback(
-    (next: Partial<Pick<ThemeConfig, 'bgBlur' | 'bgOpacity' | 'bgOverlay' | 'themeAlpha' | 'textMask'>>) => {
+    (
+      next: Partial<
+        Pick<ThemeConfig, 'bgBlur' | 'bgOpacity' | 'bgOverlay' | 'themeAlpha' | 'textMask'>
+      >,
+    ) => {
       const merge: ThemeConfig = {
         bgBlur: next.bgBlur ?? themeConfig.bgBlur,
         bgOpacity: next.bgOpacity ?? themeConfig.bgOpacity,
@@ -886,27 +890,24 @@ export function useThemeController(): UseThemeControllerResult {
     [updateBgAdjustmentFromValue],
   );
 
-  const applyBgUrlFromString = useCallback(
-    (url: string) => {
-      const trimmed = url.trim();
-      if (!trimmed) return;
-      setThemeConfig((prev) => {
-        const next: ThemeConfig = { ...prev, bgType: 'url', bgValue: trimmed };
-        writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-      /* 立即把 DOM 预览同步成最新值,无需等待 React 重渲染 */
-      const previewImg = $('bgPreviewImage');
-      const previewText = document.querySelector<HTMLElement>('.bg-preview-text');
-      const urlInput = $<HTMLInputElement>('bgUrlInput');
-      const globalBg = $('custom-bg-layer');
-      if (previewImg) previewImg.style.backgroundImage = `url("${trimmed}")`;
-      if (globalBg) globalBg.style.backgroundImage = `url("${trimmed}")`;
-      if (previewText) previewText.style.display = 'none';
-      if (urlInput) urlInput.value = trimmed;
-    },
-    [],
-  );
+  const applyBgUrlFromString = useCallback((url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setThemeConfig((prev) => {
+      const next: ThemeConfig = { ...prev, bgType: 'url', bgValue: trimmed };
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    /* 立即把 DOM 预览同步成最新值,无需等待 React 重渲染 */
+    const previewImg = $('bgPreviewImage');
+    const previewText = document.querySelector<HTMLElement>('.bg-preview-text');
+    const urlInput = $<HTMLInputElement>('bgUrlInput');
+    const globalBg = $('custom-bg-layer');
+    if (previewImg) previewImg.style.backgroundImage = `url("${trimmed}")`;
+    if (globalBg) globalBg.style.backgroundImage = `url("${trimmed}")`;
+    if (previewText) previewText.style.display = 'none';
+    if (urlInput) urlInput.value = trimmed;
+  }, []);
 
   /* 与 updateTextScale / updateUiScale 同理,使用 function declaration 提升声明 */
   function updateBgAdjustment() {
@@ -1076,41 +1077,38 @@ export function useThemeController(): UseThemeControllerResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- openCropperModal 是稳定引用(空依赖)
   }, []);
 
-  const openCropperModal = useCallback(
-    (src: string) => {
-      if (!SAFE_WINDOW) return;
-      const img = $<HTMLImageElement>('cropperImage');
-      const modal = $('cropperModal');
-      if (!img || !modal) {
-        console.warn('[theme] 裁剪模态框 DOM 未就绪');
-        return;
-      }
-      img.src = src;
-      modal.style.display = 'flex';
-      /* 同步 React 端 state,让 <CropperModal> 受控显示 */
-      setCropperModalSrc(src);
-      setCropperModalOpen(true);
-      if (cropperInstance) {
-        cropperInstance.destroy();
-        cropperInstance = null;
-      }
-      if (!window.Cropper) {
-        console.warn('[theme] Cropper.js 尚未加载完成');
-        return;
-      }
-      try {
-        cropperInstance = new window.Cropper(img, {
-          viewMode: 1,
-          dragMode: 'move',
-          autoCropArea: 1,
-          aspectRatio: NaN,
-        });
-      } catch (err) {
-        console.error('[theme] Cropper 初始化失败:', err);
-      }
-    },
-    [],
-  );
+  const openCropperModal = useCallback((src: string) => {
+    if (!SAFE_WINDOW) return;
+    const img = $<HTMLImageElement>('cropperImage');
+    const modal = $('cropperModal');
+    if (!img || !modal) {
+      console.warn('[theme] 裁剪模态框 DOM 未就绪');
+      return;
+    }
+    img.src = src;
+    modal.style.display = 'flex';
+    /* 同步 React 端 state,让 <CropperModal> 受控显示 */
+    setCropperModalSrc(src);
+    setCropperModalOpen(true);
+    if (cropperInstance) {
+      cropperInstance.destroy();
+      cropperInstance = null;
+    }
+    if (!window.Cropper) {
+      console.warn('[theme] Cropper.js 尚未加载完成');
+      return;
+    }
+    try {
+      cropperInstance = new window.Cropper(img, {
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 1,
+        aspectRatio: NaN,
+      });
+    } catch (err) {
+      console.error('[theme] Cropper 初始化失败:', err);
+    }
+  }, []);
 
   const confirmCrop = useCallback(() => {
     if (!cropperInstance) return;
@@ -1275,12 +1273,7 @@ export function useThemeController(): UseThemeControllerResult {
       writeLocalStorage(LAYOUT_STORAGE_KEY, 'scroll');
     }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateXxx 为函数声明,调用时读取最新 DOM
-  }, [
-    applyLayout,
-    applyState,
-    initFontPanel,
-    initLocks,
-  ]);
+  }, [applyLayout, applyState, initFontPanel, initLocks]);
 
   return {
     styles: DEFAULT_THEME_LIST,

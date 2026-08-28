@@ -231,7 +231,9 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               className={`param-lock-btn${lockedContent ? ' locked' : ''}`}
               id="lockContentBtn"
               onClick={() => onToggleThemeLock?.('content')}
-              dangerouslySetInnerHTML={{ __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON }}
+              dangerouslySetInnerHTML={{
+                __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON,
+              }}
             />
           </div>
           <div className="range-group">
