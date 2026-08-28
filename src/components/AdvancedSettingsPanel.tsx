@@ -33,6 +33,7 @@ export interface AdvancedSettingsPanelProps {
   onChangeFontSource?: (value: 'theme' | 'system' | 'custom') => void;
   onApplyCurrentThemeFontAsCustom?: () => void;
   onApplyCustomFont?: (url: string, name: string) => void;
+  onResetSettings?: () => void;
 }
 
 const numberInputProps = {
@@ -40,8 +41,19 @@ const numberInputProps = {
   style: { width: '100%' },
 };
 
+const LOCK_OPEN_ICON = '<i class="fas fa-lock-open"></i>';
+const LOCK_CLOSED_ICON = '<i class="fas fa-lock"></i>';
+
 /**
  * 高级主题设置面板（无损移植 docs/参考代码/2/code.html 中 #settingsWrapper）。
+ *
+ * 与参考实现保持 1:1 行为契约：
+ *  - 滑块全部受控：值取自 themeConfig,变更通过 onXxxChange 回写 controller,
+ *    controller 负责把值写回 CSS 变量 / DOM 预览 / localStorage。
+ *  - 锁定按钮的图标由 controller 在 useEffect 中通过 lockImgBtn / lockContentBtn
+ *    的 innerHTML 直接控制；这里仅渲染 <button className="param-lock-btn"> 容器。
+ *  - 系统文字缩放 checkbox 一旦勾选,controller 会同时把 textScale / uiScale
+ *    重置为 100 并禁用滑块；面板只需在 disabled / checked 上跟随。
  */
 export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
   const {
@@ -77,6 +89,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     onChangeFontSource,
     onApplyCurrentThemeFontAsCustom,
     onApplyCustomFont,
+    onResetSettings,
   } = props;
 
   const handleBgUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -84,6 +97,8 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     if (file) {
       onUploadBackground?.(file);
     }
+    /* 允许连续上传同一文件 */
+    event.target.value = '';
   };
 
   const handleApplyCustomFont = () => {
@@ -97,7 +112,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
 
   const handleApplyBgUrl = () => {
     const url = (document.getElementById('bgUrlInput') as HTMLInputElement | null)?.value.trim();
-    if (url !== undefined) {
+    if (url !== undefined && url !== null) {
       onApplyBgUrl?.(url);
     }
   };
@@ -109,11 +124,23 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
           <span>
             <i className="fas fa-sliders-h" /> 高级主题设置
           </span>
-          <i
-            className="fas fa-times close-modal-btn d-lg-none"
-            title="关闭面板"
-            onClick={onClose}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <i
+              className="fas fa-undo"
+              title="恢复默认设置"
+              role="button"
+              aria-label="恢复默认设置"
+              style={{ cursor: 'pointer' }}
+              onClick={onResetSettings}
+            />
+            <i
+              className="fas fa-times close-modal-btn d-lg-none"
+              title="关闭面板"
+              role="button"
+              aria-label="关闭面板"
+              onClick={onClose}
+            />
+          </div>
         </h2>
 
         {/* 缩放比例调节 */}
@@ -160,10 +187,10 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               max={200}
               step={1}
               value={textScale}
+              disabled={systemTextScale}
               onInput={(event) =>
                 onTextScaleChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onTextScaleChange?.(Number(event.target.value))}
             />
           </div>
           <div className="range-group">
@@ -178,10 +205,10 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               max={150}
               step={1}
               value={uiScale}
+              disabled={systemTextScale}
               onInput={(event) =>
                 onUiScaleChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onUiScaleChange?.(Number(event.target.value))}
             />
           </div>
         </div>
@@ -204,9 +231,8 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               className={`param-lock-btn${lockedContent ? ' locked' : ''}`}
               id="lockContentBtn"
               onClick={() => onToggleThemeLock?.('content')}
-            >
-              <i className="fas fa-lock" />
-            </button>
+              dangerouslySetInnerHTML={{ __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON }}
+            />
           </div>
           <div className="range-group">
             <div className="range-header">
@@ -224,7 +250,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               onInput={(event) =>
                 onThemeAlphaChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onThemeAlphaChange?.(Number(event.target.value))}
             />
           </div>
           <div className="range-group">
@@ -243,7 +268,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               onInput={(event) =>
                 onTextMaskChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onTextMaskChange?.(Number(event.target.value))}
             />
           </div>
         </div>
@@ -266,9 +290,8 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               className={`param-lock-btn${lockedImg ? ' locked' : ''}`}
               id="lockImgBtn"
               onClick={() => onToggleThemeLock?.('img')}
-            >
-              <i className="fas fa-lock" />
-            </button>
+              dangerouslySetInnerHTML={{ __html: lockedImg ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON }}
+            />
           </div>
           <div className="range-group">
             <div className="range-header">
@@ -286,7 +309,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               onInput={(event) =>
                 onBgBlurChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onBgBlurChange?.(Number(event.target.value))}
             />
           </div>
           <div className="range-group">
@@ -305,7 +327,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               onInput={(event) =>
                 onBgOpacityChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onBgOpacityChange?.(Number(event.target.value))}
             />
           </div>
           <div className="range-group">
@@ -324,7 +345,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               onInput={(event) =>
                 onBgOverlayChange?.(Number((event.target as HTMLInputElement).value))
               }
-              onChange={(event) => onBgOverlayChange?.(Number(event.target.value))}
             />
           </div>
 

@@ -83,6 +83,29 @@ export default function App() {
     applyCurrentThemeFontAsCustom,
     applyCustomFont,
     refreshCurrentFont,
+    loadSettings,
+    initLocks,
+    toggleThemeLock,
+    toggleSystemTextScale,
+    updateBgAdjustment,
+    updateTextScaleFromValue,
+    updateUiScaleFromValue,
+    updateThemeAlphaFromValue,
+    updateTextMaskFromValue,
+    updateBgBlurFromValue,
+    updateBgOpacityFromValue,
+    updateBgOverlayFromValue,
+    initSliderHideEffect,
+    handleBgUpload,
+    confirmCrop,
+    applyBgUrlFromString,
+    clearBackground,
+    updateBgPreviewUI,
+    resetCropper,
+    cropperReady,
+    cropperModalOpen,
+    cropperModalSrc,
+    closeCropperModal,
   } = useThemeController();
 
   /* ======================== 应用运行时背景设置 ======================== */
@@ -98,7 +121,6 @@ export default function App() {
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
-  const [cropperOpen, setCropperOpen] = useState(false);
 
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
@@ -184,12 +206,36 @@ export default function App() {
   /**
    * 高级面板打开时，把当前字体配置同步进 DOM 输入框，
    * 确保切换 source 后立即可见 url/name 的最新值。
+   * 注意:loadSettings/updateBgAdjustment 等是 function declaration(非 useCallback),
+   * 不能进依赖数组,否则每次渲染都会重跑本 effect;这里只在面板开合时执行一次。
    */
   useEffect(() => {
     if (advancedSettingsOpen) {
       initFontPanel();
+      /* 关键:每次打开面板都重新把 state 灌回滑块/锁定 DOM,
+       * 避免 useThemeController 内部状态已更新但 DOM 还在使用旧值 */
+      loadSettings();
+      initLocks();
+      updateBgAdjustment();
+      updateBgPreviewUI();
+      /* 给 DOM 一点时间渲染,再挂载滑块拖拽沉浸式特效 */
+      const id = window.setTimeout(() => initSliderHideEffect(), 0);
+      return () => window.clearTimeout(id);
     }
-  }, [advancedSettingsOpen, initFontPanel]);
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advancedSettingsOpen]);
+
+  /* 应用挂载后,把滑块/锁定/背景状态一次性灌入 DOM。
+   * 依赖数组刻意为空:这些函数读取的是最新闭包(themeConfig 来自 useState,
+   * 挂载时已从 localStorage 初始化),仅需要执行一次。 */
+  useEffect(() => {
+    loadSettings();
+    initLocks();
+    updateBgAdjustment();
+    updateBgPreviewUI();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * 把管理员配置的应用背景注入 CSS 变量，并把日夜模式映射到
@@ -344,21 +390,45 @@ export default function App() {
         ? createPortal(
             <AdvancedSettingsPanel
               open={advancedSettingsOpen}
-              textScale={100}
-              uiScale={100}
-              themeAlpha={0}
-              textMask={0}
-              bgBlur={0}
-              bgOpacity={1}
-              bgOverlay={0}
-              bgPreviewUrl=""
-              systemTextScale={false}
-              lockedContent
-              lockedImg
+              textScale={themeConfig.textScale}
+              uiScale={themeConfig.uiScale}
+              themeAlpha={themeConfig.themeAlpha}
+              textMask={themeConfig.textMask}
+              bgBlur={themeConfig.bgBlur}
+              bgOpacity={themeConfig.bgOpacity}
+              bgOverlay={themeConfig.bgOverlay}
+              bgPreviewUrl={
+                themeConfig.bgType !== 'none' && themeConfig.bgValue ? themeConfig.bgValue : ''
+              }
+              systemTextScale={themeConfig.systemTextScale}
+              lockedContent={themeConfig.lockedContent}
+              lockedImg={themeConfig.lockedImg}
               fontSource={themeConfig.fontSource}
               customFontUrl={themeConfig.fontUrl}
               customFontName={themeConfig.fontName}
               onClose={() => setAdvancedSettingsOpen(false)}
+              onTextScaleChange={(value) => updateTextScaleFromValue(value)}
+              onUiScaleChange={(value) => updateUiScaleFromValue(value)}
+              onThemeAlphaChange={(value) => updateThemeAlphaFromValue(value)}
+              onTextMaskChange={(value) => updateTextMaskFromValue(value)}
+              onBgBlurChange={(value) => updateBgBlurFromValue(value)}
+              onBgOpacityChange={(value) => updateBgOpacityFromValue(value)}
+              onBgOverlayChange={(value) => updateBgOverlayFromValue(value)}
+              onToggleSystemTextScale={(checked) => {
+                if (checked !== themeConfig.systemTextScale) {
+                  toggleSystemTextScale();
+                }
+              }}
+              onToggleThemeLock={(target) => {
+                toggleThemeLock(target);
+              }}
+              onUploadBackground={(file) => {
+                handleBgUpload(file);
+              }}
+              onClearBackground={() => clearBackground()}
+              onApplyBgUrl={(url) => {
+                applyBgUrlFromString(url);
+              }}
               onRefreshCurrentFont={() => {
                 refreshCurrentFont();
               }}
@@ -371,17 +441,31 @@ export default function App() {
               onApplyCustomFont={(url, name) => {
                 applyCustomFont(url, name);
               }}
+              onResetSettings={() => {
+                resetSettings();
+              }}
             />,
             document.body,
           )
         : null}
 
-      {cropperOpen
-        ? createPortal(
-            <CropperModal open={cropperOpen} imageSrc="" onClose={() => setCropperOpen(false)} />,
-            document.body,
-          )
-        : null}
+      {createPortal(
+        <CropperModal
+          open={cropperModalOpen}
+          imageSrc={cropperModalSrc}
+          cropperReady={cropperReady}
+          onClose={() => {
+            closeCropperModal();
+          }}
+          onReset={() => {
+            resetCropper();
+          }}
+          onConfirm={() => {
+            confirmCrop();
+          }}
+        />,
+        document.body,
+      )}
     </div>
   );
 }
