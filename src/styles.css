@@ -5513,6 +5513,24 @@ body[data-style='neumorphism'][data-mode='night'] {
   --radius-card: 20px;
 }
 
+/* 新拟态的"立体感"靠外阴影(双向)实现,但 5px 的外阴影需要底部留出空间才能完全显示。
+ * 默认 app-header padding-bottom 12px + margin-bottom 12px 显然不够,
+ * nav-pill / 工具栏按钮的阴影会被下一行遮挡,看上去像是被"切掉了一半"。
+ * 这里给新拟态主题的容器底部多留 14px 空间,让阴影完整展示。*/
+body[data-style='neumorphism'] .app-header {
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+}
+body[data-style='neumorphism'] .plaza-controls-panel,
+body[data-style='neumorphism'] .plaza-toolbar-actions,
+body[data-style='neumorphism'] .plaza-toolbar-row,
+body[data-style='neumorphism'] .plaza-toolbar-row-desktop {
+  padding-bottom: 14px;
+}
+body[data-style='neumorphism'] .top-nav {
+  padding-bottom: 8px;
+}
+
 body[data-style='glass'] {
   --font-family: '亲一口我的小毛咪', sans-serif;
 }
@@ -5666,6 +5684,27 @@ body[data-style='cyberpunk'][data-mode='night'] {
   --btn-shadow: 0 0 10px #00fff0;
   --radius-btn: 0;
   --radius-card: 4px;
+}
+
+/* 赛博朋克复制提示边框修复：
+ * 1px 实色 border 在霓虹色（紫红 / 玫红）下，由于子像素抗锯齿，
+ * 圆角边缘会出现明显的"毛刺"。改成用 box-shadow inset 模拟外环，
+ * + outline 兜底。颜色保留霓虹色，视觉风格不变，但渲染平滑。 */
+body[data-style='cyberpunk'][data-mode='day'] .app-toast {
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1.5px #c400a5,
+    0 0 12px rgba(196, 0, 165, 0.35);
+  outline: 1px solid #c400a5;
+  outline-offset: -1.5px;
+}
+body[data-style='cyberpunk'][data-mode='night'] .app-toast {
+  border: 0;
+  box-shadow:
+    inset 0 0 0 1.5px #ff00de,
+    0 0 12px rgba(255, 0, 222, 0.45);
+  outline: 1px solid #ff00de;
+  outline-offset: -1.5px;
 }
 
 body[data-style='swiss'] {

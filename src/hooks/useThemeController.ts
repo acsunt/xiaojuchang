@@ -418,7 +418,92 @@ export function useThemeController(): UseThemeControllerResult {
     }
   };
 
-  /** 真正执行一次 FontFace.load 并加入到 document.fonts。失败不抛,只控制台告警。 */
+  /**
+   * 真正执行一次 FontFace.load 并加入到 document.fonts。失败不抛,只控制台告警。
+   *
+   * 多线程并行下载：
+   *   1) 先尝试 HEAD 请求获取 Content-Length + Accept-Ranges。
+   *   2) 如果服务器支持 Range + 文件够大 (>= 256KB),切成 PARALLEL_LIMIT 段并发下载。
+   *   3) 任意一段失败 / 服务器不支持 Range / 文件太小 -> 自动降级为单线程 FontFace 直接 load(url)。
+   *   4) 小文件（<= 256KB）直接走单线程,避免分段开销比网络节省还大。
+   *
+   * 注：浏览器对同一 origin 的并发连接有上限(~6),但字体通常跨域 (CDN),实际不会被卡。
+   */
+  const PARALLEL_LIMIT = 4;
+  const PARALLEL_MIN_BYTES = 256 * 1024;
+
+  const isRangeSupported = async (
+    url: string,
+  ): Promise<{ supported: boolean; totalSize: number | null }> => {
+    try {
+      const headResp = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+      if (!headResp.ok) {
+        return { supported: false, totalSize: null };
+      }
+      const acceptRanges = headResp.headers.get('accept-ranges');
+      const contentLength = Number(headResp.headers.get('content-length'));
+      const supported = !!acceptRanges && acceptRanges.toLowerCase() === 'bytes';
+      return {
+        supported,
+        totalSize: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : null,
+      };
+    } catch {
+      return { supported: false, totalSize: null };
+    }
+  };
+
+  const downloadRange = async (url: string, start: number, end: number): Promise<ArrayBuffer> => {
+    const resp = await fetch(url, {
+      headers: { Range: `bytes=${start}-${end}` },
+      cache: 'no-store',
+    });
+    if (!resp.ok && resp.status !== 206) {
+      throw new Error(`Range download failed: HTTP ${resp.status}`);
+    }
+    return await resp.arrayBuffer();
+  };
+
+  /**
+   * 多线程并行下载整个字体文件,合并成 ArrayBuffer。
+   * 返回 null 表示降级（让调用方回退到单线程）。
+   */
+  const downloadFontParallel = async (url: string): Promise<ArrayBuffer | null> => {
+    const { supported, totalSize } = await isRangeSupported(url);
+    if (!supported || totalSize === null || totalSize < PARALLEL_MIN_BYTES) {
+      return null;
+    }
+
+    const chunkSize = Math.ceil(totalSize / PARALLEL_LIMIT);
+    const ranges: Array<{ start: number; end: number }> = [];
+    for (let i = 0; i < PARALLEL_LIMIT; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize - 1, totalSize - 1);
+      if (start <= end) {
+        ranges.push({ start, end });
+      }
+    }
+
+    try {
+      const buffers = await Promise.all(
+        ranges.map((range) => downloadRange(url, range.start, range.end)),
+      );
+      /* 把分段直接拼成一个 ArrayBuffer,喂给 FontFace。
+       * FontFace 支持 ArrayBuffer / TypedArray / Blob / URL,
+       * 不强求具体 mime,交给浏览器嗅探。 */
+      const total = buffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const buf of buffers) {
+        merged.set(new Uint8Array(buf), offset);
+        offset += buf.byteLength;
+      }
+      return merged.buffer;
+    } catch (err) {
+      console.warn('[font] 多线程下载失败,降级到单线程:', err);
+      return null;
+    }
+  };
+
   const loadOneFont = useCallback(
     async (fontName: string, fontUrl: string, forceReload = false): Promise<void> => {
       if (!SAFE_WINDOW || !fontName || !fontUrl) {
@@ -446,7 +531,12 @@ export function useThemeController(): UseThemeControllerResult {
 
       beginLoading(fontName);
       try {
-        const font = new FontFace(fontName, `url("${fontUrl}")`);
+        /* 路径 1:尝试多线程并行下载（HEAD + Range）。
+         * 如果服务器不支持 Range 或文件太小 -> 返回 null,回退到路径 2。 */
+        const parallelBuffer = await downloadFontParallel(fontUrl);
+        const font = parallelBuffer
+          ? new FontFace(fontName, parallelBuffer)
+          : new FontFace(fontName, `url("${fontUrl}")`);
         await font.load();
         document.fonts.add(font);
       } catch (err) {
@@ -455,7 +545,7 @@ export function useThemeController(): UseThemeControllerResult {
         endLoading(fontName);
       }
     },
-    // beginLoading / endLoading 是顶层定义的稳定函数（依赖 ref,无外部 state）,
+    // downloadFontParallel / beginLoading / endLoading 都是稳定引用（依赖 ref + 不变常量）,
     // 重复声明只会让函数引用随每次渲染变新,反而让 loadOneFont 引用也跟着抖。
     // 此处显式禁用 exhaustive-deps,避免一次性修复即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -161,8 +161,12 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
                 fontSize: 'calc(12px * var(--text-scale))',
                 display: 'flex',
                 alignItems: 'center',
+                gap: 6,
                 cursor: 'pointer',
                 color: 'var(--sp-text-secondary)',
+                /* 防止父级 justify-content: space-between 把整段 label 压缩导致文字换行 */
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               <input
@@ -170,8 +174,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
                 id="systemTextScaleCheck"
                 checked={systemTextScale}
                 onChange={(event) => onToggleSystemTextScale?.(event.target.checked)}
-                style={{ marginRight: 5 }}
-              />{' '}
+              />
               跟随系统
             </label>
           </div>
