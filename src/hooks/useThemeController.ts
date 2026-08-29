@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 import { DEFAULT_THEME_LIST } from '../data/theme-list';
 import { themeFonts } from '../data/theme-fonts';
@@ -270,8 +270,8 @@ export interface UseThemeControllerResult {
  * 1. applyState / applyLayout 1:1 移植 docs/参考代码/3/code.js,负责把状态写入
  *    localStorage 与 body 的 data-* 属性。
  * 2. 字体相关函数(initFontPanel / changeFontSource / applyCurrentThemeFontAsCustom /
- *    applyCustomFont / updateFontDOM / loadAndApplyFont / refreshCurrentFont)按参考
- *    code.js 1:1 移植,FontFace API 加载动画(Toast)通过 #fontLoadingOverlay DOM 触发。
+ *    applyCustomFont / updateFontDOM / loadFontsParallel / loadOneFont / refreshCurrentFont)
+ *    按参考 code.js 1:1 移植,FontFace API 加载动画(Toast)通过 #fontLoadingOverlay DOM 触发。
  * 3. 仅暴露 React 端需要的副作用 / 回调,DOM 写入全部收敛在此处。
  */
 export function useThemeController(): UseThemeControllerResult {
@@ -352,15 +352,78 @@ export function useThemeController(): UseThemeControllerResult {
     writeLocalStorage('sp-font-name', themeConfig.fontName);
   }, [themeConfig]);
 
-  /* ---------- 字体加载核心 ---------- */
-  const loadAndApplyFont = useCallback(
-    async (fontName: string, fontUrl: string, forceReload = false) => {
+  /* ---------- 字体加载核心 ----------
+   * 设计：
+   * 1. 加载提示（#fontLoadingOverlay）用引用计数控制显示：
+   *    进入加载时 count++ => 显示；任意一个加载完成 count--；归零时延迟 300ms 隐藏。
+   *    这样默认主题字体 + 自定义链接字体可以并行触发，overlay 也不会被来回闪烁。
+   * 2. 每个字体任务由 loadOneFont() 独立完成,内部保证 cache / 失败重试 / overlay 计数++/--。
+   * 3. updateFontDOM() 同时加载默认主题字体和自定义链接字体,P即可并行。
+   *    自定义源(custom)只加载自定义字体,默认源(theme/system)只加载默认字体。*/
+  const loadingCountRef = useRef(0);
+  const loadingNamesRef = useRef<string[]>([]);
+
+  /** 推入一个正在加载中的字体名,刷新 overlay 上的文件名展示 */
+  const pushLoadingName = (fontName: string) => {
+    const list = loadingNamesRef.current;
+    if (!list.includes(fontName)) {
+      list.push(fontName);
+    }
+    const loadingName = $('fontLoadingName');
+    if (loadingName) {
+      loadingName.innerText = list.length === 1 ? list[0] : `${list[0]} 等 ${list.length} 个`;
+    }
+  };
+
+  /** 加载完成时把字体名从列表中移除,刷新 overlay 上的文件名 */
+  const dropLoadingName = (fontName: string) => {
+    loadingNamesRef.current = loadingNamesRef.current.filter((name: string) => name !== fontName);
+    const loadingName = $('fontLoadingName');
+    if (loadingName) {
+      const list = loadingNamesRef.current;
+      if (list.length === 0) {
+        loadingName.innerText = '';
+      } else if (list.length === 1) {
+        loadingName.innerText = list[0];
+      } else {
+        loadingName.innerText = `${list[0]} 等 ${list.length} 个`;
+      }
+    }
+  };
+
+  /** 计数 + 显示 overlay */
+  const beginLoading = (fontName: string) => {
+    loadingCountRef.current += 1;
+    pushLoadingName(fontName);
+    const loadingOverlay = $('fontLoadingOverlay');
+    if (loadingOverlay) {
+      loadingOverlay.classList.add('show');
+    }
+  };
+
+  /** 计数 - 隐藏 overlay */
+  const endLoading = (fontName: string) => {
+    loadingCountRef.current = Math.max(0, loadingCountRef.current - 1);
+    dropLoadingName(fontName);
+    if (loadingCountRef.current === 0) {
+      const loadingOverlay = $('fontLoadingOverlay');
+      if (loadingOverlay) {
+        window.setTimeout(() => {
+          /* 关掉前再确认一次,避免在过渡空窗中又被新任务拉起 */
+          if (loadingCountRef.current === 0) {
+            loadingOverlay.classList.remove('show');
+          }
+        }, 300);
+      }
+    }
+  };
+
+  /** 真正执行一次 FontFace.load 并加入到 document.fonts。失败不抛,只控制台告警。 */
+  const loadOneFont = useCallback(
+    async (fontName: string, fontUrl: string, forceReload = false): Promise<void> => {
       if (!SAFE_WINDOW || !fontName || !fontUrl) {
         return;
       }
-
-      const loadingOverlay = $('fontLoadingOverlay');
-      const loadingName = $('fontLoadingName');
 
       if (forceReload) {
         Array.from(document.fonts).forEach((f) => {
@@ -377,29 +440,39 @@ export function useThemeController(): UseThemeControllerResult {
         }
       });
 
-      if (!isLoaded) {
-        try {
-          if (loadingName) {
-            loadingName.innerText = fontName;
-          }
-          if (loadingOverlay) {
-            loadingOverlay.classList.add('show');
-          }
-          const font = new FontFace(fontName, `url("${fontUrl}")`);
-          await font.load();
-          document.fonts.add(font);
-        } catch (err) {
-          console.error('字体加载失败:', err);
-        } finally {
-          if (loadingOverlay) {
-            setTimeout(() => {
-              loadingOverlay.classList.remove('show');
-            }, 300);
-          }
-        }
+      if (isLoaded) {
+        return;
+      }
+
+      beginLoading(fontName);
+      try {
+        const font = new FontFace(fontName, `url("${fontUrl}")`);
+        await font.load();
+        document.fonts.add(font);
+      } catch (err) {
+        console.error(`字体加载失败 [${fontName}]:`, err);
+      } finally {
+        endLoading(fontName);
       }
     },
+    // beginLoading / endLoading 是顶层定义的稳定函数（依赖 ref,无外部 state）,
+    // 重复声明只会让函数引用随每次渲染变新,反而让 loadOneFont 引用也跟着抖。
+    // 此处显式禁用 exhaustive-deps,避免一次性修复即可。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
+  );
+
+  /** 并行加载多组字体(name+url),所有任务都完成后 resolve。空数组直接 resolve。 */
+  const loadFontsParallel = useCallback(
+    async (fonts: Array<{ name: string; url: string }>, forceReload = false): Promise<void> => {
+      if (fonts.length === 0) {
+        return;
+      }
+      await Promise.allSettled(
+        fonts.map((entry) => loadOneFont(entry.name, entry.url, forceReload)),
+      );
+    },
+    [loadOneFont],
   );
 
   const updateFontDOM = useCallback(
@@ -422,9 +495,28 @@ export function useThemeController(): UseThemeControllerResult {
         if (preview) {
           preview.style.fontFamily = SYSTEM_FONT_STACK;
         }
-      } else if (source === 'custom' && themeConfig.fontUrl) {
+        return;
+      }
+
+      /* 自定义字体源(custom):并行加载默认主题字体 + 自定义链接字体。
+       * 这样切到自定义源后,字体预览/后备字体可以立即显示,
+       * 自定义字体加载完成后无缝替换。 */
+      if (source === 'custom' && themeConfig.fontUrl) {
         const { fontUrl: url, fontName: name } = themeConfig;
-        await loadAndApplyFont(name || 'MyCustomFont', url, forceReload);
+        const tasks: Array<{ name: string; url: string }> = [];
+
+        /* 1) 默认主题字体（并行） */
+        const themeFontInfo = themeFonts[currentStyle];
+        if (themeFontInfo && themeFontInfo.url) {
+          tasks.push({ name: themeFontInfo.name, url: themeFontInfo.url });
+        }
+
+        /* 2) 用户自定义字体（并行） */
+        const customName = name || 'MyCustomFont';
+        tasks.push({ name: customName, url });
+
+        await loadFontsParallel(tasks, forceReload);
+
         if (url.includes('.css') || url.includes('fonts.googleapis')) {
           let link = $<HTMLLinkElement>('dynamic-font-link');
           if (link) {
@@ -436,24 +528,60 @@ export function useThemeController(): UseThemeControllerResult {
           link.href = url;
           document.head.appendChild(link);
         }
-        const safeName = name || 'MyCustomFont';
+        const safeName = customName;
         styleTag.innerHTML = `body { font-family: '${safeName}', sans-serif !important; }`;
         if (preview) {
           preview.style.fontFamily = `'${safeName}', sans-serif`;
         }
-      } else {
-        styleTag.innerHTML = '';
-        if (preview) {
-          preview.style.fontFamily = 'var(--font-family)';
-        }
-        const themeFontInfo = themeFonts[currentStyle];
-        if (themeFontInfo) {
-          await loadAndApplyFont(themeFontInfo.name, themeFontInfo.url, forceReload);
-        }
+        return;
+      }
+
+      /* 主题默认字体源(theme):仅加载当前主题默认字体 */
+      styleTag.innerHTML = '';
+      if (preview) {
+        preview.style.fontFamily = 'var(--font-family)';
+      }
+      const themeFontInfo = themeFonts[currentStyle];
+      if (themeFontInfo) {
+        await loadOneFont(themeFontInfo.name, themeFontInfo.url, forceReload);
       }
     },
-    [currentStyle, loadAndApplyFont, themeConfig],
+    [currentStyle, loadFontsParallel, loadOneFont, themeConfig],
   );
+
+  /* 刷新按钮:点击重新加载当前生效的所有字体。
+   * - 系统字体源:啥也不做
+   * - 主题默认源:重载当前主题默认字体
+   * - 自定义源:重载默认主题字体 + 自定义字体（并行） */
+  const reloadActiveFonts = useCallback(async () => {
+    await updateFontDOM(true);
+  }, [updateFontDOM]);
+
+  /* 挂载刷新按钮 click -> reloadActiveFonts
+   * 顺带加 .spin 触发图标旋转反馈,动画结束后自动移除 */
+  useEffect(() => {
+    if (!SAFE_WINDOW) {
+      return;
+    }
+    const btn = $<HTMLButtonElement>('fontLoadingRefresh');
+    if (!btn) {
+      return;
+    }
+    const handler = () => {
+      btn.classList.remove('spin');
+      /* 强制 reflow 重启动画,否则连点时不会重新触发 */
+      void btn.offsetWidth;
+      btn.classList.add('spin');
+      window.setTimeout(() => {
+        btn.classList.remove('spin');
+      }, 650);
+      void reloadActiveFonts();
+    };
+    btn.addEventListener('click', handler);
+    return () => {
+      btn.removeEventListener('click', handler);
+    };
+  }, [reloadActiveFonts]);
 
   /* ---------- 主题 / 日夜 / 排版写入 ---------- */
   const applyState = useCallback(() => {

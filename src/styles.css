@@ -4990,6 +4990,9 @@ body {
   position: fixed;
   top: 20px;
   left: 50%;
+  /* 手机端一行能放下就把最大宽度拉长一些,避免换行;桌面端走 max-width 兜底 */
+  max-width: min(94vw, 720px);
+  white-space: nowrap;
   transform: translateX(-50%) translateY(-20px);
   background: rgba(0, 0, 0, 0.85);
   color: #fff;
@@ -5009,6 +5012,62 @@ body {
 .font-loading-overlay.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* 标签"正在加载字体 XXX..." 截断超长字体名,避免撑爆 layout */
+.font-loading-overlay .font-loading-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(80vw, 540px);
+}
+
+/* 刷新按钮：圆角小图标,hover/focus 时变亮,active 时给点按反馈 */
+.font-loading-overlay .font-loading-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+.font-loading-overlay .font-loading-refresh:hover,
+.font-loading-overlay .font-loading-refresh:focus-visible {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.7);
+  outline: none;
+}
+.font-loading-overlay .font-loading-refresh:active {
+  transform: scale(0.92);
+}
+.font-loading-overlay .font-loading-refresh i {
+  display: inline-block;
+  transform-origin: 50% 50%;
+}
+/* 点击瞬间给图标一个旋转反馈 */
+.font-loading-overlay .font-loading-refresh.spin i {
+  animation: font-loading-refresh-spin 0.6s ease-out;
+}
+@keyframes font-loading-refresh-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 控制面板/设置面板样式 */
