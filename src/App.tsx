@@ -355,8 +355,9 @@ export default function App() {
           // 不关闭主题面板，方便用户连续切换多个主题对比效果
         }}
         onOpenAdvancedSettings={() => {
+          /* 点了"高级主题设置"按钮不要收起主题面板，
+           * 这样用户可以一边调参数一边对比不同主题的效果。 */
           setAdvancedSettingsOpen(true);
-          setThemeDropdownOpen(false);
         }}
         onResetSettings={() => {
           resetSettings();

@@ -4936,6 +4936,18 @@ body[data-mode='night'] {
 
 html {
   scroll-behavior: smooth;
+  /* 高级设置里的"界面UI缩放"对应 CSS zoom：
+   * - 用 zoom 而不是 transform,是因为 zoom 会按比例缩放文字/控件/图片,
+   *   与浏览器内置 Ctrl+= 的视觉体验一致。
+   * - 应用在 html 而非 body,可避免 position: fixed 子元素跟随 body 重新布局导致的偏移。
+   * - 不影响 scrollHeight/scrollWidth 等布局 API,滚动条表现更自然。 */
+  zoom: var(--ui-scale, 1);
+  /* 高级设置里的"全局文字缩宽"对应 :root 的 font-size。
+   * - 让 button / input / textarea 等继承字体的元素按比例放大;
+   *   显式 calc(* var(--text-scale)) 的元素也会同步变化。
+   * - 配合上面的 zoom,text-scale 与 ui-scale 可以独立工作:
+   *     ui-scale 控制整体缩放,text-scale 单独微调文字大小。 */
+  font-size: calc(16px * var(--text-scale, 1));
 }
 body {
   position: relative;
@@ -5514,21 +5526,16 @@ body[data-style='neumorphism'][data-mode='night'] {
 }
 
 /* 新拟态的"立体感"靠外阴影(双向)实现,但 5px 的外阴影需要底部留出空间才能完全显示。
- * 默认 app-header padding-bottom 12px + margin-bottom 12px 显然不够,
- * nav-pill / 工具栏按钮的阴影会被下一行遮挡,看上去像是被"切掉了一半"。
- * 这里给新拟态主题的容器底部多留 14px 空间,让阴影完整展示。*/
-body[data-style='neumorphism'] .app-header {
-  padding-bottom: 22px;
-  margin-bottom: 22px;
-}
-body[data-style='neumorphism'] .plaza-controls-panel,
-body[data-style='neumorphism'] .plaza-toolbar-actions,
-body[data-style='neumorphism'] .plaza-toolbar-row,
-body[data-style='neumorphism'] .plaza-toolbar-row-desktop {
-  padding-bottom: 14px;
-}
+ * 默认 .app-header / .top-nav / .plaza-toolbar-row 的底部间距已经够用,
+ * 这里只需比默认多留 5px 让阴影完整显示,避免间距过宽。
+ * 不再额外给 .app-header 加 padding/margin,
+ * 阴影会从按钮自身向下溢出,这 5px 已经够阴影完整呈现。*/
 body[data-style='neumorphism'] .top-nav {
-  padding-bottom: 8px;
+  padding-bottom: 5px;
+}
+body[data-style='neumorphism'] .plaza-toolbar-row,
+body[data-style='neumorphism'] .plaza-toolbar-row-mobile-export {
+  padding-bottom: 5px;
 }
 
 body[data-style='glass'] {
