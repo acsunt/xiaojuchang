@@ -646,8 +646,8 @@ pre {
   gap: 16px;
   align-items: center;
   border-radius: 18px;
-  padding: 12px 16px;
-  margin-bottom: 12px;
+  padding: 10px 16px;
+  margin-bottom: 10px;
 }
 
 .header-brand-row {
@@ -3388,7 +3388,7 @@ body.tag-sort-dragging {
   }
 
   .app-header {
-    margin-bottom: 14px;
+    margin-bottom: 10px;
   }
 
   .page-shell,
@@ -4739,6 +4739,19 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 .modal-action-row {
   justify-content: flex-end;
   margin-top: 8px;
+  /* 强制两个按钮（稍后手动刷新 / 立即刷新）同行:
+   * - 默认 .inline-actions 是 flex-wrap: wrap,在窄屏会把两个按钮拆成上下两行
+   * - 这里覆盖为 nowrap,让两个按钮按 1:1 平分宽度,即便手机端也不会换行
+   * - 按钮允许文字溢出省略,以保证布局不破 */
+  flex-wrap: nowrap;
+}
+
+.modal-action-row > .button {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 可搜索的分类下拉框 */
@@ -6438,4 +6451,65 @@ body[data-style='brutalism'][data-mode='night'] .content-head h2,
 body[data-style='brutalism'][data-mode='night'] .hero-panel h2,
 body[data-style='brutalism'][data-mode='night'] .feature-panel h3 {
   text-shadow: 2px 2px 0 #ffeb3b;
+}
+
+/* ============================================================
+   审核后台预览区:标题/正文右上角的复制按钮
+   ============================================================ */
+.preview-section-header {
+  position: relative;
+  /* 让右上角的复制按钮可以 absolute 定位到这里 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 标题区允许复制按钮 absolute 在右上角,
+ * 不打乱标题文字本身的 flow。*/
+.preview-section-header h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 36px;
+}
+
+.preview-section-header .content-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.preview-copy-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 80%, white 20%);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    background 0.2s,
+    border-color 0.2s;
+}
+
+.preview-copy-btn:hover {
+  color: var(--heading-color, var(--text));
+  background: color-mix(in srgb, var(--panel) 60%, white 40%);
+  border-color: var(--accent, var(--text-secondary));
+}
+
+.preview-copy-btn:active {
+  transform: translateY(1px);
+}
+
+/* 内容块保留 padding 不被复制按钮遮挡 */
+.preview-content-block {
+  position: relative;
+  padding-right: 18px;
 }

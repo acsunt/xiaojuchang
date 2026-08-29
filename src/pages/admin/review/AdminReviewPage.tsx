@@ -55,6 +55,7 @@ import {
   type ReviewLog,
   type Tag,
 } from '../../../types/play';
+import { showFloatingToast } from '../../../components/floating-toast-store';
 
 const statusTabs: Array<{ label: string; value?: PlayStatus }> = [
   { label: '全部', value: undefined },
@@ -440,6 +441,35 @@ export function AdminReviewPage() {
   const [reviewContent, setReviewContent] = useState('');
   const [reviewNote, setReviewNote] = useState('');
   const reviewContentRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /* 复制预览里的标题/正文到剪贴板。
+   * 失败时降级用 document.execCommand('copy') + 隐藏 textarea,
+   * 确保非 https / 老浏览器也能复制成功。*/
+  const copyToClipboard = useCallback(async (value: string, label: string) => {
+    if (!value) {
+      showFloatingToast(`${label}为空,无需复制`, 'error');
+      return;
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        ta.remove();
+        if (!ok) throw new Error('execCommand copy failed');
+      }
+      showFloatingToast(`${label}已复制`);
+    } catch (err) {
+      console.error('[admin-review] 复制失败:', err);
+      showFloatingToast(`${label}复制失败`, 'error');
+    }
+  }, []);
 
   const ADMIN_VIEW_MODE_KEY = 'mini-theater:admin-review-view-mode';
   const readAdminViewMode = (): 'preview' | 'edit' | 'both' => {
@@ -3667,12 +3697,40 @@ export function AdminReviewPage() {
                       </span>
                       <span>{selectedPlay.category || DEFAULT_CATEGORY}</span>
                     </div>
-                    <h3>{selectedPlay.title}</h3>
+                    <div className="preview-section-header">
+                      <h3>{selectedPlay.title}</h3>
+                      <button
+                        type="button"
+                        className="preview-copy-btn"
+                        title="复制标题"
+                        aria-label="复制标题"
+                        onClick={() => {
+                          void copyToClipboard(selectedPlay.title, '标题');
+                        }}
+                      >
+                        <i className="fas fa-copy" />
+                      </button>
+                    </div>
                     {selectedPlay.summary ? (
                       <p className="sub-copy">{selectedPlay.summary}</p>
                     ) : null}
-                    <div className="inline-detail-block stack-gap-md">
-                      <span className="content-meta">正文约 {selectedPlay.content.length} 字</span>
+                    <div className="inline-detail-block stack-gap-md preview-content-block">
+                      <div className="preview-section-header">
+                        <span className="content-meta">
+                          正文约 {selectedPlay.content.length} 字
+                        </span>
+                        <button
+                          type="button"
+                          className="preview-copy-btn"
+                          title="复制正文"
+                          aria-label="复制正文"
+                          onClick={() => {
+                            void copyToClipboard(selectedPlay.content, '正文');
+                          }}
+                        >
+                          <i className="fas fa-copy" />
+                        </button>
+                      </div>
                       <p>{selectedPlay.content}</p>
                     </div>
                     {selectedPlay.status !== 'pending' && selectedPlay.reviewNote ? (
