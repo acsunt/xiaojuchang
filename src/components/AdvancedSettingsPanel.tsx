@@ -29,7 +29,6 @@ export interface AdvancedSettingsPanelProps {
   onUploadBackground?: (file: File) => void;
   onClearBackground?: () => void;
   onDownloadBackground?: () => void;
-  onClearThemeCache?: () => void;
   onApplyBgUrl?: (url: string) => void;
   onRefreshCurrentFont?: () => void;
   onChangeFontSource?: (value: 'theme' | 'system' | 'custom') => void;
@@ -87,7 +86,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     onUploadBackground,
     onClearBackground,
     onDownloadBackground,
-    onClearThemeCache,
     onApplyBgUrl,
     onRefreshCurrentFont,
     onChangeFontSource,
@@ -136,14 +134,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               aria-label="恢复默认设置"
               style={{ cursor: 'pointer' }}
               onClick={onResetSettings}
-            />
-            <i
-              className="fas fa-broom"
-              title="清空主题缓存(背景图等)"
-              role="button"
-              aria-label="清空主题缓存"
-              style={{ cursor: 'pointer' }}
-              onClick={onClearThemeCache}
             />
             <i
               className="fas fa-times close-modal-btn d-lg-none"
@@ -414,7 +404,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               <i className="fas fa-download" /> 下载
             </button>
             <button type="button" className="sp-btn danger" onClick={onClearBackground}>
-              <i className="fas fa-trash" /> 清空
+              <i className="fas fa-broom" /> 清空背景图缓存
             </button>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>

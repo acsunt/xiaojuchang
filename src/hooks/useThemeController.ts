@@ -261,7 +261,6 @@ export interface UseThemeControllerResult {
   applyBgUrlFromString: (url: string) => void;
   clearBackground: () => void;
   downloadBackgroundImage: () => Promise<void>;
-  clearThemeCache: () => Promise<void>;
   updateBgPreviewUI: () => void;
   closeModal: (id: string) => void;
   resetCropper: () => void;
@@ -1504,6 +1503,7 @@ export function useThemeController(): UseThemeControllerResult {
     void clearBackgroundStore();
     revokeAllBlobUrls();
     window.setTimeout(() => updateBgPreviewUI(), 0);
+    showFloatingToast('背景图缓存已清空');
   }, [updateBgPreviewUI]);
 
   /* 下载当前自定义背景图(仅 image 类型有效)。
@@ -1521,25 +1521,6 @@ export function useThemeController(): UseThemeControllerResult {
     downloadBlob(record.value, '自定义背景图');
     showFloatingToast('已触发下载');
   }, [themeConfig.bgType]);
-
-  /* 清空主题相关的所有本地缓存:
-   * - IndexedDB 里的背景图/URL 记录
-   * - localStorage.site-theme-config 中的 bgType/bgValue
-   * - 内存里挂着的 object URL
-   * 不动字体缓存(那是浏览器原生 document.fonts,与本地持久化无关)。
-   */
-  const clearThemeCache = useCallback(async () => {
-    await clearBackgroundStore();
-    revokeAllBlobUrls();
-    setThemeConfig((prev) => {
-      const next: ThemeConfig = { ...prev, bgType: 'none', bgValue: '' };
-      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-    window.setTimeout(() => updateBgPreviewUI(), 0);
-    showFloatingToast('主题缓存已清空');
-  }, [updateBgPreviewUI]);
-
   /* ---------- 副作用:state / config 变化时同步 DOM ---------- */
   useEffect(() => {
     applyState();
@@ -1700,7 +1681,6 @@ export function useThemeController(): UseThemeControllerResult {
     applyBgUrlFromString,
     clearBackground,
     downloadBackgroundImage,
-    clearThemeCache,
     updateBgPreviewUI,
     closeModal,
     resetCropper,

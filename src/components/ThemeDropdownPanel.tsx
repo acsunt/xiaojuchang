@@ -10,7 +10,6 @@ export interface ThemeDropdownPanelProps {
   onSelectTheme?: (key: ThemeKey) => void;
   onOpenAdvancedSettings?: () => void;
   onResetSettings?: () => void;
-  onClearThemeCache?: () => void;
   onToggleMode?: () => void;
   onToggleLayout?: () => void;
 }
@@ -27,7 +26,6 @@ export function ThemeDropdownPanel({
   onSelectTheme,
   onOpenAdvancedSettings,
   onResetSettings,
-  onClearThemeCache,
   onToggleMode,
   onToggleLayout,
 }: ThemeDropdownPanelProps) {
@@ -78,18 +76,6 @@ export function ThemeDropdownPanel({
             onClick={onResetSettings}
           >
             <i className="fas fa-undo" />
-          </button>
-          {/* 清空缓存:把 IndexedDB 里的背景图/URL 记录 + localStorage 里的
-           * 背景相关配置全部清掉,回到"无自定义背景图"状态。
-           * 不动主题/字体/排版等其它主题设置。*/}
-          <button
-            type="button"
-            className="toggle-btn"
-            id="clearCacheBtn"
-            title="清空主题缓存(背景图等)"
-            onClick={onClearThemeCache}
-          >
-            <i className="fas fa-broom" />
           </button>
           <div className="topbar-divider" />
           <button

@@ -107,7 +107,6 @@ export default function App() {
     applyBgUrlFromString,
     clearBackground,
     downloadBackgroundImage,
-    clearThemeCache,
     updateBgPreviewUI,
     resetCropper,
     cropperReady,
@@ -421,9 +420,6 @@ export default function App() {
         onResetSettings={() => {
           resetSettings();
         }}
-        onClearThemeCache={() => {
-          void clearThemeCache();
-        }}
         onToggleMode={() => {
           toggleMode();
         }}
@@ -490,9 +486,6 @@ export default function App() {
               onClearBackground={() => clearBackground()}
               onDownloadBackground={() => {
                 void downloadBackgroundImage();
-              }}
-              onClearThemeCache={() => {
-                void clearThemeCache();
               }}
               onApplyBgUrl={(url) => {
                 applyBgUrlFromString(url);
