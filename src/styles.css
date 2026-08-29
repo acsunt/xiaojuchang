@@ -5762,3 +5762,217 @@ body[data-style='brutalism'][data-mode='night'] {
   --radius-btn: 0;
   --radius-card: 0;
 }
+
+/* =============================================================================
+ * 主题样式映射（仅在非默认主题下生效）
+ *
+ * 设计目标：
+ *   - 把项目原生组件的视觉属性（颜色/阴影/圆角/边框）统一映射到主题变量。
+ *   - 严格不触碰布局属性（flex/grid/width/height/margin/padding/position）。
+ *   - 严格不触碰默认主题（body[data-style="default"]）——它有自己的样式体系。
+ *
+ * 已知变量：
+ *   --card-bg / --card-text / --card-border / --card-shadow / --card-backdrop
+ *   --radius-card / --radius-btn
+ *   --btn-bg-color / --btn-bg-image / --btn-color / --btn-border / --btn-shadow
+ *   --sp-panel-bg / --sp-border / --sp-text / --sp-text-secondary
+ *   --heading-color / --heading-weight / --heading-shadow
+ *
+ * 包含组件：
+ *   1. 主页/广场/详情/上传/审核页等"卡片/面板"容器
+ *   2. 全部按钮（含 .button.primary / .button.secondary / .icon-button / .tag-chip / .tab-chip）
+ *   3. 表单输入（input/textarea/select）
+ *   4. 弹窗面板（modal/backdrop）
+ *   5. 主标题与显著段落标题（h1/h2/h3 + .hero-panel h2 等）
+ *   6. 暗色模式适配（让 text/border 跟随主题，避开硬编码 #000/#fff）
+ *
+ * 注意：所有规则都平铺到顶级选择器，全部以 body:not([data-style='default']) 开头，
+ * 因为当前 vite/postcss 不支持嵌套 CSS。
+ * ========================================================================== */
+
+/* ---------- 主标题与显著文字 ---------- */
+body:not([data-style='default']) h1,
+body:not([data-style='default']) h2,
+body:not([data-style='default']) h3,
+body:not([data-style='default']) h4 {
+  color: var(--heading-color, var(--sp-text, #1a1a1a));
+  font-weight: var(--heading-weight, 700);
+  text-shadow: var(--heading-shadow, none);
+}
+
+body:not([data-style='default']) .hero-panel h2,
+body:not([data-style='default']) .detail-panel h2,
+body:not([data-style='default']) .panel-title,
+body:not([data-style='default']) .content-head h2 {
+  color: var(--heading-color, var(--sp-text, #1a1a1a));
+  font-weight: var(--heading-weight, 700);
+  text-shadow: var(--heading-shadow, none);
+}
+
+/* ---------- 卡片容器：把背景/边框/阴影/圆角统一映射 ---------- */
+body:not([data-style='default']) .hero-panel,
+body:not([data-style='default']) .form-panel,
+body:not([data-style='default']) .detail-panel,
+body:not([data-style='default']) .content-panel,
+body:not([data-style='default']) .login-panel,
+body:not([data-style='default']) .register-panel,
+body:not([data-style='default']) .review-sidebar,
+body:not([data-style='default']) .review-main,
+body:not([data-style='default']) .review-card,
+body:not([data-style='default']) .log-panel,
+body:not([data-style='default']) .log-item,
+body:not([data-style='default']) .empty-panel,
+body:not([data-style='default']) .hint-panel,
+body:not([data-style='default']) .feature-panel,
+body:not([data-style='default']) .feature-side,
+body:not([data-style='default']) .feature-copy,
+body:not([data-style='default']) .info-panel,
+body:not([data-style='default']) .process-panel,
+body:not([data-style='default']) .metric-strip,
+body:not([data-style='default']) .field-note-panel,
+body:not([data-style='default']) .stat-card,
+body:not([data-style='default']) .stat-card-rich,
+body:not([data-style='default']) .play-card,
+body:not([data-style='default']) .play-detail-card,
+body:not([data-style='default']) .repo-card,
+body:not([data-style='default']) .admin-card,
+body:not([data-style='default']) .tag-admin-card,
+body:not([data-style='default']) .inline-detail-block,
+body:not([data-style='default']) .upload-section {
+  background: var(--card-bg, var(--sp-panel-bg, #ffffff));
+  color: var(--card-text, var(--sp-text, #1a1a1a));
+  border: var(--card-border, 1px solid var(--sp-border, #e1e4e8));
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--card-shadow, 0 4px 14px rgba(0, 0, 0, 0.06));
+  backdrop-filter: var(--card-backdrop, none);
+  -webkit-backdrop-filter: var(--card-backdrop, none);
+}
+
+/* ---------- 按钮（操作类） ---------- */
+body:not([data-style='default']) .button,
+body:not([data-style='default']) button.button,
+body:not([data-style='default']) .button.primary,
+body:not([data-style='default']) .button.secondary,
+body:not([data-style='default']) .button.warning,
+body:not([data-style='default']) .button.danger,
+body:not([data-style='default']) .text-button,
+body:not([data-style='default']) .icon-button,
+body:not([data-style='default']) .nav-pill,
+body:not([data-style='default']) .tab-chip,
+body:not([data-style='default']) .tag-chip,
+body:not([data-style='default']) .plaza-tab-chip,
+body:not([data-style='default']) .repo-nav-pill {
+  background-color: var(--btn-bg-color, transparent);
+  background-image: var(--btn-bg-image, none);
+  color: var(--btn-color, var(--sp-text, #1a1a1a));
+  border: var(--btn-border, 1px solid transparent);
+  border-radius: var(--radius-btn, 8px);
+  box-shadow: var(--btn-shadow, none);
+}
+
+/* 主操作按钮（primary）由变量决定颜色 */
+body:not([data-style='default']) .button.primary {
+  background-image: var(--btn-bg-image, linear-gradient(135deg, var(--accent), var(--accent-strong)));
+}
+
+/* hover 反馈：去掉硬编码 hover 背景，改为透明度 */
+body:not([data-style='default']) .button:hover,
+body:not([data-style='default']) .text-button:hover,
+body:not([data-style='default']) .icon-button:hover,
+body:not([data-style='default']) .tag-chip:hover,
+body:not([data-style='default']) .nav-pill:hover,
+body:not([data-style='default']) .tab-chip:hover {
+  opacity: 0.85;
+}
+
+/* active 状态：保留变量控制，去掉 inset box-shadow */
+body:not([data-style='default']) .button.active,
+body:not([data-style='default']) .nav-pill.active,
+body:not([data-style='default']) .tab-chip.active {
+  background-color: var(--btn-bg-color, var(--card-bg, transparent));
+  color: var(--btn-color, var(--sp-text, #1a1a1a));
+}
+
+/* ---------- 输入框 / 文本域 / select ---------- */
+body:not([data-style='default']) input[type='text'],
+body:not([data-style='default']) input[type='search'],
+body:not([data-style='default']) input[type='url'],
+body:not([data-style='default']) input[type='email'],
+body:not([data-style='default']) input[type='number'],
+body:not([data-style='default']) input[type='password'],
+body:not([data-style='default']) textarea,
+body:not([data-style='default']) select,
+body:not([data-style='default']) .custom-select-trigger,
+body:not([data-style='default']) .form-field input,
+body:not([data-style='default']) .form-field textarea {
+  background: var(--sp-panel-bg, #ffffff);
+  color: var(--sp-text, #1a1a1a);
+  border: 1px solid var(--sp-border, #e1e4e8);
+  border-radius: var(--radius-btn, 8px);
+}
+
+body:not([data-style='default']) ::placeholder {
+  color: var(--sp-text-secondary, #8a8a8a);
+}
+
+/* select 下拉菜单与面板 */
+body:not([data-style='default']) .custom-select-menu,
+body:not([data-style='default']) .custom-select-option,
+body:not([data-style='default']) .dropdown-menu,
+body:not([data-style='default']) .context-menu {
+  background: var(--sp-panel-bg, #ffffff);
+  color: var(--sp-text, #1a1a1a);
+  border: 1px solid var(--sp-border, #e1e4e8);
+}
+
+body:not([data-style='default']) .custom-select-option:hover,
+body:not([data-style='default']) .dropdown-menu li:hover,
+body:not([data-style='default']) .context-menu li:hover {
+  background: color-mix(in srgb, var(--btn-bg-color, var(--accent)) 12%, transparent);
+  color: var(--btn-color, var(--sp-text, #1a1a1a));
+}
+
+/* ---------- 弹窗 / Modal ---------- */
+body:not([data-style='default']) .modal-backdrop,
+body:not([data-style='default']) .modal-overlay {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+body:not([data-style='default']) .modal-panel,
+body:not([data-style='default']) .modal-card,
+body:not([data-style='default']) .modal-content,
+body:not([data-style='default']) .dialog-panel,
+body:not([data-style='default']) .changelog-modal,
+body:not([data-style='default']) .update-prompt-modal,
+body:not([data-style='default']) .theme-dropdown-panel,
+body:not([data-style='default']) .advanced-settings-panel,
+body:not([data-style='default']) .cropper-modal {
+  background: var(--card-bg, var(--sp-panel-bg, #ffffff));
+  color: var(--card-text, var(--sp-text, #1a1a1a));
+  border: var(--card-border, 1px solid var(--sp-border, #e1e4e8));
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--card-shadow, 0 10px 30px rgba(0, 0, 0, 0.18));
+  backdrop-filter: var(--card-backdrop, none);
+  -webkit-backdrop-filter: var(--card-backdrop, none);
+}
+
+/* ---------- 提示 / Toast ---------- */
+body:not([data-style='default']) .app-toast {
+  background: var(--card-bg, var(--sp-panel-bg, #ffffff));
+  color: var(--card-text, var(--sp-text, #1a1a1a));
+  border: var(--card-border, 1px solid var(--sp-border, #e1e4e8));
+}
+
+/* ---------- 列表分割与提示文字 ---------- */
+body:not([data-style='default']) .log-entry,
+body:not([data-style='default']) .review-item,
+body:not([data-style='default']) .tag-admin-item {
+  border-bottom: 1px solid var(--sp-border, #e1e4e8);
+  color: var(--sp-text, #1a1a1a);
+}
+
+body:not([data-style='default']) .content-meta,
+body:not([data-style='default']) .field-hint,
+body:not([data-style='default']) .sub-copy {
+  color: var(--sp-text-secondary, #596b7e);
+}
