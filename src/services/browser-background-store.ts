@@ -104,7 +104,10 @@ export const getBackgroundRecord = async (): Promise<BackgroundRecord | null> =>
   }
 };
 
-export const saveBackgroundBlob = async (blob: Blob, mime = blob.type || 'image/jpeg'): Promise<string> => {
+export const saveBackgroundBlob = async (
+  blob: Blob,
+  mime = blob.type || 'image/jpeg',
+): Promise<string> => {
   if (!isIndexedDBAvailable()) {
     throw new Error('IndexedDB 不可用,无法保存图片');
   }
@@ -201,11 +204,7 @@ export const downloadBlob = (blob: Blob, filenameBase = '背景图'): void => {
   if (typeof window === 'undefined') return;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const ext = blob.type.includes('png')
-    ? 'png'
-    : blob.type.includes('webp')
-      ? 'webp'
-      : 'jpg';
+  const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
   const now = new Date();
   const stamp =
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
