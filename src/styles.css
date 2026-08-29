@@ -3530,12 +3530,6 @@ body.tag-sort-dragging {
     min-width: 42px;
   }
 
-  .header-toolbar-toggle {
-    width: 48px;
-    min-width: 48px;
-    height: 48px;
-  }
-
   .card-grid,
   .hint-grid,
   .toolbar-grid,
@@ -4049,12 +4043,6 @@ body.tag-sort-dragging {
     width: 42px;
     min-width: 42px;
     border-radius: 999px;
-  }
-
-  .header-toolbar-toggle {
-    width: 48px;
-    min-width: 48px;
-    height: 48px;
   }
 
   .button,
