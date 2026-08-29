@@ -3,6 +3,16 @@ import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 import { DEFAULT_THEME_LIST } from '../data/theme-list';
 import { themeFonts } from '../data/theme-fonts';
 import { showFloatingToast } from '../components/floating-toast-store';
+import {
+  BACKGROUND_BLOB_KEY,
+  clearBackground as clearBackgroundStore,
+  createBlobUrl,
+  downloadBlob,
+  getBackgroundRecord,
+  revokeAllBlobUrls,
+  saveBackgroundFromDataUrl,
+  saveBackgroundUrl,
+} from '../services/browser-background-store';
 
 /* ======================== 存储键 ======================== */
 const STYLE_STORAGE_KEY = 'site-style';
@@ -13,6 +23,10 @@ const LEGACY_SLIDER_KEY = 'sp-settings';
 /* 一次性迁移标记：把所有老用户的字体源强制重置为 system（之前默认是 theme，
  * 会自动加载主题字体）。标记位只写一次，之后由用户主动设置。 */
 const FONT_SOURCE_MIGRATION_KEY = 'site-font-source-default-applied';
+/* 一次性迁移标记：老版本把背景图 base64 塞在 localStorage.site-theme-config.bgValue 里,
+ * 现在改成图片本体存 IndexedDB,localStorage 只存 key('current') 或远程 URL。
+ * 检测到老 data URL 就立刻搬到 IndexedDB 并把 localStorage 里的 bgValue 改写。*/
+const BG_BLOB_MIGRATION_KEY = 'site-bg-blob-migrated-to-indexeddb';
 
 const DEFAULT_THEME_KEY: ThemeKey = 'default';
 
@@ -246,6 +260,8 @@ export interface UseThemeControllerResult {
   applyBgUrl: () => void;
   applyBgUrlFromString: (url: string) => void;
   clearBackground: () => void;
+  downloadBackgroundImage: () => Promise<void>;
+  clearThemeCache: () => Promise<void>;
   updateBgPreviewUI: () => void;
   closeModal: (id: string) => void;
   resetCropper: () => void;
@@ -292,6 +308,8 @@ export function useThemeController(): UseThemeControllerResult {
       writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(cfg));
       writeLocalStorage('sp-font-source', cfg.fontSource);
     }
+    /* 标记位置由下面的 useEffect 完成实际搬数据,这里先不修改 cfg.bgValue,
+     * 避免 useState init 阶段触发 setState 造成 warning。*/
     return cfg;
   });
   /* 标记 Cropper.js 全局脚本是否就绪（由 index.html 的 defer 脚本提供） */
@@ -299,6 +317,42 @@ export function useThemeController(): UseThemeControllerResult {
   /* 裁剪模态框显隐与待裁剪图源(由 controller 内部统一管理,App.tsx 直接绑定即可) */
   const [cropperModalOpen, setCropperModalOpen] = useState(false);
   const [cropperModalSrc, setCropperModalSrc] = useState<string>('');
+
+  /* 一次性迁移:把老版本塞在 localStorage.site-theme-config.bgValue 里的 data URL
+   * 背景图搬到 IndexedDB。
+   * 之所以放 useEffect 而不是 useState init,是因为这里要异步写 IndexedDB,
+   * useState init 阶段调 setState 会触发 React warning;
+   * 放 effect 里,迁移完成后用 setThemeConfig 改 bgValue = BACKGROUND_BLOB_KEY,
+   * 后续 themeConfig useEffect 会自动调 updateBgPreviewUI 把图刷出来。*/
+  useEffect(() => {
+    if (!SAFE_WINDOW) return;
+    if (readLocalStorage(BG_BLOB_MIGRATION_KEY)) return;
+    /* 即便当前没有 data URL 也要写标记位,避免每次启动都走判断分支。*/
+    if (themeConfig.bgType !== 'image' || !themeConfig.bgValue.startsWith('data:')) {
+      writeLocalStorage(BG_BLOB_MIGRATION_KEY, '1');
+      return;
+    }
+    const legacyDataUrl = themeConfig.bgValue;
+    writeLocalStorage(BG_BLOB_MIGRATION_KEY, '1');
+    void saveBackgroundFromDataUrl(legacyDataUrl)
+      .then(() => {
+        setThemeConfig((prev) => {
+          if (prev.bgValue === BACKGROUND_BLOB_KEY) return prev;
+          const next: ThemeConfig = { ...prev, bgValue: BACKGROUND_BLOB_KEY };
+          writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      })
+      .catch((err) => {
+        console.warn('[theme] 背景图迁移到 IndexedDB 失败,回退到无背景:', err);
+        setThemeConfig((prev) => {
+          const next: ThemeConfig = { ...prev, bgType: 'none', bgValue: '' };
+          writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!SAFE_WINDOW) {
@@ -1130,20 +1184,33 @@ export function useThemeController(): UseThemeControllerResult {
   const applyBgUrlFromString = useCallback((url: string) => {
     const trimmed = url.trim();
     if (!trimmed) return;
-    setThemeConfig((prev) => {
-      const next: ThemeConfig = { ...prev, bgType: 'url', bgValue: trimmed };
-      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-    /* 立即把 DOM 预览同步成最新值,无需等待 React 重渲染 */
-    const previewImg = $('bgPreviewImage');
-    const previewText = document.querySelector<HTMLElement>('.bg-preview-text');
-    const urlInput = $<HTMLInputElement>('bgUrlInput');
-    const globalBg = $('custom-bg-layer');
-    if (previewImg) previewImg.style.backgroundImage = `url("${trimmed}")`;
-    if (globalBg) globalBg.style.backgroundImage = `url("${trimmed}")`;
-    if (previewText) previewText.style.display = 'none';
-    if (urlInput) urlInput.value = trimmed;
+    /* URL 也走 IndexedDB,这样"清空缓存"时只需清一次 IndexedDB
+     * 就能把图片和 URL 配置一起干掉,不会留下半截孤儿状态。*/
+    void saveBackgroundUrl(trimmed)
+      .then(() => {
+        setThemeConfig((prev) => {
+          const next: ThemeConfig = {
+            ...prev,
+            bgType: 'url',
+            bgValue: trimmed,
+          };
+          writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+        /* 立即把 DOM 预览同步成最新值,无需等待 React 重渲染 */
+        const previewImg = $('bgPreviewImage');
+        const previewText = document.querySelector<HTMLElement>('.bg-preview-text');
+        const urlInput = $<HTMLInputElement>('bgUrlInput');
+        const globalBg = $('custom-bg-layer');
+        if (previewImg) previewImg.style.backgroundImage = `url("${trimmed}")`;
+        if (globalBg) globalBg.style.backgroundImage = `url("${trimmed}")`;
+        if (previewText) previewText.style.display = 'none';
+        if (urlInput) urlInput.value = trimmed;
+      })
+      .catch((err) => {
+        console.error('[theme] IndexedDB 写入失败:', err);
+        showFloatingToast('背景图保存失败,请检查浏览器存储权限', 'error');
+      });
   }, []);
 
   /* 与 updateTextScale / updateUiScale 同理,使用 function declaration 提升声明 */
@@ -1261,13 +1328,39 @@ export function useThemeController(): UseThemeControllerResult {
       if (previewImg) previewImg.style.backgroundImage = 'none';
       if (previewText) previewText.style.display = 'block';
       if (urlInput) urlInput.value = '';
-    } else {
+      revokeAllBlobUrls();
+      return;
+    }
+
+    if (type === 'url') {
+      /* 远程 URL:直接用 bgValue 当 background-image 的 url(...) */
       const imgUrl = `url("${value}")`;
       globalBg.style.backgroundImage = imgUrl;
       if (previewImg) previewImg.style.backgroundImage = imgUrl;
       if (previewText) previewText.style.display = 'none';
-      if (urlInput) urlInput.value = type === 'url' ? value : '';
+      if (urlInput) urlInput.value = value;
+      revokeAllBlobUrls();
+      return;
     }
+
+    /* type === 'image':value 是 IndexedDB 的 key,从库里读出 Blob 后
+     * 生成 object URL 喂给 background-image。
+     * 异步过程,所以这里把 setStyle 放进 then 里;DOM 端会先短暂空白,
+     * 等事务完成就恢复了。 */
+    revokeAllBlobUrls();
+    void getBackgroundRecord().then((record) => {
+      if (!record || record.type !== 'image' || !(record.value instanceof Blob)) {
+        globalBg.style.backgroundImage = 'none';
+        if (previewImg) previewImg.style.backgroundImage = 'none';
+        if (previewText) previewText.style.display = 'block';
+        return;
+      }
+      const url = createBlobUrl(record.value);
+      const imgUrl = `url("${url}")`;
+      globalBg.style.backgroundImage = imgUrl;
+      if (previewImg) previewImg.style.backgroundImage = imgUrl;
+      if (previewText) previewText.style.display = 'none';
+    });
   }, [themeConfig.bgType, themeConfig.bgValue]);
 
   const closeModal = useCallback((id: string) => {
@@ -1349,7 +1442,7 @@ export function useThemeController(): UseThemeControllerResult {
 
   const confirmCrop = useCallback(() => {
     if (!cropperInstance) return;
-    let dataUrl = '';
+    let dataUrl: string;
     try {
       const canvas = cropperInstance.getCroppedCanvas({
         maxWidth: 2000,
@@ -1360,14 +1453,27 @@ export function useThemeController(): UseThemeControllerResult {
       console.error('[theme] 剪裁失败:', err);
       return;
     }
-    setThemeConfig((prev) => {
-      const next: ThemeConfig = { ...prev, bgType: 'image', bgValue: dataUrl };
-      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-    /* 立刻把新背景应用到 DOM,避免等待 React 重渲染造成空白 */
-    window.setTimeout(() => updateBgPreviewUI(), 0);
-    closeModal('cropperModal');
+    /* 图片本体存进 IndexedDB,配置里只存 key。
+     * 这样 localStorage 不再被 base64 撑爆,体积只剩几十字节。*/
+    void saveBackgroundFromDataUrl(dataUrl)
+      .then(() => {
+        setThemeConfig((prev) => {
+          const next: ThemeConfig = {
+            ...prev,
+            bgType: 'image',
+            bgValue: BACKGROUND_BLOB_KEY,
+          };
+          writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+        /* 立刻把新背景应用到 DOM,避免等待 React 重渲染造成空白 */
+        window.setTimeout(() => updateBgPreviewUI(), 0);
+        closeModal('cropperModal');
+      })
+      .catch((err) => {
+        console.error('[theme] IndexedDB 写入失败:', err);
+        showFloatingToast('背景图保存失败,请检查浏览器存储权限', 'error');
+      });
   }, [closeModal, updateBgPreviewUI]);
 
   const resetCropper = useCallback(() => {
@@ -1394,7 +1500,44 @@ export function useThemeController(): UseThemeControllerResult {
       writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
+    /* 清掉 IndexedDB 里的图片/URL 记录,以及之前 revoke 掉的 object URL */
+    void clearBackgroundStore();
+    revokeAllBlobUrls();
     window.setTimeout(() => updateBgPreviewUI(), 0);
+  }, [updateBgPreviewUI]);
+
+  /* 下载当前自定义背景图(仅 image 类型有效)。
+   * URL 类型远程图片不受这里管,需要"图片另存为"请走浏览器右键。*/
+  const downloadBackgroundImage = useCallback(async () => {
+    if (themeConfig.bgType !== 'image') {
+      showFloatingToast('当前没有可下载的自定义图片背景', 'error');
+      return;
+    }
+    const record = await getBackgroundRecord();
+    if (!record || record.type !== 'image' || !(record.value instanceof Blob)) {
+      showFloatingToast('本地图片记录不存在或已损坏', 'error');
+      return;
+    }
+    downloadBlob(record.value, '自定义背景图');
+    showFloatingToast('已触发下载');
+  }, [themeConfig.bgType]);
+
+  /* 清空主题相关的所有本地缓存:
+   * - IndexedDB 里的背景图/URL 记录
+   * - localStorage.site-theme-config 中的 bgType/bgValue
+   * - 内存里挂着的 object URL
+   * 不动字体缓存(那是浏览器原生 document.fonts,与本地持久化无关)。
+   */
+  const clearThemeCache = useCallback(async () => {
+    await clearBackgroundStore();
+    revokeAllBlobUrls();
+    setThemeConfig((prev) => {
+      const next: ThemeConfig = { ...prev, bgType: 'none', bgValue: '' };
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+    window.setTimeout(() => updateBgPreviewUI(), 0);
+    showFloatingToast('主题缓存已清空');
   }, [updateBgPreviewUI]);
 
   /* ---------- 副作用:state / config 变化时同步 DOM ---------- */
@@ -1515,6 +1658,13 @@ export function useThemeController(): UseThemeControllerResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- updateXxx 为函数声明,调用时读取最新 DOM
   }, [applyLayout, applyState, initFontPanel, initLocks]);
 
+  /* 卸载时统一 revoke 所有 object URL,避免热更新或路由切换造成内存泄漏。*/
+  useEffect(() => {
+    return () => {
+      revokeAllBlobUrls();
+    };
+  }, []);
+
   return {
     styles: DEFAULT_THEME_LIST,
     currentStyle,
@@ -1549,6 +1699,8 @@ export function useThemeController(): UseThemeControllerResult {
     applyBgUrl,
     applyBgUrlFromString,
     clearBackground,
+    downloadBackgroundImage,
+    clearThemeCache,
     updateBgPreviewUI,
     closeModal,
     resetCropper,

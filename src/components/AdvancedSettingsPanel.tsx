@@ -28,6 +28,8 @@ export interface AdvancedSettingsPanelProps {
   onToggleThemeLock?: (target: 'content' | 'img') => void;
   onUploadBackground?: (file: File) => void;
   onClearBackground?: () => void;
+  onDownloadBackground?: () => void;
+  onClearThemeCache?: () => void;
   onApplyBgUrl?: (url: string) => void;
   onRefreshCurrentFont?: () => void;
   onChangeFontSource?: (value: 'theme' | 'system' | 'custom') => void;
@@ -84,6 +86,8 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     onToggleThemeLock,
     onUploadBackground,
     onClearBackground,
+    onDownloadBackground,
+    onClearThemeCache,
     onApplyBgUrl,
     onRefreshCurrentFont,
     onChangeFontSource,
@@ -132,6 +136,14 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               aria-label="恢复默认设置"
               style={{ cursor: 'pointer' }}
               onClick={onResetSettings}
+            />
+            <i
+              className="fas fa-broom"
+              title="清空主题缓存(背景图等)"
+              role="button"
+              aria-label="清空主题缓存"
+              style={{ cursor: 'pointer' }}
+              onClick={onClearThemeCache}
             />
             <i
               className="fas fa-times close-modal-btn d-lg-none"
@@ -390,6 +402,17 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               style={{ display: 'none' }}
               onChange={handleBgUpload}
             />
+            {/* 下载按钮:仅在有自定义背景图(image 或 url)时可用。
+             * image 类型从 IndexedDB 读 Blob 触发下载,url 类型提示用户走浏览器右键另存为。*/}
+            <button
+              type="button"
+              className="sp-btn"
+              style={{ flex: 1 }}
+              onClick={onDownloadBackground}
+              title="把当前自定义背景图下载到本地"
+            >
+              <i className="fas fa-download" /> 下载
+            </button>
             <button type="button" className="sp-btn danger" onClick={onClearBackground}>
               <i className="fas fa-trash" /> 清空
             </button>

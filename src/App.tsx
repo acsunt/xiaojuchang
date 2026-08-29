@@ -24,6 +24,11 @@ import {
 } from './services/browser-play-preferences';
 import { OPEN_CHANGELOG_EVENT } from './data/visitor-changelog';
 import type { RepoNoticeSettings, SiteSettings } from './types/play';
+import {
+  createBlobUrl,
+  getBackgroundRecord,
+  revokeAllBlobUrls,
+} from './services/browser-background-store';
 import { PlayDetailPage } from './pages/plays/PlayDetailPage';
 import { PlayListPage } from './pages/plays/PlayListPage';
 import { UploadPage } from './pages/upload/UploadPage';
@@ -101,6 +106,8 @@ export default function App() {
     confirmCrop,
     applyBgUrlFromString,
     clearBackground,
+    downloadBackgroundImage,
+    clearThemeCache,
     updateBgPreviewUI,
     resetCropper,
     cropperReady,
@@ -122,6 +129,10 @@ export default function App() {
   const [backgroundDevice, setBackgroundDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
   const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  /* 高级面板里预览框要显示的真实 URL。
+   * 当 bgType === 'image' 时,themeConfig.bgValue 只是 IndexedDB 的 key,
+   * 需要异步读出 Blob 并 createObjectURL 才能渲染到 <div> 上。*/
+  const [bgPreviewUrl, setBgPreviewUrl] = useState<string>('');
 
   const { updateAvailable, dismiss: dismissUpdate, refresh: refreshUpdate } = useUpdateNotifier();
 
@@ -152,6 +163,54 @@ export default function App() {
       .getSiteSettings()
       .then(setSiteSettings)
       .catch(() => setSiteSettings(defaultSiteSettings));
+  }, []);
+
+  /* themeConfig.bgValue 异步解析成可渲染的 URL:
+   * - 'image' 类型:从 IndexedDB 读 Blob,createObjectURL
+   * - 'url'   类型:直接用 bgValue
+   * - 其他    :清空
+   * 因为切图时 controller 已经在 updateBgPreviewUI 里 revoke 掉了旧 object URL,
+   * 这里只 new 一个新的并 setState,组件卸载时统一 revoke。*/
+  useEffect(() => {
+    let cancelled = false;
+    const type = themeConfig.bgType;
+    const value = themeConfig.bgValue;
+    if (!value || type === 'none') {
+      setBgPreviewUrl('');
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (type === 'url') {
+      setBgPreviewUrl(value);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (type === 'image') {
+      void getBackgroundRecord()
+        .then((record) => {
+          if (cancelled) return;
+          if (record && record.type === 'image' && record.value instanceof Blob) {
+            setBgPreviewUrl(createBlobUrl(record.value));
+          } else {
+            setBgPreviewUrl('');
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setBgPreviewUrl('');
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [themeConfig.bgType, themeConfig.bgValue]);
+
+  /* App 卸载时清理所有 object URL */
+  useEffect(() => {
+    return () => {
+      revokeAllBlobUrls();
+    };
   }, []);
 
   useEffect(() => {
@@ -362,6 +421,9 @@ export default function App() {
         onResetSettings={() => {
           resetSettings();
         }}
+        onClearThemeCache={() => {
+          void clearThemeCache();
+        }}
         onToggleMode={() => {
           toggleMode();
         }}
@@ -399,9 +461,7 @@ export default function App() {
               bgBlur={themeConfig.bgBlur}
               bgOpacity={themeConfig.bgOpacity}
               bgOverlay={themeConfig.bgOverlay}
-              bgPreviewUrl={
-                themeConfig.bgType !== 'none' && themeConfig.bgValue ? themeConfig.bgValue : ''
-              }
+              bgPreviewUrl={bgPreviewUrl}
               systemTextScale={themeConfig.systemTextScale}
               lockedContent={themeConfig.lockedContent}
               lockedImg={themeConfig.lockedImg}
@@ -428,6 +488,12 @@ export default function App() {
                 handleBgUpload(file);
               }}
               onClearBackground={() => clearBackground()}
+              onDownloadBackground={() => {
+                void downloadBackgroundImage();
+              }}
+              onClearThemeCache={() => {
+                void clearThemeCache();
+              }}
               onApplyBgUrl={(url) => {
                 applyBgUrlFromString(url);
               }}
