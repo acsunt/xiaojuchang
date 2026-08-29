@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+﻿import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   countPlayBatchItems,
   detectPlayTitleFromContent,
@@ -26,6 +26,7 @@ import {
   type UploadMode,
 } from '../../types/play';
 import { rememberOwnedPlayId } from '../../services/browser-repo-history';
+import { showFloatingToast } from '../../components/FloatingToast';
 
 const initialForm = {
   authorName: '',
@@ -102,8 +103,6 @@ export function UploadPage() {
   const [batchText, setBatchText] = useState('');
   const [mode, setMode] = useState<UploadMode>('single');
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [categoryTagsOpen, setCategoryTagsOpen] = useState(() =>
     readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true),
@@ -188,8 +187,6 @@ export function UploadPage() {
   const resetEditingState = () => {
     setEditingHistoryId('');
     setForm(initialForm);
-    setMessage('');
-    setError('');
   };
 
   const handleSingleSubmit = async () => {
@@ -211,7 +208,7 @@ export function UploadPage() {
 
     setForm(initialForm);
     setEditingHistoryId('');
-    setMessage(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
+    showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
   };
 
   const handleBatchSubmit = async () => {
@@ -250,14 +247,12 @@ export function UploadPage() {
 
     syncLocalHistory(form.authorName);
     setBatchText('');
-    setMessage(`已批量提交 ${items.length} 篇到待审核池。`);
+    showFloatingToast(`已批量提交 ${items.length} 篇到待审核池。`);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
-    setMessage('');
-    setError('');
 
     try {
       if (mode === 'single') {
@@ -266,7 +261,7 @@ export function UploadPage() {
         await handleBatchSubmit();
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '提交失败');
+      showFloatingToast(reason instanceof Error ? reason.message : '提交失败', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -281,9 +276,8 @@ export function UploadPage() {
       const content = await file.text();
       setBatchText(content);
       setMode('batch');
-      setError('');
     } catch {
-      setError('读取 txt 失败');
+      showFloatingToast('读取 txt 失败', 'error');
     }
   };
 
@@ -297,8 +291,6 @@ export function UploadPage() {
       summary: record.summary,
       content: record.content,
     });
-    setMessage('');
-    setError('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -338,20 +330,17 @@ export function UploadPage() {
     const detectedTitle = detectPlayTitleFromContent(form.content);
 
     if (!form.content.trim()) {
-      setError('先填写正文，再识别标题');
-      setMessage('');
+      showFloatingToast('先填写正文，再识别标题', 'error');
       return;
     }
 
     if (!detectedTitle) {
-      setError('没识别到标题。优先读取第一个双引号内容，其次读取首尾成对的 <标题>...</标题>');
-      setMessage('');
+      showFloatingToast('没识别到标题。优先读取第一个双引号内容，其次读取首尾成对的 <标题>...</标题>', 'error');
       return;
     }
 
     setForm((current) => ({ ...current, title: detectedTitle }));
-    setError('');
-    setMessage(`已自动识别标题：${detectedTitle}`);
+    showFloatingToast(`已自动识别标题：${detectedTitle}`);
   };
 
   return (
@@ -614,12 +603,12 @@ export function UploadPage() {
             ) : null}
           </div>
 
-          {message ? (
-            <div className="feedback success stacked-feedback">
-              <span>{message}</span>
-            </div>
-          ) : null}
-          {error ? <div className="feedback error">{error}</div> : null}
+
+
+
+
+
+
         </form>
 
         <aside className="review-sidebar stack-gap-lg">
@@ -743,3 +732,4 @@ export function UploadPage() {
     </section>
   );
 }
+

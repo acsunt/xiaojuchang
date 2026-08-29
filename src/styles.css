@@ -867,8 +867,15 @@ label span,
 .tag-chip {
   border-radius: 999px;
   border: 1px solid transparent;
-  transition: 180ms ease;
+  /* 不要把 border-color 放进 transition：
+   * 半透明 1px 边框在圆角处容易出现子像素渲染抖动（俗称"毛刺"）。
+   * 这里只动画 background-color / color / box-shadow / transform。 */
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease,
+    transform 180ms ease;
   cursor: pointer;
+  /* 强制独立合成层，让圆角 + 1px border 在不同主题/日夜模式下渲染更稳定 */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .nav-pill,
@@ -928,7 +935,10 @@ label span,
 .tab-chip.active {
   color: var(--text);
   background: rgba(89, 143, 255, 0.18);
-  border-color: rgba(105, 168, 255, 0.36);
+  /* 用 box-shadow inset 替代半透明 border，避免圆角处的"毛刺"。
+   * 1px 的实色 outline 兜底，确保线条连贯。 */
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(105, 168, 255, 0.55);
 }
 
 .button {
@@ -956,7 +966,8 @@ label span,
 .button.secondary.active {
   color: var(--text);
   background: rgba(89, 143, 255, 0.18);
-  border-color: rgba(105, 168, 255, 0.36);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px rgba(105, 168, 255, 0.55);
 }
 
 .button.warning {
@@ -1594,6 +1605,57 @@ label {
   border-radius: 12px;
   padding: 10px 12px;
   font-size: 13px;
+}
+
+/* ============ 悬浮提示（app toast）：悬浮在视口上，不占布局 ============ */
+.app-toast-stack {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 13000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.app-toast {
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  word-break: break-word;
+  pointer-events: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  animation: app-toast-in 0.16s ease-out;
+}
+
+.app-toast-success {
+  background: color-mix(in srgb, var(--success) 22%, var(--panel-strong, #101c32) 78%);
+  color: color-mix(in srgb, var(--success) 55%, white 45%);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+.app-toast-error {
+  background: color-mix(in srgb, var(--danger) 22%, var(--panel-strong, #101c32) 78%);
+  color: #ffd9d9;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+@keyframes app-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .floating-toast {

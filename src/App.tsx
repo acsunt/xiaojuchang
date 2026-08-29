@@ -9,6 +9,7 @@ import { UpdatePromptModal } from './components/UpdatePromptModal';
 import { ThemeDropdownPanel } from './components/ThemeDropdownPanel';
 import { AdvancedSettingsPanel } from './components/AdvancedSettingsPanel';
 import { CropperModal } from './components/CropperModal';
+import { FloatingToastHost } from './components/FloatingToast';
 import {
   getOwnedPlayIds,
   getRepoNoticeSettings,
@@ -351,7 +352,7 @@ export default function App() {
         layoutMode={currentLayout}
         onSelectTheme={(key) => {
           selectStyle(key);
-          setThemeDropdownOpen(false);
+          // 不关闭主题面板，方便用户连续切换多个主题对比效果
         }}
         onOpenAdvancedSettings={() => {
           setAdvancedSettingsOpen(true);
@@ -466,6 +467,8 @@ export default function App() {
         />,
         document.body,
       )}
+
+      <FloatingToastHost />
     </div>
   );
 }

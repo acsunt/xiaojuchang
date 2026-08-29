@@ -61,6 +61,7 @@ import {
   type RepoSummary,
 } from '../../types/play';
 import { openVisitorChangelog } from '../../data/visitor-changelog';
+import { showFloatingToast } from '../../components/FloatingToast';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';
@@ -572,9 +573,9 @@ export function PlayListPage() {
   const initialNavigationSnapshot = getPlazaNavigationSnapshot();
   const [plays, setPlays] = useState<Play[]>(() => getCachedPublicPlays());
   const [loading, setLoading] = useState(() => getCachedPublicPlays().length === 0);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
   const [repoCounts, setRepoCounts] = useState<RepoSummary[]>([]);
+  const randomPickedCardRef = useRef<HTMLElement | null>(null);
+  const confettiRef = useRef<ConfettiCanvasHandle | null>(null);
   const [keyword, setKeyword] = useState(() => readPlazaSearchKeyword());
   const [playSearchFields, setPlaySearchFields] = useState<PlaySearchField[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
@@ -691,10 +692,6 @@ export function PlayListPage() {
   const [toolbarCollapsed, setToolbarCollapsed] = useState(() => getPlazaToolbarCollapsed());
   const [randomMode, setRandomMode] = useState<RandomMode>('repeatable');
   const [randomPickedPlayId, setRandomPickedPlayId] = useState('');
-  const [randomMessage, setRandomMessage] = useState('');
-  const [randomCopyMessage, setRandomCopyMessage] = useState('');
-  const randomPickedCardRef = useRef<HTMLElement | null>(null);
-  const confettiRef = useRef<ConfettiCanvasHandle | null>(null);
   const [confettiPrefs, setConfettiPrefsState] = useState<ConfettiPrefs>(() => getConfettiPrefs());
   const [currentPage, setCurrentPage] = useState(() =>
     initialNavigationSnapshot?.restorePending ? initialNavigationSnapshot.currentPage : 1,
@@ -771,12 +768,10 @@ export function PlayListPage() {
               latestHeadUpdatedAt: latestPlay?.updatedAt ?? '',
               restorePending: true,
             });
-            setMessage(`已刷新，新增 ${addedCount} 篇小剧场。`);
+            showFloatingToast(`已刷新，新增 ${addedCount} 篇小剧场。`);
           } else {
             setPendingRefresh({ nextPlays: items, addedCount });
-            setMessage('');
           }
-          setError('');
           return;
         }
 
@@ -788,9 +783,8 @@ export function PlayListPage() {
             latestHeadUpdatedAt: latestPlay?.updatedAt ?? '',
           });
         }
-        setError('');
       } catch (reason) {
-        setError(reason instanceof Error ? reason.message : '加载失败');
+        showFloatingToast(reason instanceof Error ? reason.message : '加载失败', 'error');
       } finally {
         setLoading(false);
       }
@@ -1341,12 +1335,10 @@ export function PlayListPage() {
   const exportPlays = (items: Play[], fileName: string, scopeLabel: string) => {
     const exportItems = collectExportPlaySet(items, plays);
     if (exportItems.length === 0) {
-      setError(`当前没有可导出的${scopeLabel}`);
+      showFloatingToast(`当前没有可导出的${scopeLabel}`, 'error');
       return;
     }
 
-    setError('');
-    setMessage('');
     const text = serializePlaysToBatchText(exportItems);
     downloadTextFile(`${fileName}-${exportItems.length}篇.txt`, text);
   };
@@ -1356,7 +1348,7 @@ export function PlayListPage() {
       ? plays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
       : plays;
     if (sourcePlays.length === 0) {
-      setError('当前没有可导出的内容');
+      showFloatingToast('当前没有可导出的内容', 'error');
       return;
     }
     exportPlays(sourcePlays, '全部小剧场', '全部');
@@ -1364,7 +1356,7 @@ export function PlayListPage() {
 
   const handleExportFavorites = () => {
     if (favoritePlays.length === 0) {
-      setError('当前没有收藏的小剧场可导出');
+      showFloatingToast('当前没有收藏的小剧场可导出', 'error');
       return;
     }
     exportPlays(favoritePlays, '收藏小剧场', '收藏');
@@ -1372,14 +1364,12 @@ export function PlayListPage() {
 
   const handleExportSelected = () => {
     if (selectionMode !== 'export') {
-      setError('');
-      setMessage('');
       setSelectionMode('export');
       return;
     }
 
     if (selectedPlays.length === 0) {
-      setError('先选择要导出的内容');
+      showFloatingToast('先选择要导出的内容', 'error');
       return;
     }
 
@@ -1387,7 +1377,7 @@ export function PlayListPage() {
       ? selectedPlays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
       : selectedPlays;
     if (sourcePlays.length === 0) {
-      setError('选中内容全部被标记为不喜欢，已被屏蔽。请先取消不喜欢再导出。');
+      showFloatingToast('选中内容全部被标记为不喜欢，已被屏蔽。请先取消不喜欢再导出。', 'error');
       return;
     }
 
@@ -1406,7 +1396,7 @@ export function PlayListPage() {
       new Set(values.map((value) => value.trim()).filter(Boolean)),
     );
     if (normalizedValues.length === 0) {
-      setError(emptyMessage);
+      showFloatingToast(emptyMessage, 'error');
       return;
     }
 
@@ -1424,12 +1414,9 @@ export function PlayListPage() {
       .filter((group): group is { value: string; items: Play[] } => Boolean(group));
 
     if (matchedGroups.length === 0) {
-      setError(`当前没有符合条件的${successLabel}内容可导出`);
+      showFloatingToast(`当前没有符合条件的${successLabel}内容可导出`, 'error');
       return;
     }
-
-    setError('');
-    setMessage('');
 
     if (matchedGroups.length === 1) {
       const [group] = matchedGroups;
@@ -1448,7 +1435,7 @@ export function PlayListPage() {
     }
 
     const totalCount = matchedGroups.reduce((sum, group) => sum + group.items.length, 0);
-    setMessage(
+    showFloatingToast(
       matchedGroups.length === 1
         ? `已导出${successLabel}「${matchedGroups[0].value}」的 ${totalCount} 篇小剧场。`
         : `已导出 ${matchedGroups.length} 个${successLabel}，共 ${totalCount} 篇小剧场。`,
@@ -1464,8 +1451,6 @@ export function PlayListPage() {
   };
 
   const handleOpenExportModal = (type: ExportTargetType) => {
-    setError('');
-    setMessage('');
     setExportModalType(type);
   };
 
@@ -1501,14 +1486,15 @@ export function PlayListPage() {
 
   const applyBatchPreference = (mode: 'favorite' | 'disliked') => {
     if (selectionMode !== mode) {
-      setError('');
-      setMessage('');
       setSelectionMode(mode);
       return;
     }
 
     if (selectedIds.length === 0) {
-      setError(mode === 'favorite' ? '先选择要批量收藏的内容' : '先选择要批量标记不喜欢的内容');
+      showFloatingToast(
+        mode === 'favorite' ? '先选择要批量收藏的内容' : '先选择要批量标记不喜欢的内容',
+        'error',
+      );
       return;
     }
 
@@ -1521,7 +1507,7 @@ export function PlayListPage() {
 
     persistStore(nextStore);
     setSelectionMode('idle');
-    setMessage(
+    showFloatingToast(
       mode === 'favorite'
         ? nextState
           ? `已批量收藏 ${selectedIds.length} 篇。`
@@ -1530,19 +1516,14 @@ export function PlayListPage() {
           ? `已批量标记 ${selectedIds.length} 篇不喜欢。`
           : `已取消 ${selectedIds.length} 篇不喜欢。`,
     );
-    setError('');
   };
 
   const handleToggleFavorite = (playId: string) => {
     persistStore(toggleFavoritePlay(playId, preferenceStore));
-    setMessage('');
-    setError('');
   };
 
   const handleToggleDisliked = (playId: string) => {
     persistStore(toggleDislikedPlay(playId, preferenceStore));
-    setMessage('');
-    setError('');
   };
 
   const handlePickRandom = () => {
@@ -1557,22 +1538,20 @@ export function PlayListPage() {
     });
 
     persistStore(result.store);
-    setError('');
-    setRandomCopyMessage('');
 
     if (result.reason === 'empty') {
       setRandomPickedPlayId('');
-      setRandomMessage('当前条件下没有可抽取的小剧场。');
+      showFloatingToast('当前条件下没有可抽取的小剧场。', 'error');
       return;
     }
 
     if (result.reason === 'exhausted') {
-      setRandomMessage('当前候选池已经抽完了，清空记录后可以重新开始。');
+      showFloatingToast('当前候选池已经抽完了，清空记录后可以重新开始。', 'error');
       return;
     }
 
     setRandomPickedPlayId(result.play?.id ?? '');
-    setRandomMessage(randomMode === 'unique' ? '已按不重复模式抽出一篇。' : '已随机抽出一篇。');
+    showFloatingToast(randomMode === 'unique' ? '已按不重复模式抽出一篇。' : '已随机抽出一篇。');
     if (result.play) {
       requestAnimationFrame(() => {
         const card = randomPickedCardRef.current;
@@ -1596,9 +1575,7 @@ export function PlayListPage() {
       return;
     }
     persistStore(clearRandomSeen(activeView, preferenceStore));
-    setRandomMessage('当前视图的不重复抽取记录已清空。');
-    setRandomCopyMessage('');
-    setError('');
+    showFloatingToast('当前视图的不重复抽取记录已清空。');
   };
 
   const handleToggleSetting = (key: keyof PlayPreferenceStore['settings'], value: boolean) => {
@@ -1624,11 +1601,10 @@ export function PlayListPage() {
   const jumpToPage = () => {
     const nextPage = Number(pageInput);
     if (!Number.isFinite(nextPage) || nextPage < 1 || nextPage > totalPages) {
-      setError(`页数范围是 1 到 ${totalPages}`);
+      showFloatingToast(`页数范围是 1 到 ${totalPages}`, 'error');
       return;
     }
 
-    setError('');
     setCurrentPage(nextPage);
   };
 
@@ -1642,7 +1618,6 @@ export function PlayListPage() {
     const nextPageSize = clampPageSize(Number(value));
     setPageSize(nextPageSize);
     setCurrentPage(1);
-    setError('');
 
     if (String(nextPageSize) !== value) {
       setPageSizeInput(String(nextPageSize));
@@ -1678,8 +1653,7 @@ export function PlayListPage() {
     setPendingRefresh(null);
     restoreRequestRef.current = restoreMode;
     explicitRefreshTriggeredRef.current = true; // 标记为用户显式触发，允许 effect 执行 scroll 恢复
-    setError('');
-    setMessage(`已加载 ${pendingRefresh.addedCount} 篇新增小剧场。`);
+    showFloatingToast(`已加载 ${pendingRefresh.addedCount} 篇新增小剧场。`);
 
     if (restoreMode === 'top') {
       setCurrentPage(1);
@@ -1725,9 +1699,9 @@ export function PlayListPage() {
 
     try {
       await copyText(randomPickedPlay.content);
-      setRandomCopyMessage('正文已复制');
+      showFloatingToast('正文已复制');
     } catch {
-      setRandomCopyMessage('正文复制失败，请检查浏览器权限');
+      showFloatingToast('正文复制失败，请检查浏览器权限', 'error');
     }
   };
 
@@ -2151,7 +2125,6 @@ export function PlayListPage() {
                             setActiveCategory('');
                             setActiveAuthor('');
                             setSelectionMode('idle');
-                            setRandomMessage('');
                             setCurrentPage(1);
                           }}
                           type="button"
@@ -2524,8 +2497,6 @@ export function PlayListPage() {
                 </label>
               </div>
 
-              {randomMessage ? <div className="feedback success">{randomMessage}</div> : null}
-
               {randomPickedPlay ? (
                 <article
                   className="play-card random-picked-card play-card-shell play-card-clickable"
@@ -2558,9 +2529,6 @@ export function PlayListPage() {
                     </button>
                   </div>
                   <p className="preview-copy">{randomPickedPlay.content}</p>
-                  {randomCopyMessage ? (
-                    <div className="feedback success">{randomCopyMessage}</div>
-                  ) : null}
                 </article>
               ) : null}
             </section>
@@ -2600,11 +2568,9 @@ export function PlayListPage() {
             </div>
           ) : null}
 
-          {message ? <div className="feedback success">{message}</div> : null}
           {loading ? <div className="empty-panel">正在加载公开内容…</div> : null}
-          {error ? <div className="empty-panel error">{error}</div> : null}
 
-          {!loading && !error && !(!toolbarCollapsed && randomPanelOpen && randomPickedPlay) ? (
+          {!loading && !(!toolbarCollapsed && randomPanelOpen && randomPickedPlay) ? (
             filteredPlays.length > 0 ? (
               <>
                 <div

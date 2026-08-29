@@ -11,6 +11,7 @@ import { playApi } from '../../services/play-api';
 import type { Repo, RepoNoticeSettings, RepoOrder } from '../../types/play';
 import { repoStatusLabelMap } from '../../types/play';
 import { RepoMarkdown } from './RepoMarkdown';
+import { showFloatingToast } from '../../components/FloatingToast';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
 
@@ -27,8 +28,6 @@ export function RepoPage() {
   const [noticeSettings, setNoticeSettingsState] = useState<RepoNoticeSettings>(() =>
     getRepoNoticeSettings(),
   );
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [clearingRejected, setClearingRejected] = useState(false);
 
@@ -39,7 +38,6 @@ export function RepoPage() {
 
   const loadRepos = useCallback(async () => {
     setLoading(true);
-    setError('');
 
     try {
       const [nextSentRepos, nextReceivedRepos] = await Promise.all([
@@ -49,7 +47,7 @@ export function RepoPage() {
       setSentRepos(nextSentRepos);
       setReceivedRepos(nextReceivedRepos);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'repo 加载失败');
+      showFloatingToast(reason instanceof Error ? reason.message : 'repo 加载失败', 'error');
     } finally {
       setLoading(false);
     }
@@ -61,7 +59,7 @@ export function RepoPage() {
 
   const handleMarkRead = () => {
     markRepoReadNow();
-    setMessage('已把当前收到的 repo 标记为已读。');
+    showFloatingToast('已把当前收到的 repo 标记为已读。');
   };
 
   const handleClearRejected = async () => {
@@ -76,18 +74,16 @@ export function RepoPage() {
     }
 
     setClearingRejected(true);
-    setMessage('');
-    setError('');
     try {
       const deletedCount = await playApi.deleteRejectedReposByVisitor(visitorId);
       await loadRepos();
-      setMessage(
+      showFloatingToast(
         deletedCount > 0
           ? `已清空 ${deletedCount} 条被拒绝的 repo。`
           : '当前没有可清空的未通过 repo。',
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '清空未通过 repo 失败');
+      showFloatingToast(reason instanceof Error ? reason.message : '清空未通过 repo 失败', 'error');
     } finally {
       setClearingRejected(false);
     }
@@ -95,7 +91,7 @@ export function RepoPage() {
 
   const updateNoticeSettings = (settings: RepoNoticeSettings) => {
     setNoticeSettingsState(setRepoNoticeSettings(settings));
-    setMessage(
+    showFloatingToast(
       settings === 'off'
         ? '已关闭 repo 提醒。'
         : settings === 'dot'
@@ -186,8 +182,6 @@ export function RepoPage() {
         </div>
       </div>
 
-      {message ? <div className="feedback success">{message}</div> : null}
-      {error ? <div className="feedback error">{error}</div> : null}
       {loading ? <div className="empty-panel">正在加载 repo…</div> : null}
 
       {!loading ? (

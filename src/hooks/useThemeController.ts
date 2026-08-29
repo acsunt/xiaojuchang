@@ -2,6 +2,7 @@
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 import { DEFAULT_THEME_LIST } from '../data/theme-list';
 import { themeFonts } from '../data/theme-fonts';
+import { showFloatingToast } from '../components/FloatingToast';
 
 /* ======================== 存储键 ======================== */
 const STYLE_STORAGE_KEY = 'site-style';
@@ -533,7 +534,7 @@ export function useThemeController(): UseThemeControllerResult {
         }),
       );
     } else {
-      alert('当前主题未配置专属字体');
+      showFloatingToast('当前主题未配置专属字体', 'error');
     }
   }, [currentStyle, themeConfig]);
 
@@ -546,7 +547,7 @@ export function useThemeController(): UseThemeControllerResult {
 
     const url = (urlOverride ?? urlInput?.value ?? '').trim();
     if (!url) {
-      alert('请输入有效的字体链接');
+      showFloatingToast('请输入有效的字体链接', 'error');
       return false;
     }
 
