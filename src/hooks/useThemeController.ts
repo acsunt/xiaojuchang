@@ -10,6 +10,9 @@ const MODE_STORAGE_KEY = 'site-mode';
 const LAYOUT_STORAGE_KEY = 'site-layout';
 const THEME_CONFIG_STORAGE_KEY = 'site-theme-config';
 const LEGACY_SLIDER_KEY = 'sp-settings';
+/* 一次性迁移标记：把所有老用户的字体源强制重置为 system（之前默认是 theme，
+ * 会自动加载主题字体）。标记位只写一次，之后由用户主动设置。 */
+const FONT_SOURCE_MIGRATION_KEY = 'site-font-source-default-applied';
 
 const DEFAULT_THEME_KEY: ThemeKey = 'default';
 
@@ -52,7 +55,7 @@ const DEFAULT_THEME_CONFIG: ThemeConfig = {
   lockedContent: true,
   bgType: 'none',
   bgValue: '',
-  fontSource: 'theme',
+  fontSource: 'system',
   fontUrl: '',
   fontName: '',
 };
@@ -275,7 +278,22 @@ export function useThemeController(): UseThemeControllerResult {
   const [currentStyle, setCurrentStyle] = useState<ThemeKey>(() => readStyle());
   const [currentMode, setCurrentMode] = useState<ThemeMode>(() => readMode());
   const [currentLayout, setCurrentLayout] = useState<LayoutMode>(() => readLayout());
-  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readThemeConfig());
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => {
+    const cfg = readThemeConfig();
+    /* 一次性迁移：把老用户的字体源从默认 'theme' 强制重置为 'system'。
+     * 之前默认会自动加载主题字体，现在默认使用系统字体；用户需要时
+     * 可在高级设置里把"字体源"切到"主题默认"或"自定义链接"启用。
+     * 标记写入 localStorage 后不再触发，保留用户后续主动设置。 */
+    if (SAFE_WINDOW && !readLocalStorage(FONT_SOURCE_MIGRATION_KEY)) {
+      if (cfg.fontSource !== 'custom') {
+        cfg.fontSource = 'system';
+      }
+      writeLocalStorage(FONT_SOURCE_MIGRATION_KEY, '1');
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(cfg));
+      writeLocalStorage('sp-font-source', cfg.fontSource);
+    }
+    return cfg;
+  });
   /* 标记 Cropper.js 全局脚本是否就绪（由 index.html 的 defer 脚本提供） */
   const [cropperReady, setCropperReady] = useState<boolean>(() => SAFE_WINDOW && !!window.Cropper);
   /* 裁剪模态框显隐与待裁剪图源(由 controller 内部统一管理,App.tsx 直接绑定即可) */
@@ -1211,6 +1229,9 @@ export function useThemeController(): UseThemeControllerResult {
   ]);
 
   /* ---------- 业务回调 ---------- */
+  /* 切换主题不再自动加载主题字体：保持当前 fontSource（通常是 system），
+   * 只有当用户主动在高级设置里把"字体源"切到"主题默认"时才会加载主题字体。
+   * 这样切换主题更快、不浪费流量，也避免主题自带的字体可能与文字阅读体验冲突。 */
   const selectStyle = useCallback((key: ThemeKey) => {
     setCurrentStyle(key);
   }, []);

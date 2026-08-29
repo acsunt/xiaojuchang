@@ -1014,11 +1014,11 @@ body[data-style='default'][data-mode='day'] .button.danger {
 }
 
 .header-toolbar-toggle {
-  width: 48px;
-  height: 48px;
+  height: 36px;
   min-width: 48px;
   flex-shrink: 0;
-  font-size: 22px;
+  font-size: 16px;
+  padding: 0 12px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-soft);
   border-color: var(--border);
