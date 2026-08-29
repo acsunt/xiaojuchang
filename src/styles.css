@@ -870,7 +870,10 @@ label span,
   /* 不要把 border-color 放进 transition：
    * 半透明 1px 边框在圆角处容易出现子像素渲染抖动（俗称"毛刺"）。
    * 这里只动画 background-color / color / box-shadow / transform。 */
-  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease,
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
     transform 180ms ease;
   cursor: pointer;
   /* 强制独立合成层，让圆角 + 1px border 在不同主题/日夜模式下渲染更稳定 */

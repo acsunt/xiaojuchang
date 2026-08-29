@@ -61,7 +61,7 @@ import {
   type RepoSummary,
 } from '../../types/play';
 import { openVisitorChangelog } from '../../data/visitor-changelog';
-import { showFloatingToast } from '../../components/FloatingToast';
+import { showFloatingToast } from '../../components/floating-toast-store';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';

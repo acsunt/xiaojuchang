@@ -11,7 +11,7 @@ import { playApi } from '../../services/play-api';
 import type { Repo, RepoNoticeSettings, RepoOrder } from '../../types/play';
 import { repoStatusLabelMap } from '../../types/play';
 import { RepoMarkdown } from './RepoMarkdown';
-import { showFloatingToast } from '../../components/FloatingToast';
+import { showFloatingToast } from '../../components/floating-toast-store';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
 

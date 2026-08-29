@@ -26,7 +26,7 @@ import {
   type UploadMode,
 } from '../../types/play';
 import { rememberOwnedPlayId } from '../../services/browser-repo-history';
-import { showFloatingToast } from '../../components/FloatingToast';
+import { showFloatingToast } from '../../components/floating-toast-store';
 
 const initialForm = {
   authorName: '',
@@ -335,7 +335,10 @@ export function UploadPage() {
     }
 
     if (!detectedTitle) {
-      showFloatingToast('没识别到标题。优先读取第一个双引号内容，其次读取首尾成对的 <标题>...</标题>', 'error');
+      showFloatingToast(
+        '没识别到标题。优先读取第一个双引号内容，其次读取首尾成对的 <标题>...</标题>',
+        'error',
+      );
       return;
     }
 
@@ -602,13 +605,6 @@ export function UploadPage() {
               </button>
             ) : null}
           </div>
-
-
-
-
-
-
-
         </form>
 
         <aside className="review-sidebar stack-gap-lg">
@@ -732,4 +728,3 @@ export function UploadPage() {
     </section>
   );
 }
-
