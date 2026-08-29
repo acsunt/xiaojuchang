@@ -45,6 +45,7 @@ export function ThemeDropdownPanel({
       id="themeDropdownPanel"
       style={{
         marginTop: 10,
+        marginBottom: 16,
         background: 'var(--card-bg)',
         borderRadius: 8,
         overflow: 'hidden',

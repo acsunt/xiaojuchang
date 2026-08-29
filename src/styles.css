@@ -5872,7 +5872,10 @@ body:not([data-style='default']) .repo-nav-pill {
 
 /* 主操作按钮（primary）由变量决定颜色 */
 body:not([data-style='default']) .button.primary {
-  background-image: var(--btn-bg-image, linear-gradient(135deg, var(--accent), var(--accent-strong)));
+  background-image: var(
+    --btn-bg-image,
+    linear-gradient(135deg, var(--accent), var(--accent-strong))
+  );
 }
 
 /* hover 反馈：去掉硬编码 hover 背景，改为透明度 */
@@ -5975,4 +5978,36 @@ body:not([data-style='default']) .content-meta,
 body:not([data-style='default']) .field-hint,
 body:not([data-style='default']) .sub-copy {
   color: var(--sp-text-secondary, #596b7e);
+}
+
+/* ---------- 主题微调：修复特定主题下的可读性问题 ---------- */
+
+/* gradient 主题日间模式：标题色被设成 #fff，但卡片是半透明白底，导致
+ * 标题在卡片里几乎看不到。覆盖为深色，与卡片形成对比。 */
+body[data-style='gradient'][data-mode='day'] h1,
+body[data-style='gradient'][data-mode='day'] h2,
+body[data-style='gradient'][data-mode='day'] h3,
+body[data-style='gradient'][data-mode='day'] h4,
+body[data-style='gradient'][data-mode='day'] .hero-panel h2,
+body[data-style='gradient'][data-mode='day'] .detail-panel h2,
+body[data-style='gradient'][data-mode='day'] .panel-title,
+body[data-style='gradient'][data-mode='day'] .content-head h2 {
+  color: #2b1f3a;
+}
+
+/* brutalism 主题夜间模式：黑底白字，但按钮颜色被设成 #000 黑字，
+ * 一些未在卡片里的 nav-pill/icon-button 会出现黑字黑底。
+ * 强制按钮文字颜色为高对比色（黄色背景就黑字，透明按钮就白字）。 */
+body[data-style='brutalism'][data-mode='night'] .nav-pill,
+body[data-style='brutalism'][data-mode='night'] .icon-button,
+body[data-style='brutalism'][data-mode='night'] .tab-chip,
+body[data-style='brutalism'][data-mode='night'] .tag-chip,
+body[data-style='brutalism'][data-mode='night'] .button,
+body[data-style='brutalism'][data-mode='night'] .text-button,
+body[data-style='brutalism'][data-mode='night'] .plaza-tab-chip,
+body[data-style='brutalism'][data-mode='night'] .repo-nav-pill {
+  background-color: #fff;
+  background-image: none;
+  color: #000;
+  border: 2px solid #fff;
 }
