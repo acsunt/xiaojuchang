@@ -43,10 +43,15 @@ export function ThemeDropdownPanel({
   return (
     <div
       id="themeDropdownPanel"
+      className="theme-dropdown-panel"
       style={{
         marginTop: 10,
         marginBottom: 16,
-        background: 'var(--card-bg)',
+        /* 改用两套都存在的 token：
+         * - 默认主题用 --panel（半透明蓝/米白，与其他面板一致）
+         * - 非默认主题用 --card-bg（各主题自定义的卡片色）
+         * 这样无论哪个主题，面板背景都能跟同一主题下的其他面板和谐统一。 */
+        background: 'var(--panel, var(--card-bg, var(--sp-panel-bg, #ffffff)))',
         borderRadius: 8,
         overflow: 'hidden',
         boxShadow: '0 4px 12px rgba(0,0,0,0.1)',

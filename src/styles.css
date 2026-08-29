@@ -1638,15 +1638,42 @@ label {
 }
 
 .app-toast-success {
+  /* 默认主题日间：success token 偏浅，需要把文字改成深绿才能看清。
+   * 默认主题夜间：背景很暗，让文字偏白绿保持明亮。
+   * 非默认主题：完全交给项目卡片 / 文本色，避免破坏各主题的设计。
+   * 这里通过 body[data-style=default] 锁定默认主题的范围,不污染其它主题。 */
   background: color-mix(in srgb, var(--success) 22%, var(--panel-strong, #101c32) 78%);
   color: color-mix(in srgb, var(--success) 55%, white 45%);
   border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+/* 默认主题日间：背景很亮，文字必须用深绿才有对比度 */
+body[data-style='default'][data-mode='day'] .app-toast-success {
+  background: color-mix(in srgb, var(--success) 12%, var(--panel-strong, #fffaf1) 88%);
+  color: color-mix(in srgb, var(--success) 70%, #0d3b25 30%);
+  border: 1px solid color-mix(in srgb, var(--success) 50%, transparent);
+  box-shadow: 0 8px 20px rgba(30, 159, 109, 0.18);
+}
+
+/* 默认主题夜间：背景是深蓝，文字保持浅绿高亮即可 */
+body[data-style='default'][data-mode='night'] .app-toast-success {
+  background: color-mix(in srgb, var(--success) 26%, var(--panel-strong, #101c32) 74%);
+  color: color-mix(in srgb, var(--success) 40%, white 60%);
+  border: 1px solid color-mix(in srgb, var(--success) 45%, transparent);
 }
 
 .app-toast-error {
   background: color-mix(in srgb, var(--danger) 22%, var(--panel-strong, #101c32) 78%);
   color: #ffd9d9;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+/* 默认主题日间：错误提示也要把文字改成深红才能看清 */
+body[data-style='default'][data-mode='day'] .app-toast-error {
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel-strong, #fffaf1) 88%);
+  color: color-mix(in srgb, var(--danger) 60%, #5a1a1a 40%);
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  box-shadow: 0 8px 20px rgba(196, 85, 85, 0.18);
 }
 
 @keyframes app-toast-in {
@@ -4994,6 +5021,47 @@ body {
   padding: 10px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--sp-text) 15%, transparent);
 }
+
+/* 默认主题：把主题面板内部所有元素改用默认主题的 token（--text/--border/--accent），
+ * 这样面板底色、文字、按钮、分隔线都跟同一主题下的其他面板一致，不会显得突兀。 */
+body[data-style='default'] .theme-dropdown-panel {
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+body[data-style='default'] .theme-dropdown-panel .topbar-row1 {
+  border-bottom: 1px solid var(--border);
+}
+
+body[data-style='default'] .theme-dropdown-panel .topbar-divider {
+  background: var(--border);
+}
+
+body[data-style='default'] .theme-dropdown-panel .toggle-btn {
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+body[data-style='default'] .theme-dropdown-panel .toggle-btn:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border) 60%);
+}
+
+body[data-style='default'] .theme-dropdown-panel .switcher button {
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+body[data-style='default'] .theme-dropdown-panel .switcher button:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border) 60%);
+}
+body[data-style='default'] .theme-dropdown-panel .switcher button.active {
+  background: var(--accent);
+  background-image: none;
+  color: #ffffff;
+  border-color: var(--accent);
+}
 .actions {
   display: flex;
   gap: 8px;
@@ -5959,6 +6027,35 @@ body:not([data-style='default']) .cropper-modal {
   -webkit-backdrop-filter: var(--card-backdrop, none);
 }
 
+/* ---------- 勾选框（checkbox） ----------
+ * 默认主题的 .checkbox-chip input 用了 --accent + --panel-strong 自绘勾选标记。
+ * 非默认主题的卡片底色由 --card-bg 控制，文字色由 --card-text 控制；
+ * 原生 accent-color 在自定义勾选标记上无效，必须把背景/边框/勾子颜色
+ * 全部映射到主题变量，才能在 15 个主题里都保持一致的可读性。
+ * 注意:故意避开部分主题(粗野等)的高饱和实色边框,改用半透明叠加避免视觉太硬。 */
+body:not([data-style='default']) .checkbox-chip {
+  color: var(--card-text, var(--sp-text, #1a1a1a));
+}
+body:not([data-style='default']) .checkbox-chip input {
+  background-color: var(--sp-panel-bg, #ffffff);
+  border: 1.5px solid var(--sp-border, #cbd1d9);
+  /* 关闭原生 accent-color,由我们完全自绘（与默认主题行为一致） */
+  accent-color: transparent;
+}
+body:not([data-style='default']) .checkbox-chip input:hover {
+  border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
+}
+body:not([data-style='default']) .checkbox-chip input:checked {
+  background-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
+  background-image: var(--btn-bg-image, none);
+  border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
+}
+/* 勾子:在亮主题上用面板色 / 在暗主题上用 --btn-color,避免勾子看不见。
+ * 用 var(--card-text) 作为兜底,大多数主题的卡片文字色与勾子色一致。 */
+body:not([data-style='default']) .checkbox-chip input:checked::after {
+  border-color: var(--btn-color, var(--card-text, #ffffff));
+}
+
 /* ---------- 提示 / Toast ---------- */
 body:not([data-style='default']) .app-toast {
   background: var(--card-bg, var(--sp-panel-bg, #ffffff));
@@ -6010,4 +6107,230 @@ body[data-style='brutalism'][data-mode='night'] .repo-nav-pill {
   background-image: none;
   color: #000;
   border: 2px solid #fff;
+}
+
+/* brutalism 夜间：把页面里所有"卡片"都强制改成粗野主题的标志性黄底+黑边。
+ * 这一层覆盖绕开通用 body:not([data-style='default']) 里使用 --card-bg 但被
+ * 默认主题更具体的样式（用 color-mix(...var(--panel)...)）覆盖的坑。 */
+body[data-style='brutalism'][data-mode='night'] .hero-panel,
+body[data-style='brutalism'][data-mode='night'] .form-panel,
+body[data-style='brutalism'][data-mode='night'] .detail-panel,
+body[data-style='brutalism'][data-mode='night'] .content-panel,
+body[data-style='brutalism'][data-mode='night'] .login-panel,
+body[data-style='brutalism'][data-mode='night'] .register-panel,
+body[data-style='brutalism'][data-mode='night'] .review-sidebar,
+body[data-style='brutalism'][data-mode='night'] .review-main,
+body[data-style='brutalism'][data-mode='night'] .review-card,
+body[data-style='brutalism'][data-mode='night'] .log-panel,
+body[data-style='brutalism'][data-mode='night'] .log-item,
+body[data-style='brutalism'][data-mode='night'] .empty-panel,
+body[data-style='brutalism'][data-mode='night'] .hint-panel,
+body[data-style='brutalism'][data-mode='night'] .feature-panel,
+body[data-style='brutalism'][data-mode='night'] .feature-side,
+body[data-style='brutalism'][data-mode='night'] .feature-copy,
+body[data-style='brutalism'][data-mode='night'] .info-panel,
+body[data-style='brutalism'][data-mode='night'] .process-panel,
+body[data-style='brutalism'][data-mode='night'] .metric-strip,
+body[data-style='brutalism'][data-mode='night'] .field-note-panel,
+body[data-style='brutalism'][data-mode='night'] .stat-card,
+body[data-style='brutalism'][data-mode='night'] .stat-card-rich,
+body[data-style='brutalism'][data-mode='night'] .play-card,
+body[data-style='brutalism'][data-mode='night'] .play-detail-card,
+body[data-style='brutalism'][data-mode='night'] .repo-card,
+body[data-style='brutalism'][data-mode='night'] .admin-card,
+body[data-style='brutalism'][data-mode='night'] .tag-admin-card,
+body[data-style='brutalism'][data-mode='night'] .inline-detail-block,
+body[data-style='brutalism'][data-mode='night'] .upload-section,
+body[data-style='brutalism'][data-mode='night'] .duplicate-summary-card,
+body[data-style='brutalism'][data-mode='night'] .duplicate-play-pane,
+body[data-style='brutalism'][data-mode='night'] .duplicate-match-row,
+body[data-style='brutalism'][data-mode='night'] .diff-panel,
+body[data-style='brutalism'][data-mode='night'] .admin-bulk-review-progress,
+body[data-style='brutalism'][data-mode='night'] .plaza-derived-group,
+body[data-style='brutalism'][data-mode='night'] .plaza-calendar-play-item,
+body[data-style='brutalism'][data-mode='night'] .plaza-calendar-empty,
+body[data-style='brutalism'][data-mode='night'] .plaza-calendar-day,
+body[data-style='brutalism'][data-mode='night'] .detail-version-panel,
+body[data-style='brutalism'][data-mode='night'] .backup-notes-panel,
+body[data-style='brutalism'][data-mode='night'] .modal-panel,
+body[data-style='brutalism'][data-mode='night'] .modal-card,
+body[data-style='brutalism'][data-mode='night'] .modal-content,
+body[data-style='brutalism'][data-mode='night'] .dialog-panel,
+body[data-style='brutalism'][data-mode='night'] .changelog-modal,
+body[data-style='brutalism'][data-mode='night'] .update-prompt-modal,
+body[data-style='brutalism'][data-mode='night'] .theme-dropdown-panel,
+body[data-style='brutalism'][data-mode='night'] .advanced-settings-panel,
+body[data-style='brutalism'][data-mode='night'] .cropper-modal {
+  background: #ffeb3b;
+  background-image: none;
+  color: #000;
+  border: 3px solid #000;
+  border-radius: 0;
+  box-shadow: 6px 6px 0 #000;
+}
+
+/* brutalism 夜间：input/textarea/select 必须跟随粗野标志性的硬朗风格 */
+body[data-style='brutalism'][data-mode='night'] input[type='text'],
+body[data-style='brutalism'][data-mode='night'] input[type='search'],
+body[data-style='brutalism'][data-mode='night'] input[type='url'],
+body[data-style='brutalism'][data-mode='night'] input[type='email'],
+body[data-style='brutalism'][data-mode='night'] input[type='number'],
+body[data-style='brutalism'][data-mode='night'] input[type='password'],
+body[data-style='brutalism'][data-mode='night'] textarea,
+body[data-style='brutalism'][data-mode='night'] select,
+body[data-style='brutalism'][data-mode='night'] .custom-select-trigger,
+body[data-style='brutalism'][data-mode='night'] .form-field input,
+body[data-style='brutalism'][data-mode='night'] .form-field textarea {
+  background: #ffffff;
+  color: #000;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: 4px 4px 0 #000;
+}
+
+/* brutalism 夜间：topbar-row1 顶部条（属于主题面板内部）+ 工具栏底色 = 黄底 */
+body[data-style='brutalism'][data-mode='night'] .topbar-row1 {
+  border-bottom: 3px solid #000;
+}
+body[data-style='brutalism'][data-mode='night'] .topbar-divider {
+  background: #000;
+}
+body[data-style='brutalism'][data-mode='night'] .theme-dropdown-panel {
+  border: 3px solid #000 !important;
+  box-shadow: 6px 6px 0 #000 !important;
+}
+body[data-style='brutalism'][data-mode='night'] .theme-dropdown-panel .switcher button {
+  background: #ffeb3b;
+  background-image: none;
+  color: #000;
+  border: 2px solid #000;
+  border-radius: 0;
+  text-shadow: none;
+  box-shadow: 3px 3px 0 #000;
+}
+body[data-style='brutalism'][data-mode='night'] .theme-dropdown-panel .switcher button:hover {
+  background: #ffffff;
+  color: #000;
+  border-color: #000;
+  box-shadow: 3px 3px 0 #000;
+}
+body[data-style='brutalism'][data-mode='night'] .theme-dropdown-panel .switcher button.active {
+  background: #000;
+  background-image: none;
+  color: #ffeb3b;
+  border-color: #000;
+  box-shadow: 3px 3px 0 #ffeb3b;
+}
+body[data-style='brutalism'][data-mode='night'] .toggle-btn {
+  background: #ffffff;
+  background-image: none;
+  color: #000;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 #000;
+}
+body[data-style='brutalism'][data-mode='night'] .toggle-btn:hover {
+  background: #000;
+  color: #ffeb3b;
+  border-color: #000;
+}
+
+/* brutalism 夜间：active 状态的标签/导航 (header 顶部条 + 卡片内) */
+body[data-style='brutalism'][data-mode='night'] .nav-pill.active,
+body[data-style='brutalism'][data-mode='night'] .nav-pill:hover,
+body[data-style='brutalism'][data-mode='night'] .tab-chip.active,
+body[data-style='brutalism'][data-mode='night'] .tab-chip:hover,
+body[data-style='brutalism'][data-mode='night'] .button.active,
+body[data-style='brutalism'][data-mode='night'] .button:hover,
+body[data-style='brutalism'][data-mode='night'] .button.primary,
+body[data-style='brutalism'][data-mode='night'] .button.primary:hover {
+  background-color: #000;
+  background-image: none;
+  color: #ffeb3b;
+  border-color: #000;
+  border-radius: 0;
+  box-shadow: 3px 3px 0 #ffeb3b;
+}
+body[data-style='brutalism'][data-mode='night'] .repo-nav-pill.active,
+body[data-style='brutalism'][data-mode='night'] .repo-nav-pill:hover {
+  background: #000;
+  color: #ffeb3b;
+  border-color: #000;
+}
+
+/* brutalism 夜间：页面里的小剧场标题（h1/h2/h3/h4 + 各面板的标题块）
+ * 必须用粗野标志性的白字加黑色硬阴影,否则在 #000 页面上根本看不见。 */
+body[data-style='brutalism'][data-mode='night'] h1,
+body[data-style='brutalism'][data-mode='night'] h2,
+body[data-style='brutalism'][data-mode='night'] h3,
+body[data-style='brutalism'][data-mode='night'] h4,
+body[data-style='brutalism'][data-mode='night'] .hero-panel h2,
+body[data-style='brutalism'][data-mode='night'] .detail-panel h2,
+body[data-style='brutalism'][data-mode='night'] .panel-title,
+body[data-style='brutalism'][data-mode='night'] .content-head h2,
+body[data-style='brutalism'][data-mode='night'] .eyebrow,
+body[data-style='brutalism'][data-mode='night'] .content-meta,
+body[data-style='brutalism'][data-mode='night'] .field-hint,
+body[data-style='brutalism'][data-mode='night'] .sub-copy,
+body[data-style='brutalism'][data-mode='night'] .meta-line,
+body[data-style='brutalism'][data-mode='night'] .meta-row,
+body[data-style='brutalism'][data-mode='night'] .summary,
+body[data-style='brutalism'][data-mode='night'] .preview-copy,
+body[data-style='brutalism'][data-mode='night'] .play-detail-copy,
+body[data-style='brutalism'][data-mode='night'] label span,
+body[data-style='brutalism'][data-mode='night'] .checkbox-chip,
+body[data-style='brutalism'][data-mode='night'] strong {
+  color: #ffffff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+/* 卡片内部：因为卡片本身就是黄底,标题/正文应保持黑字 */
+body[data-style='brutalism'][data-mode='night'] .hero-panel h2,
+body[data-style='brutalism'][data-mode='night'] .hero-panel h3,
+body[data-style='brutalism'][data-mode='night'] .hero-panel p,
+body[data-style='brutalism'][data-mode='night'] .detail-panel h2,
+body[data-style='brutalism'][data-mode='night'] .detail-panel h3,
+body[data-style='brutalism'][data-mode='night'] .detail-panel p,
+body[data-style='brutalism'][data-mode='night'] .content-panel h2,
+body[data-style='brutalism'][data-mode='night'] .content-panel h3,
+body[data-style='brutalism'][data-mode='night'] .content-panel p,
+body[data-style='brutalism'][data-mode='night'] .content-head h2,
+body[data-style='brutalism'][data-mode='night'] .content-meta,
+body[data-style='brutalism'][data-mode='night'] .field-hint,
+body[data-style='brutalism'][data-mode='night'] .meta-line,
+body[data-style='brutalism'][data-mode='night'] .meta-row,
+body[data-style='brutalism'][data-mode='night'] .summary,
+body[data-style='brutalism'][data-mode='night'] .sub-copy,
+body[data-style='brutalism'][data-mode='night'] label span,
+body[data-style='brutalism'][data-mode='night'] .checkbox-chip,
+body[data-style='brutalism'][data-mode='night'] .review-card,
+body[data-style='brutalism'][data-mode='night'] .review-card *,
+body[data-style='brutalism'][data-mode='night'] .play-card,
+body[data-style='brutalism'][data-mode='night'] .play-card *,
+body[data-style='brutalism'][data-mode='night'] .repo-card,
+body[data-style='brutalism'][data-mode='night'] .repo-card *,
+body[data-style='brutalism'][data-mode='night'] .stat-card,
+body[data-style='brutalism'][data-mode='night'] .stat-card *,
+body[data-style='brutalism'][data-mode='night'] .feature-panel,
+body[data-style='brutalism'][data-mode='night'] .feature-panel *,
+body[data-style='brutalism'][data-mode='night'] .form-panel,
+body[data-style='brutalism'][data-mode='night'] .form-panel *,
+body[data-style='brutalism'][data-mode='night'] .login-panel,
+body[data-style='brutalism'][data-mode='night'] .login-panel *,
+body[data-style='brutalism'][data-mode='night'] .modal-panel,
+body[data-style='brutalism'][data-mode='night'] .modal-panel *,
+body[data-style='brutalism'][data-mode='night'] .dialog-panel,
+body[data-style='brutalism'][data-mode='night'] .dialog-panel * {
+  color: #000;
+  text-shadow: none;
+}
+
+/* 卡片内的标题仍可保留阴影(粗野风格),让小剧场标题更有设计感 */
+body[data-style='brutalism'][data-mode='night'] .play-card h3,
+body[data-style='brutalism'][data-mode='night'] .repo-card h3,
+body[data-style='brutalism'][data-mode='night'] .detail-panel h2,
+body[data-style='brutalism'][data-mode='night'] .content-head h2,
+body[data-style='brutalism'][data-mode='night'] .hero-panel h2,
+body[data-style='brutalism'][data-mode='night'] .feature-panel h3 {
+  text-shadow: 2px 2px 0 #ffeb3b;
 }
