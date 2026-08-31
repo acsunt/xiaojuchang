@@ -1204,6 +1204,114 @@ body[data-style='default'][data-mode='day'] .button.danger {
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
 
+/* ============================================================
+   文字区遮罩 (--text-mask)
+   --------------------------------------------------------------
+   高级设置里的"文字区遮罩"滑块通过 --text-mask（0~1）控制。
+   把黑色遮罩叠在"文字承载区"的卡片/面板底色之上、正文之下,
+   让用户在自定义背景图下强化文字的可读性。
+   实现要点:
+   1. 目标元素必须建立自身的层叠上下文(isolation: isolate),
+      否则 ::before 的 z-index: 0 会穿到父级卡片背后。
+   2. ::before 使用 position: absolute + inset: 0,
+      不改变原有 background / border-radius / padding。
+   3. pointer-events: none 保证遮罩不阻挡点击/hover。
+   4. 遮罩色使用纯黑, 强度直接来自 --text-mask,
+      文字变暗时保持文字色不动, 文字仍然可读。
+   5. 使用 :where() 关闭选择器权重, 避免覆盖各主题自定义样式。
+   ============================================================ */
+:where(
+  .play-card,
+  .play-detail-card,
+  .review-card,
+  .repo-card,
+  .repo-panel,
+  .hero-panel,
+  .form-panel,
+  .content-panel,
+  .detail-panel,
+  .info-panel,
+  .process-panel,
+  .metric-strip,
+  .feature-panel,
+  .feature-side,
+  .field-note-panel,
+  .stat-card,
+  .stat-card-rich,
+  .tag-admin-card,
+  .inline-detail-block,
+  .log-item,
+  .plaza-derived-group,
+  .plaza-calendar-play-item,
+  .plaza-calendar-empty,
+  .admin-card,
+  .upload-section,
+  .empty-panel,
+  .hint-panel,
+  .backup-notes-panel,
+  .diff-panel,
+  .duplicate-summary-card,
+  .duplicate-play-pane,
+  .duplicate-match-row,
+  .duplicate-content-pane,
+  .modal-panel,
+  .dialog-panel,
+  .login-panel
+) {
+  position: relative;
+  /* 建立独立层叠上下文,避免 ::before 的 z-index 影响父级 */
+  isolation: isolate;
+}
+
+:where(
+  .play-card,
+  .play-detail-card,
+  .review-card,
+  .repo-card,
+  .repo-panel,
+  .hero-panel,
+  .form-panel,
+  .content-panel,
+  .detail-panel,
+  .info-panel,
+  .process-panel,
+  .metric-strip,
+  .feature-panel,
+  .feature-side,
+  .field-note-panel,
+  .stat-card,
+  .stat-card-rich,
+  .tag-admin-card,
+  .inline-detail-block,
+  .log-item,
+  .plaza-derived-group,
+  .plaza-calendar-play-item,
+  .plaza-calendar-empty,
+  .admin-card,
+  .upload-section,
+  .empty-panel,
+  .hint-panel,
+  .backup-notes-panel,
+  .diff-panel,
+  .duplicate-summary-card,
+  .duplicate-play-pane,
+  .duplicate-match-row,
+  .duplicate-content-pane,
+  .modal-panel,
+  .dialog-panel,
+  .login-panel
+)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* 继承父级的 border-radius,避免遮罩超出圆角 */
+  border-radius: inherit;
+  background-color: rgba(0, 0, 0, var(--text-mask, 0));
+  pointer-events: none;
+  /* --text-mask 从 useThemeController 每帧同步,不加过渡,避免拖动闪烁 */
+}
+
 .play-card,
 .review-card,
 .stat-card-rich,
