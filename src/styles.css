@@ -5019,6 +5019,27 @@ body {
   background: transparent;
 }
 
+/* 背景三层从后到前:
+ *   #theme-bg-layer  (-6)  主题底色 / 主题内置渐变,任何主题都存在,兜底
+ *   #custom-bg-layer (-5)  用户上传/URL 的自定义背景图,可选
+ *   #custom-bg-overlay(-4) 半透明遮罩,叠在自定义背景上做压暗
+ * 之前 #theme-bg-layer 用了 z-index:-3,不透明的 --bg-color 会把自定义
+ * 背景图整个盖住,导致"上传了背景图但没显示"。 */
+#theme-bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -6;
+  background-color: var(--bg-color);
+  transition: background-color 0.4s ease;
+}
+#theme-bg-layer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--bg-image);
+  opacity: var(--bg-image-opacity);
+  transition: opacity 0.4s ease;
+}
 #custom-bg-layer {
   position: fixed;
   inset: 0;
@@ -5037,21 +5058,6 @@ body {
   z-index: -4;
   background-color: rgba(0, 0, 0, var(--bg-overlay));
   /* 同上:去掉 transition 避免拖动 overlay slider 时闪烁。 */
-}
-#theme-bg-layer {
-  position: fixed;
-  inset: 0;
-  z-index: -3;
-  background-color: var(--bg-color);
-  transition: background-color 0.4s ease;
-}
-#theme-bg-layer::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: var(--bg-image);
-  opacity: var(--bg-image-opacity);
-  transition: opacity 0.4s ease;
 }
 
 .font-loading-overlay {
