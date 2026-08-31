@@ -963,8 +963,6 @@ export function useThemeController(): UseThemeControllerResult {
     });
   }, []);
 
-
-
   const toggleSystemTextScale = useCallback(() => {
     const sysCheck = $<HTMLInputElement>('systemTextScaleCheck');
     const isChecked = !!sysCheck?.checked;
