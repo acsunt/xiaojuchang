@@ -2497,6 +2497,11 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
+    /* overflow-x: auto 会隐含把 overflow-y 变成 auto,导致孟菲斯/等距插画/
+     * 渐变风格等主题的按钮下方阴影被裁。留出 padding-bottom + 负 margin,
+     * 让阴影空间进入自身滚动区域内。 */
+    padding-bottom: 12px;
+    margin-bottom: -12px;
   }
 
   .plaza-toolbar-row-mobile-export::-webkit-scrollbar {
@@ -3662,6 +3667,9 @@ body.tag-sort-dragging {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
+    /* 同上:留空间给主题的按钮阴影,避免被 overflow-y auto 裁掉。 */
+    padding-bottom: 12px;
+    margin-bottom: -12px;
   }
 
   .plaza-toolbar-row-mobile-export::-webkit-scrollbar {
@@ -4058,13 +4066,13 @@ body.tag-sort-dragging {
     scrollbar-width: none;
     padding-top: 8px;
     padding-right: 8px;
-    /* 孟菲斯 / 等距插画 等主题的按钮有 5-6px 的下方硬阴影,
+    /* 孟菲斯 / 等距插画 / 渐变风格 等主题的按钮有 5-8px 的下方阴影,
      * overflow-x: auto 会隐含把 overflow-y 变成 auto,把阴影裁掉。
      * 额外留出下方空间让阴影完整显示。 */
-    padding-bottom: 10px;
+    padding-bottom: 12px;
     margin-top: -8px;
     margin-right: -8px;
-    margin-bottom: -10px;
+    margin-bottom: -12px;
   }
 
   .top-nav::-webkit-scrollbar {
@@ -4581,6 +4589,10 @@ body.tag-sort-dragging {
   width: min(520px, calc(100vw - 32px));
   max-height: min(82vh, 720px);
   overflow: auto;
+  /* 让 .modal-action-row 通过 position: sticky 粘在弹窗底部,
+   * 需要弹窗内容的定位上下文,而 stack-gap-md 是纯 gap 布局,
+   * 这里保留 overflow: auto 让 sticky 生效。 */
+  padding-bottom: 0;
 }
 
 .changelog-modal {
@@ -4749,6 +4761,18 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
    * - 这里覆盖为 nowrap,让两个按钮按 1:1 平分宽度,即便手机端也不会换行
    * - 按钮允许文字溢出省略,以保证布局不破 */
   flex-wrap: nowrap;
+}
+
+/* "发现新功能更新"弹窗:当日志内容较长、弹窗内部出现滚动时,
+ * 让底部两个操作按钮 sticky 到弹窗底部,用户不用翻到底才能点。 */
+.update-prompt-modal .modal-action-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 8px -16px 0;
+  padding: 12px 16px;
+  background: var(--panel);
+  border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
 }
 
 .modal-action-row > .button {
@@ -5474,6 +5498,21 @@ input[type='range'] {
   margin-top: -20px;
   padding-top: 20px;
 }
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 20px;
+  /* 与 header 对称:滚动到长图底部时按钮行始终可见。 */
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
+  background: var(--sp-panel-bg);
+  margin: 15px -20px -20px;
+  padding: 12px 20px 20px;
+  border-top: 1px solid var(--sp-border);
+}
 .close-modal-btn {
   color: var(--sp-text-secondary);
   transition: color 0.3s;
@@ -5552,16 +5591,18 @@ body[data-style='neumorphism'][data-mode='night'] {
 }
 
 /* 新拟态的"立体感"靠外阴影(双向)实现,但 5px 的外阴影需要底部留出空间才能完全显示。
- * 默认 .app-header / .top-nav / .plaza-toolbar-row 的底部间距已经够用,
- * 这里只需比默认多留 5px 让阴影完整显示,避免间距过宽。
- * 不再额外给 .app-header 加 padding/margin,
- * 阴影会从按钮自身向下溢出,这 5px 已经够阴影完整呈现。*/
+ * 之前给 .top-nav 单独加 padding-bottom:5px 会把它撑得比同级的"主题"按钮高
+ * (主题按钮直接放在 .header-actions 里、不在 .top-nav 里),导致两者视觉未对齐。
+ * 改成:.top-nav 不加高度,让它与"主题"按钮 align-items:center 后同高;
+ * 阴影空间用 padding-bottom + 负 margin-bottom 挤到自身内部,不影响外部布局。 */
 body[data-style='neumorphism'] .top-nav {
   padding-bottom: 5px;
+  margin-bottom: -5px;
 }
 body[data-style='neumorphism'] .plaza-toolbar-row,
 body[data-style='neumorphism'] .plaza-toolbar-row-mobile-export {
   padding-bottom: 5px;
+  margin-bottom: -5px;
 }
 
 body[data-style='glass'] {

@@ -66,15 +66,7 @@ export function CropperModal({
             <i className="fas fa-spinner fa-spin" /> 正在加载 Cropper.js…
           </div>
         ) : null}
-        <div
-          style={{
-            textAlign: 'right',
-            marginTop: 15,
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 10,
-          }}
-        >
+        <div className="modal-footer cropper-modal-footer">
           <button type="button" className="sp-btn" onClick={onReset} disabled={!cropperReady}>
             <i className="fas fa-sync" /> 重置
           </button>
