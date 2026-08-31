@@ -1263,8 +1263,10 @@ body[data-style='default'][data-mode='day'] .button.danger {
   isolation: isolate;
   /* "主题透明度" (--theme-alpha, 0~1) 作用于同一批"文字区"卡片:
    * 值越大,这些卡片(含文字)越透明,越能露出下面的自定义背景图。
-   * 与 --text-mask 组合使用:先透出背景图,再叠加黑色遮罩加深文字可读性。 */
-  opacity: calc(1 - var(--theme-alpha, 0));
+   * 与 --text-mask 组合使用:先透出背景图,再叠加黑色遮罩加深文字可读性。
+   * 读取 --theme-alpha-effective:面板上的"无透明度"复选框勾选时该值恒为 0,
+   * 卡片就完全不透明,视觉等价于该功能引入之前的样子。 */
+  opacity: calc(1 - var(--theme-alpha-effective, 0));
 }
 
 :where(
@@ -1311,9 +1313,11 @@ body[data-style='default'][data-mode='day'] .button.danger {
   z-index: 0;
   /* 继承父级的 border-radius,避免遮罩超出圆角 */
   border-radius: inherit;
-  background-color: rgba(0, 0, 0, var(--text-mask, 0));
+  background-color: rgba(0, 0, 0, var(--text-mask-effective, 0));
   pointer-events: none;
-  /* --text-mask 从 useThemeController 每帧同步,不加过渡,避免拖动闪烁 */
+  /* 读取 --text-mask-effective:"无透明度"复选框勾上时恒为 0,遮罩隐身,
+   * 与"主题透明度与遮罩"功能引入前一致。滑块本身的 --text-mask 仍然写入,
+   * 用于面板上百分比显示,取消勾选后立即恢复。 */
 }
 
 .play-card,
@@ -5088,6 +5092,12 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   --bg-overlay: 0;
   --theme-alpha: 0;
   --text-mask: 0;
+  /* 由 useThemeController 根据"无透明度"复选框写入:
+   *  - 未勾选:effective = 对应滑块值/100
+   *  - 勾选(默认):effective 恒为 0,等价于"主题透明度与遮罩"功能引入前的表现。
+   * 样式表里实际生效的规则统一读这两个 effective 变量。 */
+  --theme-alpha-effective: 0;
+  --text-mask-effective: 0;
   --sp-bg: #f2f4f6;
   --sp-panel-bg: #ffffff;
   --sp-input-bg: #eff2f5;
@@ -5163,8 +5173,10 @@ body {
    * 卡片/面板容器上另有一份 opacity: calc(1 - --theme-alpha),
    * 两者叠加后就是:主题底色 + 卡片一起淡出,让背景图完整显现,
    * 再靠 --text-mask 单独回加黑色遮罩保证文字可读。
+   * 读取 --theme-alpha-effective:面板上的"无透明度"复选框勾选时该值恒为 0,
+   * 主题底色恒不透明,视觉等价于该功能引入之前的样子。
    * 不给 opacity 加 transition,拖动 slider 时避免帧级动画抖动。 */
-  opacity: calc(1 - var(--theme-alpha, 0));
+  opacity: calc(1 - var(--theme-alpha-effective, 0));
   transition: background-color 0.4s ease;
 }
 #theme-bg-layer::before {

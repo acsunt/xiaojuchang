@@ -93,6 +93,7 @@ export default function App() {
     initLocks,
     toggleThemeLock,
     toggleSystemTextScale,
+    setThemeAlphaDisabled,
     updateBgAdjustment,
     updateTextScaleFromValue,
     updateUiScaleFromValue,
@@ -459,6 +460,7 @@ export default function App() {
               bgOverlay={themeConfig.bgOverlay}
               bgPreviewUrl={bgPreviewUrl}
               systemTextScale={themeConfig.systemTextScale}
+              themeAlphaDisabled={themeConfig.themeAlphaDisabled}
               lockedContent={themeConfig.lockedContent}
               lockedImg={themeConfig.lockedImg}
               fontSource={themeConfig.fontSource}
@@ -479,6 +481,9 @@ export default function App() {
               }}
               onToggleThemeLock={(target) => {
                 toggleThemeLock(target);
+              }}
+              onToggleThemeAlphaDisabled={(disabled) => {
+                setThemeAlphaDisabled(disabled);
               }}
               onUploadBackground={(file) => {
                 handleBgUpload(file);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 import { DEFAULT_THEME_LIST } from '../data/theme-list';
 import { themeFonts } from '../data/theme-fonts';
@@ -44,6 +44,11 @@ export interface ThemeConfig {
   bgOpacity: number;
   bgOverlay: number;
   systemTextScale: boolean;
+  /* "无透明度"开关:勾上时禁用 themeAlpha / textMask 的实际生效,
+   * 视觉上恢复到引入"主题透明度与遮罩"功能之前的状态(主题底色恒不透明、
+   * 卡片恒不透明、无黑色文字遮罩)。滑块值本身仍然保留,方便随时关闭开关
+   * 恢复之前的调节;默认 true,新用户看到的就是"关闭状态"。 */
+  themeAlphaDisabled: boolean;
   /* 锁定 */
   lockedImg: boolean;
   lockedContent: boolean;
@@ -65,6 +70,7 @@ const DEFAULT_THEME_CONFIG: ThemeConfig = {
   bgOpacity: 1,
   bgOverlay: 0,
   systemTextScale: false,
+  themeAlphaDisabled: true,
   lockedImg: true,
   lockedContent: true,
   bgType: 'none',
@@ -249,6 +255,10 @@ export interface UseThemeControllerResult {
   initLocks: () => void;
   toggleThemeLock: (type: 'img' | 'content') => void;
   toggleSystemTextScale: () => void;
+  /* "主题透明度与遮罩 -> 无透明度"复选框:
+   * disabled=true 时把 --theme-alpha-effective 和 --text-mask-effective 强制置 0,
+   * 面板里两个滑块也会被禁用;取消勾选后立刻恢复到滑块原值。 */
+  setThemeAlphaDisabled: (disabled: boolean) => void;
   updateTextScale: () => void;
   updateUiScale: () => void;
   updateBgAdjustment: () => void;
@@ -987,6 +997,20 @@ export function useThemeController(): UseThemeControllerResult {
     });
   }, []);
 
+  const setThemeAlphaDisabled = useCallback((disabled: boolean) => {
+    setThemeConfig((prev) => {
+      if (prev.themeAlphaDisabled === disabled) {
+        return prev;
+      }
+      const next: ThemeConfig = {
+        ...prev,
+        themeAlphaDisabled: disabled,
+      };
+      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const toggleSystemTextScale = useCallback(() => {
     const sysCheck = $<HTMLInputElement>('systemTextScaleCheck');
     const isChecked = !!sysCheck?.checked;
@@ -1096,6 +1120,7 @@ export function useThemeController(): UseThemeControllerResult {
         textScale: themeConfig.textScale,
         uiScale: themeConfig.uiScale,
         systemTextScale: themeConfig.systemTextScale,
+        themeAlphaDisabled: themeConfig.themeAlphaDisabled,
         lockedImg: themeConfig.lockedImg,
         lockedContent: themeConfig.lockedContent,
         bgType: themeConfig.bgType,
@@ -1579,6 +1604,15 @@ export function useThemeController(): UseThemeControllerResult {
     rootStyle.setProperty('--bg-overlay', String(themeConfig.bgOverlay));
     rootStyle.setProperty('--theme-alpha', String(themeConfig.themeAlpha / 100));
     rootStyle.setProperty('--text-mask', String(themeConfig.textMask / 100));
+    /* --theme-alpha-effective / --text-mask-effective 是样式表实际读取的变量:
+     *  - "无透明度"复选框(themeAlphaDisabled)勾上时,两者恒为 0,视觉上等价于
+     *    "主题透明度与遮罩"功能未引入之前的样子;
+     *  - 未勾选时,值 = 对应滑块的百分比 / 100。
+     * 原始 --theme-alpha / --text-mask 依旧被写入,方便面板上滑块值/百分比显示。 */
+    const alphaEffective = themeConfig.themeAlphaDisabled ? 0 : themeConfig.themeAlpha / 100;
+    const maskEffective = themeConfig.themeAlphaDisabled ? 0 : themeConfig.textMask / 100;
+    rootStyle.setProperty('--theme-alpha-effective', String(alphaEffective));
+    rootStyle.setProperty('--text-mask-effective', String(maskEffective));
   }, [
     themeConfig.textScale,
     themeConfig.uiScale,
@@ -1587,6 +1621,7 @@ export function useThemeController(): UseThemeControllerResult {
     themeConfig.bgOverlay,
     themeConfig.themeAlpha,
     themeConfig.textMask,
+    themeConfig.themeAlphaDisabled,
   ]);
 
   /* ---------- 业务回调 ---------- */
@@ -1695,6 +1730,7 @@ export function useThemeController(): UseThemeControllerResult {
     initLocks,
     toggleThemeLock,
     toggleSystemTextScale,
+    setThemeAlphaDisabled,
     updateTextScale,
     updateUiScale,
     updateBgAdjustment,

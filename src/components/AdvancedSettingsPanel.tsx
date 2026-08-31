@@ -26,6 +26,10 @@ export interface AdvancedSettingsPanelProps {
   onBgOverlayChange?: (value: number) => void;
   onToggleSystemTextScale?: (value: boolean) => void;
   onToggleThemeLock?: (target: 'content' | 'img') => void;
+  /* "主题透明度与遮罩 -> 无透明度"复选框:勾上时(默认)禁用透明度/遮罩效果,
+   * 视觉上恢复到该功能引入前的样子;取消勾选后按滑块值实时生效。 */
+  themeAlphaDisabled: boolean;
+  onToggleThemeAlphaDisabled?: (disabled: boolean) => void;
   onUploadBackground?: (file: File) => void;
   onClearBackground?: () => void;
   onDownloadBackground?: () => void;
@@ -68,6 +72,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     bgOverlay,
     bgPreviewUrl,
     systemTextScale,
+    themeAlphaDisabled,
     lockedContent,
     lockedImg,
     fontSource,
@@ -83,6 +88,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     onBgOverlayChange,
     onToggleSystemTextScale,
     onToggleThemeLock,
+    onToggleThemeAlphaDisabled,
     onUploadBackground,
     onClearBackground,
     onDownloadBackground,
@@ -225,21 +231,53 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
+              gap: 8,
               marginBottom: 10,
             }}
           >
             <span className="section-label">
               <i className="fas fa-layer-group" /> 主题透明度与遮罩
             </span>
-            <button
-              type="button"
-              className={`param-lock-btn${lockedContent ? ' locked' : ''}`}
-              id="lockContentBtn"
-              onClick={() => onToggleThemeLock?.('content')}
-              dangerouslySetInnerHTML={{
-                __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON,
+            {/* 右侧:"无透明度"复选框 + 参数锁按钮。
+             * 复选框默认勾上,勾选时下面两个滑块被禁用,视觉效果等价于该功能引入前;
+             * 状态由 useThemeController 写入 localStorage.site-theme-config 持久化。 */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexShrink: 0,
               }}
-            />
+            >
+              <label
+                style={{
+                  fontSize: 'calc(12px * var(--text-scale))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  cursor: 'pointer',
+                  color: 'var(--sp-text-secondary)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  id="themeAlphaDisabledCheck"
+                  checked={themeAlphaDisabled}
+                  onChange={(event) => onToggleThemeAlphaDisabled?.(event.target.checked)}
+                />
+                无透明度
+              </label>
+              <button
+                type="button"
+                className={`param-lock-btn${lockedContent ? ' locked' : ''}`}
+                id="lockContentBtn"
+                onClick={() => onToggleThemeLock?.('content')}
+                dangerouslySetInnerHTML={{
+                  __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON,
+                }}
+              />
+            </div>
           </div>
           <div className="range-group">
             <div className="range-header">
@@ -253,7 +291,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               max={100}
               step={1}
               value={themeAlpha}
-              disabled={lockedContent}
+              disabled={lockedContent || themeAlphaDisabled}
               onInput={(event) =>
                 onThemeAlphaChange?.(Number((event.target as HTMLInputElement).value))
               }
@@ -271,7 +309,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               max={100}
               step={1}
               value={textMask}
-              disabled={lockedContent}
+              disabled={lockedContent || themeAlphaDisabled}
               onInput={(event) =>
                 onTextMaskChange?.(Number((event.target as HTMLInputElement).value))
               }
