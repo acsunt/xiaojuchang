@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 import { DEFAULT_THEME_LIST } from '../data/theme-list';
 import { themeFonts } from '../data/theme-fonts';
@@ -1531,17 +1531,36 @@ export function useThemeController(): UseThemeControllerResult {
     applyLayout();
   }, [applyLayout]);
 
-  /* themeConfig 变化时,仅持久化字体/锁定类状态;
-   * 滑块相关状态由 updateXxx() 自行写 localStorage,
-   * 避免 onInput 高频触发导致双重 setState。 */
+  /* themeConfig 变化时的副作用拆分成三块,按真实依赖分别订阅:
+   *
+   * 1) 字体 / 锁定 / 全量持久化:依赖字体源、锁定标志等"结构性"字段。
+   * 2) 背景图源:仅在 bgType / bgValue 改变时同步 DOM & 预览
+   *    (含 revokeAllBlobUrls + 异步从 IndexedDB 读 Blob 生成新的 object URL)。
+   *
+   * 之前把 updateBgPreviewUI 放在依赖 [themeConfig] 的 effect 里,
+   * 拖动 themeAlpha / bgOpacity / bgOverlay 滑块会触发新对象 → effect 重跑 →
+   * revoke 旧 blob URL、再异步取一次新的,DOM 上就有一小段空白背景,
+   * 视觉上就是"闪烁"。这里把图源同步收窄到只观察 bgType / bgValue,
+   * 滑块改变时不再重新加载背景图。 */
   useEffect(() => {
     void updateFontDOM();
     toggleFontInputs();
     saveSettings();
     initLocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    themeConfig.fontSource,
+    themeConfig.fontUrl,
+    themeConfig.fontName,
+    themeConfig.lockedImg,
+    themeConfig.lockedContent,
+    themeConfig.systemTextScale,
+  ]);
+
+  useEffect(() => {
     updateBgPreviewUI();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [themeConfig]);
+  }, [themeConfig.bgType, themeConfig.bgValue]);
 
   /* 纯 state 驱动的 CSS 变量同步（关键兜底）:
    * AdvancedSettingsPanel 是条件渲染的,面板未打开时 #textScaleRange 等 DOM 不存在,

@@ -43,6 +43,10 @@ body[data-style='default'][data-mode='night'] {
   --warning: #ffb454;
   --danger: #ff7575;
   --shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+
+  /* 同 day 版:补齐 default 主题下 .switcher button.active 的按钮变量 */
+  --btn-bg-color: var(--accent);
+  --btn-color: #ffffff;
 }
 
 body[data-style='default'][data-mode='day'] {
@@ -65,6 +69,12 @@ body[data-style='default'][data-mode='day'] {
   --warning: #b9852d;
   --danger: #c45555;
   --shadow: 0 18px 48px rgba(86, 77, 57, 0.1);
+
+  /* 主题下拉 .switcher button.active 用了 --btn-bg-color / --btn-color。
+   * :root 把它们默认成 transparent 后,default 主题下 active 项会没有底色,
+   * 这里显式赋一份 default 语义的 accent 颜色,保持视觉一致。 */
+  --btn-bg-color: var(--accent);
+  --btn-color: #ffffff;
 }
 
 * {
@@ -4934,7 +4944,13 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   --bg-color: #ffffff;
   --bg-image: none;
   --bg-image-opacity: 0;
-  --btn-bg-color: #000000;
+  /* 首屏 body[data-style] 由 index.html 的内联脚本预置,
+   * 但在 head <link rel="stylesheet"> 解析到本文件、body 尚未挂载的这段窗口期,
+   * :root 变量会短暂生效。之前 --btn-bg-color 是 #000000,
+   * 导致刷新时所有非默认主题按钮闪一下纯黑。
+   * 改为 transparent,让"未设定主题的裸态"下按钮不带任何背景色,
+   * 尊重主题激活后由 body[data-style] 覆盖出的实际颜色。 */
+  --btn-bg-color: transparent;
   --btn-bg-image: none;
   --radius-btn: 8px;
   --radius-card: 12px;
@@ -5524,11 +5540,21 @@ input[type='range'] {
 .cropper-container-wrapper {
   width: 100%;
   min-height: 300px;
+  /* 给 Cropper 画布一个视口高度上限,避免长图把画布(以及右下角选区手柄)
+   * 撑出 .modal-content 的可视区。header/footer 已经 sticky,画布本身
+   * 也必须受限,四个角柄才能都留在视口内。 */
+  max-height: 60vh;
+  overflow: hidden;
   background: var(--sp-input-bg);
   display: flex;
   justify-content: center;
   align-items: center;
   transition: background 0.3s;
+}
+/* Cropper.js 初始化前,原始 <img> 的渲染尺寸决定画布尺寸,
+ * 这里同步限高,画布 fit 到视口后手柄自然可见。 */
+#cropperImage {
+  max-height: 60vh;
 }
 #fontPreviewText {
   font-family: var(--font-family);
