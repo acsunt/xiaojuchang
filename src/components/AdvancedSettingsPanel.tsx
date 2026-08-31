@@ -388,7 +388,7 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
             <input
               type="file"
               id="bgUploadInput"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/*"
               style={{ display: 'none' }}
               onChange={handleBgUpload}
             />

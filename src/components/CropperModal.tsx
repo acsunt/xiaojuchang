@@ -87,7 +87,7 @@ export function CropperModal({
               onClick={onConfirm}
               disabled={!cropperReady}
             >
-              <i className="fas fa-check" /> 确定应用
+              <i className="fas fa-check" /> 确定
             </button>
           </div>
         </div>

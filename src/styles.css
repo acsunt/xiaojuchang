@@ -5435,7 +5435,7 @@ input[type='range'] {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 10000;
+  z-index: 10001;
   justify-content: center;
   align-items: center;
 }
