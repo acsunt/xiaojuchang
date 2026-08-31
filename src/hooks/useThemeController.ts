@@ -38,17 +38,10 @@ export interface ThemeConfig {
   /* 滑块（与 docs/参考代码/4/code.js 的 loadSettings 完全对齐） */
   textScale: number;
   uiScale: number;
-  themeAlpha: number;
-  textMask: number;
   bgBlur: number;
   bgOpacity: number;
   bgOverlay: number;
   systemTextScale: boolean;
-  /* "无透明度"开关:勾上时禁用 themeAlpha / textMask 的实际生效,
-   * 视觉上恢复到引入"主题透明度与遮罩"功能之前的状态(主题底色恒不透明、
-   * 卡片恒不透明、无黑色文字遮罩)。滑块值本身仍然保留,方便随时关闭开关
-   * 恢复之前的调节;默认 true,新用户看到的就是"关闭状态"。 */
-  themeAlphaDisabled: boolean;
   /* 锁定 */
   lockedImg: boolean;
   lockedContent: boolean;
@@ -64,13 +57,10 @@ export interface ThemeConfig {
 const DEFAULT_THEME_CONFIG: ThemeConfig = {
   textScale: 100,
   uiScale: 100,
-  themeAlpha: 0,
-  textMask: 0,
   bgBlur: 0,
   bgOpacity: 1,
   bgOverlay: 0,
   systemTextScale: false,
-  themeAlphaDisabled: true,
   lockedImg: true,
   lockedContent: true,
   bgType: 'none',
@@ -162,8 +152,6 @@ const readThemeConfig = (): ThemeConfig => {
     ...DEFAULT_THEME_CONFIG,
     textScale: numFrom(slider.textScale, DEFAULT_THEME_CONFIG.textScale),
     uiScale: numFrom(slider.uiScale, DEFAULT_THEME_CONFIG.uiScale),
-    themeAlpha: numFrom(slider.themeAlpha, DEFAULT_THEME_CONFIG.themeAlpha),
-    textMask: numFrom(slider.textMask, DEFAULT_THEME_CONFIG.textMask),
     bgBlur: numFrom(slider.bgBlur, DEFAULT_THEME_CONFIG.bgBlur),
     bgOpacity: numFrom(slider.bgOpacity, DEFAULT_THEME_CONFIG.bgOpacity),
     bgOverlay: numFrom(slider.bgOverlay, DEFAULT_THEME_CONFIG.bgOverlay),
@@ -255,10 +243,6 @@ export interface UseThemeControllerResult {
   initLocks: () => void;
   toggleThemeLock: (type: 'img' | 'content') => void;
   toggleSystemTextScale: () => void;
-  /* "主题透明度与遮罩 -> 无透明度"复选框:
-   * disabled=true 时把 --theme-alpha-effective 和 --text-mask-effective 强制置 0,
-   * 面板里两个滑块也会被禁用;取消勾选后立刻恢复到滑块原值。 */
-  setThemeAlphaDisabled: (disabled: boolean) => void;
   updateTextScale: () => void;
   updateUiScale: () => void;
   updateBgAdjustment: () => void;
@@ -282,8 +266,6 @@ export interface UseThemeControllerResult {
   /* React 受控端直接传值的 setters（与 DOM 解耦） */
   updateTextScaleFromValue: (value: number) => void;
   updateUiScaleFromValue: (value: number) => void;
-  updateThemeAlphaFromValue: (value: number) => void;
-  updateTextMaskFromValue: (value: number) => void;
   updateBgBlurFromValue: (value: number) => void;
   updateBgOpacityFromValue: (value: number) => void;
   updateBgOverlayFromValue: (value: number) => void;
@@ -399,8 +381,6 @@ export function useThemeController(): UseThemeControllerResult {
       JSON.stringify({
         textScale: themeConfig.textScale,
         uiScale: themeConfig.uiScale,
-        themeAlpha: themeConfig.themeAlpha,
-        textMask: themeConfig.textMask,
         bgBlur: themeConfig.bgBlur,
         bgOpacity: themeConfig.bgOpacity,
         bgOverlay: themeConfig.bgOverlay,
@@ -909,8 +889,6 @@ export function useThemeController(): UseThemeControllerResult {
     const map: Record<string, number> = {
       textScaleRange: themeConfig.textScale,
       uiScaleRange: themeConfig.uiScale,
-      themeAlphaRange: themeConfig.themeAlpha,
-      textMaskRange: themeConfig.textMask,
       bgBlurRange: themeConfig.bgBlur,
       bgOpacityRange: themeConfig.bgOpacity,
       bgOverlayRange: themeConfig.bgOverlay,
@@ -935,9 +913,7 @@ export function useThemeController(): UseThemeControllerResult {
     themeConfig.bgBlur,
     themeConfig.bgOpacity,
     themeConfig.bgOverlay,
-    themeConfig.textMask,
     themeConfig.textScale,
-    themeConfig.themeAlpha,
     themeConfig.uiScale,
     themeConfig.systemTextScale,
   ]);
@@ -964,25 +940,14 @@ export function useThemeController(): UseThemeControllerResult {
           b.innerHTML = d ? lockedIconHTML : unlockedIconHTML;
           b.classList.toggle('locked', d);
         }
-      } else {
-        const d = themeConfig.lockedContent;
-        const alpha = $range('themeAlphaRange');
-        const mask = $range('textMaskRange');
-        if (alpha) alpha.disabled = d;
-        if (mask) mask.disabled = d;
-        const b = $<HTMLButtonElement>('lockContentBtn');
-        if (b) {
-          b.innerHTML = d ? lockedIconHTML : unlockedIconHTML;
-          b.classList.toggle('locked', d);
-        }
       }
+      /* content 分支已随"主题透明度与遮罩"功能一同移除 */
     },
     [themeConfig.lockedContent, themeConfig.lockedImg],
   );
 
   const initLocks = useCallback(() => {
     applyLockState('img');
-    applyLockState('content');
   }, [applyLockState]);
 
   const toggleThemeLock = useCallback((type: 'img' | 'content') => {
@@ -997,19 +962,7 @@ export function useThemeController(): UseThemeControllerResult {
     });
   }, []);
 
-  const setThemeAlphaDisabled = useCallback((disabled: boolean) => {
-    setThemeConfig((prev) => {
-      if (prev.themeAlphaDisabled === disabled) {
-        return prev;
-      }
-      const next: ThemeConfig = {
-        ...prev,
-        themeAlphaDisabled: disabled,
-      };
-      writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+
 
   const toggleSystemTextScale = useCallback(() => {
     const sysCheck = $<HTMLInputElement>('systemTextScaleCheck');
@@ -1106,56 +1059,29 @@ export function useThemeController(): UseThemeControllerResult {
   }, []);
 
   const updateBgAdjustmentFromValue = useCallback(
-    (
-      next: Partial<
-        Pick<ThemeConfig, 'bgBlur' | 'bgOpacity' | 'bgOverlay' | 'themeAlpha' | 'textMask'>
-      >,
-    ) => {
-      const merge: ThemeConfig = {
+    (next: Partial<Pick<ThemeConfig, 'bgBlur' | 'bgOpacity' | 'bgOverlay'>>) => {
+      const merge = {
         bgBlur: next.bgBlur ?? themeConfig.bgBlur,
         bgOpacity: next.bgOpacity ?? themeConfig.bgOpacity,
         bgOverlay: next.bgOverlay ?? themeConfig.bgOverlay,
-        themeAlpha: next.themeAlpha ?? themeConfig.themeAlpha,
-        textMask: next.textMask ?? themeConfig.textMask,
-        textScale: themeConfig.textScale,
-        uiScale: themeConfig.uiScale,
-        systemTextScale: themeConfig.systemTextScale,
-        themeAlphaDisabled: themeConfig.themeAlphaDisabled,
-        lockedImg: themeConfig.lockedImg,
-        lockedContent: themeConfig.lockedContent,
-        bgType: themeConfig.bgType,
-        bgValue: themeConfig.bgValue,
-        fontSource: themeConfig.fontSource,
-        fontUrl: themeConfig.fontUrl,
-        fontName: themeConfig.fontName,
       };
       const blurEl = $range('bgBlurRange');
       const opaEl = $range('bgOpacityRange');
       const overEl = $range('bgOverlayRange');
-      const alphaEl = $range('themeAlphaRange');
-      const maskEl = $range('textMaskRange');
       if (blurEl) blurEl.value = String(merge.bgBlur);
       if (opaEl) opaEl.value = String(merge.bgOpacity);
       if (overEl) overEl.value = String(merge.bgOverlay);
-      if (alphaEl) alphaEl.value = String(merge.themeAlpha);
-      if (maskEl) maskEl.value = String(merge.textMask);
 
       const blurDisp = $('blurValDisplay');
       const opaDisp = $('opacityValDisplay');
       const overDisp = $('overlayValDisplay');
-      const alphaDisp = $('themeAlphaDisplay');
-      const maskDisp = $('textMaskDisplay');
       if (blurDisp) blurDisp.innerText = `${merge.bgBlur}px`;
       if (opaDisp) opaDisp.innerText = `${Math.round(merge.bgOpacity * 100)}%`;
       if (overDisp) overDisp.innerText = `${Math.round(merge.bgOverlay * 100)}%`;
-      if (alphaDisp) alphaDisp.innerText = `${merge.themeAlpha}%`;
-      if (maskDisp) maskDisp.innerText = `${merge.textMask}%`;
 
       document.documentElement.style.setProperty('--bg-blur', `${merge.bgBlur}px`);
       document.documentElement.style.setProperty('--bg-opacity', String(merge.bgOpacity));
       document.documentElement.style.setProperty('--bg-overlay', String(merge.bgOverlay));
-      document.documentElement.style.setProperty('--theme-alpha', String(merge.themeAlpha / 100));
-      document.documentElement.style.setProperty('--text-mask', String(merge.textMask / 100));
 
       /* 同步背景预览小窗 */
       const previewImg = $('bgPreviewImage');
@@ -1174,8 +1100,6 @@ export function useThemeController(): UseThemeControllerResult {
           bgBlur: merge.bgBlur,
           bgOpacity: merge.bgOpacity,
           bgOverlay: merge.bgOverlay,
-          themeAlpha: merge.themeAlpha,
-          textMask: merge.textMask,
         };
         writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(after));
         return after;
@@ -1184,14 +1108,6 @@ export function useThemeController(): UseThemeControllerResult {
     [themeConfig],
   );
 
-  const updateThemeAlphaFromValue = useCallback(
-    (value: number) => updateBgAdjustmentFromValue({ themeAlpha: value }),
-    [updateBgAdjustmentFromValue],
-  );
-  const updateTextMaskFromValue = useCallback(
-    (value: number) => updateBgAdjustmentFromValue({ textMask: value }),
-    [updateBgAdjustmentFromValue],
-  );
   const updateBgBlurFromValue = useCallback(
     (value: number) => updateBgAdjustmentFromValue({ bgBlur: value }),
     [updateBgAdjustmentFromValue],
@@ -1242,31 +1158,21 @@ export function useThemeController(): UseThemeControllerResult {
     const blurEl = $range('bgBlurRange');
     const opaEl = $range('bgOpacityRange');
     const overEl = $range('bgOverlayRange');
-    const alphaEl = $range('themeAlphaRange');
-    const maskEl = $range('textMaskRange');
-    if (!blurEl || !opaEl || !overEl || !alphaEl || !maskEl) return;
+    if (!blurEl || !opaEl || !overEl) return;
     const blur = Number(blurEl.value);
     const opa = Number(opaEl.value);
     const over = Number(overEl.value);
-    const alpha = Number(alphaEl.value);
-    const mask = Number(maskEl.value);
 
     const blurDisp = $('blurValDisplay');
     const opaDisp = $('opacityValDisplay');
     const overDisp = $('overlayValDisplay');
-    const alphaDisp = $('themeAlphaDisplay');
-    const maskDisp = $('textMaskDisplay');
     if (blurDisp) blurDisp.innerText = `${blur}px`;
     if (opaDisp) opaDisp.innerText = `${Math.round(opa * 100)}%`;
     if (overDisp) overDisp.innerText = `${Math.round(over * 100)}%`;
-    if (alphaDisp) alphaDisp.innerText = `${alpha}%`;
-    if (maskDisp) maskDisp.innerText = `${mask}%`;
 
     document.documentElement.style.setProperty('--bg-blur', `${blur}px`);
     document.documentElement.style.setProperty('--bg-opacity', String(opa));
     document.documentElement.style.setProperty('--bg-overlay', String(over));
-    document.documentElement.style.setProperty('--theme-alpha', String(alpha / 100));
-    document.documentElement.style.setProperty('--text-mask', String(mask / 100));
 
     /* 同步背景预览小窗 */
     const previewImg = $('bgPreviewImage');
@@ -1285,8 +1191,6 @@ export function useThemeController(): UseThemeControllerResult {
         bgBlur: blur,
         bgOpacity: opa,
         bgOverlay: over,
-        themeAlpha: alpha,
-        textMask: mask,
       };
       writeLocalStorage(THEME_CONFIG_STORAGE_KEY, JSON.stringify(next));
       return next;
@@ -1563,7 +1467,7 @@ export function useThemeController(): UseThemeControllerResult {
    *    (含 revokeAllBlobUrls + 异步从 IndexedDB 读 Blob 生成新的 object URL)。
    *
    * 之前把 updateBgPreviewUI 放在依赖 [themeConfig] 的 effect 里,
-   * 拖动 themeAlpha / bgOpacity / bgOverlay 滑块会触发新对象 → effect 重跑 →
+   * 拖动 bgBlur / bgOpacity / bgOverlay 滑块会触发新对象 → effect 重跑 →
    * revoke 旧 blob URL、再异步取一次新的,DOM 上就有一小段空白背景,
    * 视觉上就是"闪烁"。这里把图源同步收窄到只观察 bgType / bgValue,
    * 滑块改变时不再重新加载背景图。 */
@@ -1602,26 +1506,12 @@ export function useThemeController(): UseThemeControllerResult {
     rootStyle.setProperty('--bg-blur', `${themeConfig.bgBlur}px`);
     rootStyle.setProperty('--bg-opacity', String(themeConfig.bgOpacity));
     rootStyle.setProperty('--bg-overlay', String(themeConfig.bgOverlay));
-    rootStyle.setProperty('--theme-alpha', String(themeConfig.themeAlpha / 100));
-    rootStyle.setProperty('--text-mask', String(themeConfig.textMask / 100));
-    /* --theme-alpha-effective / --text-mask-effective 是样式表实际读取的变量:
-     *  - "无透明度"复选框(themeAlphaDisabled)勾上时,两者恒为 0,视觉上等价于
-     *    "主题透明度与遮罩"功能未引入之前的样子;
-     *  - 未勾选时,值 = 对应滑块的百分比 / 100。
-     * 原始 --theme-alpha / --text-mask 依旧被写入,方便面板上滑块值/百分比显示。 */
-    const alphaEffective = themeConfig.themeAlphaDisabled ? 0 : themeConfig.themeAlpha / 100;
-    const maskEffective = themeConfig.themeAlphaDisabled ? 0 : themeConfig.textMask / 100;
-    rootStyle.setProperty('--theme-alpha-effective', String(alphaEffective));
-    rootStyle.setProperty('--text-mask-effective', String(maskEffective));
   }, [
     themeConfig.textScale,
     themeConfig.uiScale,
     themeConfig.bgBlur,
     themeConfig.bgOpacity,
     themeConfig.bgOverlay,
-    themeConfig.themeAlpha,
-    themeConfig.textMask,
-    themeConfig.themeAlphaDisabled,
   ]);
 
   /* ---------- 业务回调 ---------- */
@@ -1660,8 +1550,6 @@ export function useThemeController(): UseThemeControllerResult {
       const sliders: Array<[string, string]> = [
         ['textScaleRange', '100'],
         ['uiScaleRange', '100'],
-        ['themeAlphaRange', '0'],
-        ['textMaskRange', '0'],
         ['bgBlurRange', '0'],
         ['bgOpacityRange', '1'],
         ['bgOverlayRange', '0'],
@@ -1730,7 +1618,6 @@ export function useThemeController(): UseThemeControllerResult {
     initLocks,
     toggleThemeLock,
     toggleSystemTextScale,
-    setThemeAlphaDisabled,
     updateTextScale,
     updateUiScale,
     updateBgAdjustment,
@@ -1752,8 +1639,6 @@ export function useThemeController(): UseThemeControllerResult {
     /* React 受控端用的 setters（与 DOM 解耦） */
     updateTextScaleFromValue,
     updateUiScaleFromValue,
-    updateThemeAlphaFromValue,
-    updateTextMaskFromValue,
     updateBgBlurFromValue,
     updateBgOpacityFromValue,
     updateBgOverlayFromValue,

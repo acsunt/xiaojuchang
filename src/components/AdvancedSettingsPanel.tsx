@@ -4,14 +4,11 @@ export interface AdvancedSettingsPanelProps {
   open: boolean;
   textScale: number;
   uiScale: number;
-  themeAlpha: number;
-  textMask: number;
   bgBlur: number;
   bgOpacity: number;
   bgOverlay: number;
   bgPreviewUrl: string;
   systemTextScale: boolean;
-  lockedContent: boolean;
   lockedImg: boolean;
   fontSource: 'theme' | 'system' | 'custom';
   customFontUrl: string;
@@ -19,17 +16,12 @@ export interface AdvancedSettingsPanelProps {
   onClose?: () => void;
   onTextScaleChange?: (value: number) => void;
   onUiScaleChange?: (value: number) => void;
-  onThemeAlphaChange?: (value: number) => void;
-  onTextMaskChange?: (value: number) => void;
   onBgBlurChange?: (value: number) => void;
   onBgOpacityChange?: (value: number) => void;
   onBgOverlayChange?: (value: number) => void;
   onToggleSystemTextScale?: (value: boolean) => void;
-  onToggleThemeLock?: (target: 'content' | 'img') => void;
-  /* "主题透明度与遮罩 -> 无透明度"复选框:勾上时(默认)禁用透明度/遮罩效果,
-   * 视觉上恢复到该功能引入前的样子;取消勾选后按滑块值实时生效。 */
-  themeAlphaDisabled: boolean;
-  onToggleThemeAlphaDisabled?: (disabled: boolean) => void;
+  /* 只保留 'img'。'content' 曾用于锁定主题透明度/文字遮罩滑块,现整个功能已移除。 */
+  onToggleThemeLock?: (target: 'img') => void;
   onUploadBackground?: (file: File) => void;
   onClearBackground?: () => void;
   onDownloadBackground?: () => void;
@@ -55,8 +47,8 @@ const LOCK_CLOSED_ICON = '<i class="fas fa-lock"></i>';
  * 与参考实现保持 1:1 行为契约：
  *  - 滑块全部受控：值取自 themeConfig,变更通过 onXxxChange 回写 controller,
  *    controller 负责把值写回 CSS 变量 / DOM 预览 / localStorage。
- *  - 锁定按钮的图标由 controller 在 useEffect 中通过 lockImgBtn / lockContentBtn
- *    的 innerHTML 直接控制；这里仅渲染 <button className="param-lock-btn"> 容器。
+ *  - 锁定按钮的图标由 controller 在 useEffect 中通过 lockImgBtn 的 innerHTML
+ *    直接控制；这里仅渲染 <button className="param-lock-btn"> 容器。
  *  - 系统文字缩放 checkbox 一旦勾选,controller 会同时把 textScale / uiScale
  *    重置为 100 并禁用滑块；面板只需在 disabled / checked 上跟随。
  */
@@ -65,15 +57,11 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     open,
     textScale,
     uiScale,
-    themeAlpha,
-    textMask,
     bgBlur,
     bgOpacity,
     bgOverlay,
     bgPreviewUrl,
     systemTextScale,
-    themeAlphaDisabled,
-    lockedContent,
     lockedImg,
     fontSource,
     customFontUrl,
@@ -81,14 +69,11 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
     onClose,
     onTextScaleChange,
     onUiScaleChange,
-    onThemeAlphaChange,
-    onTextMaskChange,
     onBgBlurChange,
     onBgOpacityChange,
     onBgOverlayChange,
     onToggleSystemTextScale,
     onToggleThemeLock,
-    onToggleThemeAlphaDisabled,
     onUploadBackground,
     onClearBackground,
     onDownloadBackground,
@@ -219,99 +204,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               disabled={systemTextScale}
               onInput={(event) =>
                 onUiScaleChange?.(Number((event.target as HTMLInputElement).value))
-              }
-            />
-          </div>
-        </div>
-
-        {/* 主题透明度与遮罩 */}
-        <div className="adjust-container">
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 8,
-              marginBottom: 10,
-            }}
-          >
-            <span className="section-label">
-              <i className="fas fa-layer-group" /> 主题透明度与遮罩
-            </span>
-            {/* 右侧:"无透明度"复选框 + 参数锁按钮。
-             * 复选框默认勾上,勾选时下面两个滑块被禁用,视觉效果等价于该功能引入前;
-             * 状态由 useThemeController 写入 localStorage.site-theme-config 持久化。 */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                flexShrink: 0,
-              }}
-            >
-              <label
-                style={{
-                  fontSize: 'calc(12px * var(--text-scale))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  cursor: 'pointer',
-                  color: 'var(--sp-text-secondary)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  id="themeAlphaDisabledCheck"
-                  checked={themeAlphaDisabled}
-                  onChange={(event) => onToggleThemeAlphaDisabled?.(event.target.checked)}
-                />
-                无透明度
-              </label>
-              <button
-                type="button"
-                className={`param-lock-btn${lockedContent ? ' locked' : ''}`}
-                id="lockContentBtn"
-                onClick={() => onToggleThemeLock?.('content')}
-                dangerouslySetInnerHTML={{
-                  __html: lockedContent ? LOCK_CLOSED_ICON : LOCK_OPEN_ICON,
-                }}
-              />
-            </div>
-          </div>
-          <div className="range-group">
-            <div className="range-header">
-              <span>主题透明度</span>
-              <span id="themeAlphaDisplay">{themeAlpha}%</span>
-            </div>
-            <input
-              {...numberInputProps}
-              id="themeAlphaRange"
-              min={0}
-              max={100}
-              step={1}
-              value={themeAlpha}
-              disabled={lockedContent || themeAlphaDisabled}
-              onInput={(event) =>
-                onThemeAlphaChange?.(Number((event.target as HTMLInputElement).value))
-              }
-            />
-          </div>
-          <div className="range-group">
-            <div className="range-header">
-              <span>文字区遮罩</span>
-              <span id="textMaskDisplay">{textMask}%</span>
-            </div>
-            <input
-              {...numberInputProps}
-              id="textMaskRange"
-              min={0}
-              max={100}
-              step={1}
-              value={textMask}
-              disabled={lockedContent || themeAlphaDisabled}
-              onInput={(event) =>
-                onTextMaskChange?.(Number((event.target as HTMLInputElement).value))
               }
             />
           </div>

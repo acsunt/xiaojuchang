@@ -93,12 +93,9 @@ export default function App() {
     initLocks,
     toggleThemeLock,
     toggleSystemTextScale,
-    setThemeAlphaDisabled,
     updateBgAdjustment,
     updateTextScaleFromValue,
     updateUiScaleFromValue,
-    updateThemeAlphaFromValue,
-    updateTextMaskFromValue,
     updateBgBlurFromValue,
     updateBgOpacityFromValue,
     updateBgOverlayFromValue,
@@ -453,15 +450,11 @@ export default function App() {
               open={advancedSettingsOpen}
               textScale={themeConfig.textScale}
               uiScale={themeConfig.uiScale}
-              themeAlpha={themeConfig.themeAlpha}
-              textMask={themeConfig.textMask}
               bgBlur={themeConfig.bgBlur}
               bgOpacity={themeConfig.bgOpacity}
               bgOverlay={themeConfig.bgOverlay}
               bgPreviewUrl={bgPreviewUrl}
               systemTextScale={themeConfig.systemTextScale}
-              themeAlphaDisabled={themeConfig.themeAlphaDisabled}
-              lockedContent={themeConfig.lockedContent}
               lockedImg={themeConfig.lockedImg}
               fontSource={themeConfig.fontSource}
               customFontUrl={themeConfig.fontUrl}
@@ -469,8 +462,6 @@ export default function App() {
               onClose={() => setAdvancedSettingsOpen(false)}
               onTextScaleChange={(value) => updateTextScaleFromValue(value)}
               onUiScaleChange={(value) => updateUiScaleFromValue(value)}
-              onThemeAlphaChange={(value) => updateThemeAlphaFromValue(value)}
-              onTextMaskChange={(value) => updateTextMaskFromValue(value)}
               onBgBlurChange={(value) => updateBgBlurFromValue(value)}
               onBgOpacityChange={(value) => updateBgOpacityFromValue(value)}
               onBgOverlayChange={(value) => updateBgOverlayFromValue(value)}
@@ -481,9 +472,6 @@ export default function App() {
               }}
               onToggleThemeLock={(target) => {
                 toggleThemeLock(target);
-              }}
-              onToggleThemeAlphaDisabled={(disabled) => {
-                setThemeAlphaDisabled(disabled);
               }}
               onUploadBackground={(file) => {
                 handleBgUpload(file);
