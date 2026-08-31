@@ -3937,8 +3937,8 @@ export function AdminReviewPage() {
                       </label>
 
                       {/* 追加衍生版本:仅对已通过条目开放。
-                        * 每按一次"衍生"追加一版,填简介 + 内容;
-                        * 提交时会依次上传并自动通过,前台列表页按同标题+分类聚合。 */}
+                       * 每按一次"衍生"追加一版,填简介 + 内容;
+                       * 提交时会依次上传并自动通过,前台列表页按同标题+分类聚合。 */}
                       {selectedPlay?.status === 'approved' ? (
                         <div className="stack-gap-sm admin-derived-section">
                           <div className="stack-gap-sm">

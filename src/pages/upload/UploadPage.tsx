@@ -611,7 +611,7 @@ export function UploadPage() {
               </label>
 
               {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
-                * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。 */}
+               * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。 */}
               {derivedVersions.map((version, index) => (
                 <div className="upload-derived-block stack-gap-sm" key={version.id}>
                   <div className="upload-derived-head">
@@ -659,7 +659,7 @@ export function UploadPage() {
               ))}
 
               {/* 单篇模式的底部按钮区:衍生按钮 + 上传小剧场按钮
-                * 位置始终在最后一个版本框下方(动态追加时自动往下推)。 */}
+               * 位置始终在最后一个版本框下方(动态追加时自动往下推)。 */}
               <div className="inline-actions wrap-mobile upload-single-action-row">
                 <button
                   className="button secondary"
@@ -732,8 +732,8 @@ export function UploadPage() {
           )}
 
           {/* 只在回填历史时才显示"取消回填"按钮;
-            * single 模式的提交按钮已经渲染在原文/衍生版本组的底部按钮区,不再重复。
-            * batch 模式的提交按钮由"批量文本"区块内部的 upload-batch-action-row 承担。 */}
+           * single 模式的提交按钮已经渲染在原文/衍生版本组的底部按钮区,不再重复。
+           * batch 模式的提交按钮由"批量文本"区块内部的 upload-batch-action-row 承担。 */}
           {editingHistoryId ? (
             <div className="action-bar wrap-mobile action-bar-half">
               <button
