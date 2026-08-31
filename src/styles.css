@@ -1,6 +1,6 @@
 html {
   font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale, 1));
   line-height: 1.45;
   font-weight: 400;
   font-synthesis: none;
@@ -234,7 +234,7 @@ select option {
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
   font-weight: 700;
   box-shadow: none;
 }
@@ -303,7 +303,7 @@ select option {
 
 .plaza-calendar-weekday {
   text-align: center;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   color: var(--text-soft);
 }
 
@@ -344,13 +344,13 @@ select option {
 }
 
 .plaza-calendar-day-number {
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
   font-weight: 700;
   justify-self: center;
 }
 
 .plaza-calendar-day-count {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   color: var(--text-soft);
   justify-self: center;
   text-align: center;
@@ -485,7 +485,7 @@ select option {
 
 .custom-select-chevron {
   color: var(--text-soft);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   line-height: 1;
 }
 
@@ -789,7 +789,7 @@ pre {
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
 }
 
 h1,
@@ -808,7 +808,7 @@ h2 {
 }
 
 h3 {
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
 }
 
 .sub-copy,
@@ -848,7 +848,7 @@ label span,
 .login-meta,
 .section-note,
 .template-code {
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
 }
 
 .sub-copy,
@@ -856,7 +856,7 @@ label span,
 .preview-copy,
 .feature-side p,
 .play-detail-copy {
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
 }
 
 .nav-pill,
@@ -891,7 +891,7 @@ label span,
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
   line-height: 1.2;
   text-decoration: none;
   vertical-align: middle;
@@ -921,7 +921,7 @@ label span,
   border-radius: 999px;
   background: #ff5f6d;
   color: white;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   line-height: 20px;
   text-align: center;
 }
@@ -950,7 +950,7 @@ label span,
   justify-content: center;
   min-height: 40px;
   padding: 0 14px;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
   font-weight: 600;
 }
 
@@ -1000,7 +1000,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 .tag-chip {
   min-height: 34px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
 }
 
 .icon-button {
@@ -1009,7 +1009,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
   padding: 0;
 }
 
@@ -1017,7 +1017,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
   height: 36px;
   min-width: 48px;
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
   padding: 0 12px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-soft);
@@ -1033,7 +1033,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 .text-button {
   min-height: 36px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
 }
 
 .button:disabled {
@@ -1180,7 +1180,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 }
 
 .stat-card strong {
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
 }
 
 .play-card,
@@ -1216,7 +1216,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 .play-card h3,
 .review-card h3,
 .repo-card h3 {
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
   line-height: 1.35;
 }
 
@@ -1271,7 +1271,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 .review-card-delete-button {
   min-height: 32px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   flex: 0 0 auto;
 }
 
@@ -1285,7 +1285,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
 }
 
 .review-card-checkbox span {
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
 }
 
 .admin-bulk-review-panel {
@@ -1498,7 +1498,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
   align-items: center;
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   color: white;
 }
 
@@ -1590,7 +1590,7 @@ label {
 .field-inline-action {
   min-height: 34px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   flex-shrink: 0;
 }
 
@@ -1607,7 +1607,7 @@ label {
 .feedback {
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
 }
 
 /* ============ 悬浮提示（app toast）：悬浮在视口上，不占布局 ============ */
@@ -1628,7 +1628,7 @@ label {
   max-width: min(420px, calc(100vw - 32px));
   padding: 10px 18px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.4;
   text-align: center;
   word-break: break-word;
@@ -1841,7 +1841,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 }
 
 .metric-strip strong {
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
 }
 
 .file-button {
@@ -1866,7 +1866,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 .subdued-template {
   color: var(--text-soft);
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
 }
 
 .tag-cloud {
@@ -2022,7 +2022,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 .plaza-view-primary .tab-chip {
   width: 100%;
   min-width: 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   padding: 8px 6px;
   letter-spacing: 0;
   white-space: nowrap;
@@ -2061,7 +2061,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 .compact-meta-row-small,
 .compact-meta-item,
 .tag-floor-order {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   color: var(--text-soft);
 }
 
@@ -2088,7 +2088,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.45;
 }
 
@@ -2096,7 +2096,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   content: '✦';
   flex: 0 0 auto;
   color: var(--accent);
-  font-size: 11px;
+  font-size: calc(11px * var(--text-scale, 1));
   line-height: 1.9;
   opacity: 0.86;
 }
@@ -2140,7 +2140,7 @@ body[data-style='default'][data-mode='day'] .repo-card {
   background: rgba(255, 95, 109, 0.12);
   border: 1px solid rgba(255, 95, 109, 0.3);
   color: #ffd0d0;
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
   line-height: 1.6;
 }
 
@@ -2165,7 +2165,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   min-width: 38px;
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
 }
 
 /* 审核后台 repo 行：拒绝 → 删除 → 通过，同行 */
@@ -2227,7 +2227,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   flex: 0 0 auto;
   width: auto;
   min-width: 0;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   min-height: 32px;
   padding: 0 12px;
   white-space: nowrap;
@@ -2367,7 +2367,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   height: 34px;
   padding: 0;
   border-radius: 999px;
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
   line-height: 1;
 }
 
@@ -2390,7 +2390,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   padding: 0;
   border-radius: 999px;
   transform: translateY(-50%);
-  font-size: 30px;
+  font-size: calc(30px * var(--text-scale, 1));
   line-height: 1;
 }
 
@@ -2464,7 +2464,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   }
   .review-action-row .button {
     padding-inline: 6px;
-    font-size: 13.5px;
+    font-size: calc(13.5px * var(--text-scale, 1));
   }
 
   /* 上传页操作行（重新投稿 + 取消回填）：手机端同一行 */
@@ -2510,7 +2510,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
     max-width: none;
     min-height: 32px;
     padding-inline: 6px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     flex: 0 0 auto;
     white-space: nowrap;
   }
@@ -2531,7 +2531,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   .plaza-export-modal-action {
     min-height: 36px;
     padding: 0 8px;
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale, 1));
     line-height: 1.15;
     white-space: nowrap;
   }
@@ -2578,7 +2578,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
     right: calc(env(safe-area-inset-right, 0px) + 10px);
     width: 30px;
     height: 30px;
-    font-size: 18px;
+    font-size: calc(18px * var(--text-scale, 1));
     background: rgba(98, 104, 114, 0.42);
   }
 
@@ -2586,7 +2586,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
     position: fixed;
     top: calc(env(safe-area-inset-top, 0px) + 10px);
     left: calc(env(safe-area-inset-left, 0px) + 10px);
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     padding: 5px 9px;
   }
 
@@ -2682,7 +2682,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   min-width: 44px;
   width: 44px;
   padding: 0;
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
 }
 
 .plaza-page-indicator {
@@ -2828,7 +2828,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 .play-marker-menu .play-marker-icon {
   min-width: 0;
   padding: 0;
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
   line-height: 1;
   background: transparent;
   border-color: transparent;
@@ -2846,7 +2846,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 
 /* 不喜欢 (💔)：默认灰色 (opacity + grayscale)，激活时去掉滤镜恢复原色红心裂开 */
 .play-marker-menu .play-marker-icon .marker-broken-heart-icon {
-  font-size: 24px;
+  font-size: calc(24px * var(--text-scale, 1));
   line-height: 1;
   opacity: 0.34;
   filter: grayscale(100%);
@@ -2868,7 +2868,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 }
 
 .plaza-block-disliked-export-chip {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
@@ -2900,7 +2900,7 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 .toolbar-toggle-row .button {
   min-width: 0;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   white-space: nowrap;
 }
 
@@ -2933,11 +2933,11 @@ body.tag-sort-dragging {
 }
 
 .metric-card-lite span {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
 }
 
 .metric-card-lite strong {
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
 }
 
 .sidebar-head-admin {
@@ -3299,7 +3299,7 @@ body.tag-sort-dragging {
   .plaza-toolbar-button,
   .plaza-export-modal-action {
     padding-inline: 10px;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--text-scale, 1));
   }
 
   .plaza-view-primary {
@@ -3309,7 +3309,7 @@ body.tag-sort-dragging {
 
   .plaza-view-primary .tab-chip {
     width: 100%;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     padding: 7px 4px;
   }
 }
@@ -3486,7 +3486,7 @@ body.tag-sort-dragging {
 
   .nav-pill {
     padding: 9px 12px;
-    font-size: 14px;
+    font-size: calc(14px * var(--text-scale, 1));
   }
 }
 
@@ -3547,7 +3547,7 @@ body.tag-sort-dragging {
     justify-content: center;
     min-height: 36px;
     padding: 7px 10px;
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
     min-width: 0;
     line-height: 1.2;
   }
@@ -3587,7 +3587,7 @@ body.tag-sort-dragging {
   }
 
   .plaza-calendar-picker-trigger {
-    font-size: 18px;
+    font-size: calc(18px * var(--text-scale, 1));
   }
 
   .plaza-calendar-picker-menu {
@@ -3610,11 +3610,11 @@ body.tag-sort-dragging {
   }
 
   .plaza-calendar-day-number {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
   }
 
   .plaza-calendar-day-count {
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale, 1));
   }
 
   .plaza-calendar-play-list,
@@ -3676,7 +3676,7 @@ body.tag-sort-dragging {
     min-width: 0;
     min-height: 32px;
     padding-inline: 6px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     flex: 0 0 auto;
     white-space: nowrap;
   }
@@ -3728,7 +3728,7 @@ body.tag-sort-dragging {
   .plaza-toolbar-actions .button {
     width: auto;
     padding-inline: 12px;
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
     white-space: nowrap;
   }
 
@@ -3776,7 +3776,7 @@ body.tag-sort-dragging {
     width: 100%;
     min-width: 0;
     padding-inline: 8px;
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
   }
 
   .review-action-row .button {
@@ -3850,7 +3850,7 @@ body.tag-sort-dragging {
   }
 
   .plaza-category-switcher .tab-chip {
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
     padding: 9px 12px;
   }
 
@@ -3860,7 +3860,7 @@ body.tag-sort-dragging {
   }
 
   .plaza-stat-card strong {
-    font-size: 18px;
+    font-size: calc(18px * var(--text-scale, 1));
   }
 
   .app-header,
@@ -4058,8 +4058,13 @@ body.tag-sort-dragging {
     scrollbar-width: none;
     padding-top: 8px;
     padding-right: 8px;
+    /* 孟菲斯 / 等距插画 等主题的按钮有 5-6px 的下方硬阴影,
+     * overflow-x: auto 会隐含把 overflow-y 变成 auto,把阴影裁掉。
+     * 额外留出下方空间让阴影完整显示。 */
+    padding-bottom: 10px;
     margin-top: -8px;
     margin-right: -8px;
+    margin-bottom: -10px;
   }
 
   .top-nav::-webkit-scrollbar {
@@ -4107,7 +4112,7 @@ body.tag-sort-dragging {
   .plaza-toolbar-row-mobile-export .plaza-block-disliked-export-chip {
     min-height: 32px;
     padding-inline: 6px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     flex: 0 0 auto;
     white-space: nowrap;
   }
@@ -4137,7 +4142,7 @@ body.tag-sort-dragging {
   }
 
   .plaza-view-primary .tab-chip {
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     padding: 7px 4px;
   }
 
@@ -4165,14 +4170,14 @@ body.tag-sort-dragging {
     min-width: 0;
     white-space: nowrap;
     padding: 8px 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
   .repo-view-switcher-row .repo-clear-rejected-button {
     width: auto;
     flex: 0 0 auto;
     min-width: 0;
     padding: 0 10px;
-    font-size: 11px;
+    font-size: calc(11px * var(--text-scale, 1));
     min-height: 30px;
     white-space: nowrap;
   }
@@ -4275,7 +4280,7 @@ body.tag-sort-dragging {
     white-space: nowrap;
     justify-content: center;
     padding: 8px 10px;
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
     line-height: 1.2;
   }
 
@@ -4304,7 +4309,7 @@ body.tag-sort-dragging {
   .plaza-page-indicator {
     grid-area: indicator;
     min-width: 0;
-    font-size: 13px;
+    font-size: calc(13px * var(--text-scale, 1));
   }
 
   .plaza-page-jump-inline {
@@ -4337,7 +4342,7 @@ body.tag-sort-dragging {
   .plaza-pagination-toolbar .icon-page-button {
     min-width: 38px;
     width: 38px;
-    font-size: 16px;
+    font-size: calc(16px * var(--text-scale, 1));
   }
 
   .upload-batch-action-row,
@@ -4372,7 +4377,7 @@ body.tag-sort-dragging {
   .toolbar-toggle-row .button {
     width: 100%;
     padding: 0 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .duplicate-scan-actions {
@@ -4386,7 +4391,7 @@ body.tag-sort-dragging {
     width: 100%;
     min-width: 0;
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .backup-summary-grid {
@@ -4433,7 +4438,7 @@ body.tag-sort-dragging {
 
   .admin-bulk-review-top-count-button {
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .admin-bulk-review-top-count input {
@@ -4447,7 +4452,7 @@ body.tag-sort-dragging {
     min-width: 0;
     flex: 0 0 auto;
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .admin-bulk-review-row-compact {
@@ -4461,7 +4466,7 @@ body.tag-sort-dragging {
     width: 100%;
     min-width: 0;
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .admin-bulk-review-selection-top-row .admin-bulk-review-clear-button {
@@ -4478,7 +4483,7 @@ body.tag-sort-dragging {
     width: auto;
     min-width: 0;
     padding-inline: 10px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     white-space: nowrap;
   }
 
@@ -4486,7 +4491,7 @@ body.tag-sort-dragging {
     width: auto;
     min-width: 0;
     padding-inline: 16px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     white-space: nowrap;
   }
 
@@ -4500,7 +4505,7 @@ body.tag-sort-dragging {
     width: 30px;
     min-width: 30px;
     height: 30px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
   }
 
   .plaza-category-switcher-collapsed {
@@ -4509,7 +4514,7 @@ body.tag-sort-dragging {
   }
 
   .plaza-category-switcher-collapsed .tab-chip {
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     padding: 8px 10px;
   }
 
@@ -4524,7 +4529,7 @@ body.tag-sort-dragging {
     width: 100%;
     min-width: 0;
     padding: 8px 4px;
-    font-size: 12px;
+    font-size: calc(12px * var(--text-scale, 1));
     white-space: nowrap;
   }
 }
@@ -4552,14 +4557,14 @@ body.tag-sort-dragging {
 
 .update-prompt-modal .modal-title {
   margin: 0;
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
 }
 
 .update-prompt-warning {
   padding: 10px 14px;
   border-radius: 10px;
   background: var(--bg-soft);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.6;
   color: var(--text-soft);
 }
@@ -4598,7 +4603,7 @@ body.tag-sort-dragging {
   border-radius: 999px;
   background: transparent;
   color: var(--text-soft);
-  font-size: 24px;
+  font-size: calc(24px * var(--text-scale, 1));
   line-height: 1;
   cursor: pointer;
 }
@@ -4628,7 +4633,7 @@ body.tag-sort-dragging {
   display: grid;
   gap: 10px;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.7;
 }
 
@@ -4640,15 +4645,15 @@ body.tag-sort-dragging {
 }
 
 .simple-markdown-h1 {
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
 }
 
 .simple-markdown-h2 {
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
 }
 
 .simple-markdown-h3 {
-  font-size: 14px;
+  font-size: calc(14px * var(--text-scale, 1));
 }
 
 .simple-markdown p,
@@ -4684,7 +4689,7 @@ body.tag-sort-dragging {
   padding: 0 4px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--panel-strong) 82%, var(--border) 18%);
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
 }
 
 .changelog-version {
@@ -4694,12 +4699,12 @@ body.tag-sort-dragging {
 
 .changelog-version-title {
   margin: 0;
-  font-size: 16px;
+  font-size: calc(16px * var(--text-scale, 1));
 }
 
 .changelog-category-label {
   margin: 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   font-weight: 600;
   color: var(--text);
 }
@@ -4708,7 +4713,7 @@ body.tag-sort-dragging {
   margin: 4px 0 0;
   padding-left: 18px;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.6;
 }
 
@@ -4718,7 +4723,7 @@ body.tag-sort-dragging {
   border: 0;
   background: transparent;
   color: #4c8dff;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   line-height: 1.4;
   text-decoration: underline;
   cursor: pointer;
@@ -4802,7 +4807,7 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 .searchable-category-empty {
   padding: 12px 14px;
   color: var(--text-soft);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   line-height: 1.5;
 }
 
@@ -4859,7 +4864,7 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 }
 
 .plaza-confetti-toggles .checkbox-chip {
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
 }
 
 /* === iOS / Android 触摸优化 === */
@@ -4981,16 +4986,16 @@ body {
   background-position: center;
   filter: blur(var(--bg-blur));
   opacity: var(--bg-opacity);
-  transition:
-    filter 0.2s,
-    opacity 0.2s;
+  /* 说明:不给 filter/opacity 加 transition。用户拖动 slider 时
+   * CSS 变量会以每帧的频率被更新,若同时启用短 transition,浏览器每一帧
+   * 都要重新起一个动画,视觉上就是"闪烁"。这里保持即时同步。 */
 }
 #custom-bg-overlay {
   position: fixed;
   inset: 0;
   z-index: -4;
   background-color: rgba(0, 0, 0, var(--bg-overlay));
-  transition: background-color 0.2s;
+  /* 同上:去掉 transition 避免拖动 overlay slider 时闪烁。 */
 }
 #theme-bg-layer {
   position: fixed;
@@ -4998,9 +5003,9 @@ body {
   z-index: -3;
   background-color: var(--bg-color);
   opacity: calc(1 - var(--theme-alpha));
-  transition:
-    background-color 0.4s ease,
-    opacity 0.2s ease;
+  /* 保留 background-color 的过渡(切换主题时才有意义),
+   * 但 opacity 不加 transition,避免拖动 themeAlpha 时闪烁。 */
+  transition: background-color 0.4s ease;
 }
 #theme-bg-layer::before {
   content: '';
@@ -5023,7 +5028,7 @@ body {
   color: #fff;
   padding: 10px 24px;
   border-radius: 30px;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   font-weight: 500;
   z-index: 100000;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -5060,7 +5065,7 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 12px;
+  font-size: calc(12px * var(--text-scale, 1));
   line-height: 1;
   cursor: pointer;
   pointer-events: auto;
@@ -5165,7 +5170,7 @@ body[data-style='default'] .theme-dropdown-panel .switcher button.active {
   height: 34px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 15px;
+  font-size: calc(15px * var(--text-scale, 1));
   transition: all 0.3s;
   background: transparent;
   color: var(--sp-text);
@@ -5208,7 +5213,7 @@ body[data-style='default'] .theme-dropdown-panel .switcher button.active {
   padding: 7px 16px;
   border-radius: 20px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   transition: all 0.3s ease;
   background: transparent;
   color: var(--sp-text);
@@ -5253,7 +5258,7 @@ body[data-style='default'] .theme-dropdown-panel .switcher button.active {
 }
 .d-lg-none {
   display: block;
-  font-size: 20px;
+  font-size: calc(20px * var(--text-scale, 1));
   color: var(--sp-text-secondary);
   cursor: pointer;
   transition: color 0.3s;
@@ -5275,7 +5280,7 @@ body[data-style='default'] .theme-dropdown-panel .switcher button.active {
     color 0.3s;
 }
 .settings-panel h2 {
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
   margin-top: 0;
   margin-bottom: 20px;
   border-bottom: 1px solid var(--sp-border);
@@ -5455,11 +5460,19 @@ input[type='range'] {
 .modal-header {
   display: flex;
   justify-content: space-between;
-  font-size: 18px;
+  font-size: calc(18px * var(--text-scale, 1));
   font-weight: bold;
   margin-bottom: 15px;
   border-bottom: 1px solid var(--sp-border);
-  padding-bottom: 10px;
+  padding: 10px 0;
+  /* 长图裁剪时 .modal-content 会出现滚动条,让 header 粘顶,避免
+   * 用户滚到底部时看不到"关闭裁剪"按钮。 */
+  position: sticky;
+  top: -20px; /* 抵消 .modal-content 的 padding-top: 20px */
+  z-index: 1;
+  background: var(--sp-panel-bg);
+  margin-top: -20px;
+  padding-top: 20px;
 }
 .close-modal-btn {
   color: var(--sp-text-secondary);
@@ -5568,6 +5581,10 @@ body[data-style='glass'][data-mode='day'] {
   --btn-border: 1px solid rgba(255, 255, 255, 0.7);
   --radius-card: 18px;
   --radius-btn: 10px;
+  /* 为 .button.primary 提供饱和度更高的强调色,避免"通过当前待审核"
+   * 之类的主操作按钮和普通半透明按钮融为一体。 */
+  --accent: #4f8ee6;
+  --accent-strong: #2762c4;
 }
 body[data-style='glass'][data-mode='night'] {
   --bg-color: #1a2226;
@@ -5581,6 +5598,9 @@ body[data-style='glass'][data-mode='night'] {
   --btn-bg-color: rgba(255, 255, 255, 0.15);
   --btn-color: #fff;
   --btn-border: 1px solid rgba(255, 255, 255, 0.3);
+  /* 夜间玻璃拟态:亮青色作为主操作按钮的强调色。 */
+  --accent: #63d3f1;
+  --accent-strong: #2fa8cb;
   --radius-card: 18px;
   --radius-btn: 10px;
 }
@@ -6490,7 +6510,7 @@ body[data-style='brutalism'][data-mode='night'] .feature-panel h3 {
   border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 80%, white 20%);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: calc(13px * var(--text-scale, 1));
   cursor: pointer;
   transition:
     color 0.2s,

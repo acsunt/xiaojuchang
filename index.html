@@ -25,6 +25,21 @@
         const theme = storedTheme === 'light' ? 'light' : 'dark';
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
+
+        /* 预置 body 的 data-style / data-mode,避免 React 挂载前
+         * 按钮回退到 :root 的 --btn-bg-color: #000 出现"瞬间黑色"闪烁。 */
+        const style = window.localStorage.getItem('site-style') || 'default';
+        const mode = window.localStorage.getItem('site-mode') === 'night' ? 'night' : 'day';
+        const applyBodyDataset = () => {
+          if (!document.body) return;
+          document.body.setAttribute('data-style', style);
+          document.body.setAttribute('data-mode', mode);
+        };
+        if (document.body) {
+          applyBodyDataset();
+        } else {
+          document.addEventListener('DOMContentLoaded', applyBodyDataset, { once: true });
+        }
       })();
     </script>
   </head>

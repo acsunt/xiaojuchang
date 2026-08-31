@@ -1595,6 +1595,12 @@ export function useThemeController(): UseThemeControllerResult {
     setCurrentMode('day');
     setCurrentLayout('scroll');
     setThemeConfig({ ...DEFAULT_THEME_CONFIG });
+    /* 同步清空 IndexedDB 里保存的自定义背景图,否则页面刷新后预览会重新
+     * 从 store 里读出旧图,与 DEFAULT_THEME_CONFIG.bgType='none' 不一致。 */
+    void clearBackgroundStore().catch(() => {
+      /* 忽略 */
+    });
+    revokeAllBlobUrls();
     /* 同步滑块 DOM */
     if (typeof document !== 'undefined') {
       const sliders: Array<[string, string]> = [

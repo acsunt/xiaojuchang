@@ -72,12 +72,13 @@ export function CropperModal({
             marginTop: 15,
             display: 'flex',
             justifyContent: 'space-between',
+            gap: 10,
           }}
         >
           <button type="button" className="sp-btn" onClick={onReset} disabled={!cropperReady}>
             <i className="fas fa-sync" /> 重置
           </button>
-          <div>
+          <div style={{ display: 'flex', gap: 10 }}>
             <button type="button" className="sp-btn" onClick={onClose}>
               取消
             </button>
