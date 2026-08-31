@@ -941,9 +941,10 @@ export function useThemeController(): UseThemeControllerResult {
           b.classList.toggle('locked', d);
         }
       }
-      /* content 分支已随"主题透明度与遮罩"功能一同移除 */
+      /* content 分支已随"主题透明度与遮罩"功能一同移除,
+       * 因此 applyLockState 只依赖 lockedImg。 */
     },
-    [themeConfig.lockedContent, themeConfig.lockedImg],
+    [themeConfig.lockedImg],
   );
 
   const initLocks = useCallback(() => {
