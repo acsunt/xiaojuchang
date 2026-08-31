@@ -1132,6 +1132,23 @@ body[data-style='default'][data-mode='day'] .button.danger {
   justify-content: flex-end;
 }
 
+/* 手机端：新剧场提醒里的「跳转到开头 / 继续浏览位置」两个按钮同一行。
+ * 默认 .button 在手机端是 width:100%,不覆盖会各占一行。 */
+@media (max-width: 720px) {
+  .plaza-refresh-modal-actions {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .plaza-refresh-modal-actions > .button {
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .hero-panel,
 .form-panel,
 .detail-panel,
@@ -2104,8 +2121,36 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 12px;
 }
 
+/* 「删除该版本」按钮：宽度收到文字宽度，避免继承 .text-button {width:100%}
+ * 让手机端占据整行。 */
+.upload-derived-head .text-button {
+  width: fit-content;
+  flex: 0 0 auto;
+}
+
 .upload-single-action-row {
   justify-content: flex-end;
+}
+
+/* 手机端：单篇上传底部两个按钮 (衍生 / 上传小剧场) 同一行，衍生左、上传右。
+ * 默认 .button 在手机端是 width:100%，会各占一行，这里覆盖为 auto + nowrap。 */
+@media (max-width: 720px) {
+  .upload-single-action-row {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .upload-single-action-row > .button {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .upload-single-action-row > .upload-submit-button {
+    flex: 1 1 auto;
+  }
 }
 
 /* 广场列表 & 详情页里的"衍生"徽标：
@@ -5714,6 +5759,66 @@ body[data-style='glass'][data-mode='night'] {
   --accent-strong: #2fa8cb;
   --radius-card: 18px;
   --radius-btn: 10px;
+}
+
+/* 玻璃拟态：「发现新功能更新」弹窗底部两个按钮
+ * 默认按钮走的是半透明白 (rgba 255,255,255,0.55 / 0.15)，
+ * 导致弹窗底部整体偏灰、按钮几乎看不出边界。
+ * 这里把弹窗内的两个操作按钮改成不透明背景，主按钮沿用 accent 渐变，
+ * 次按钮用清晰的白/深底 + 明确边框。 */
+body[data-style='glass'] .update-prompt-modal .modal-action-row > .button.secondary {
+  background: var(--panel-strong, #ffffff);
+  color: var(--text);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body[data-style='glass'][data-mode='night']
+  .update-prompt-modal
+  .modal-action-row
+  > .button.secondary {
+  background: #2a3238;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+body[data-style='glass'] .update-prompt-modal .modal-action-row > .button.primary {
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  background-color: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 玻璃拟态审核后台的状态标签
+ * 默认样式是白色文字 + 24%~26% 透明彩色底，在玻璃拟态日间浅蓝底上白字几乎消失，
+ * 「待审核 / 有改动 / 分类 未改 / 简介 未改 / 正文 已改」这些都看不清。
+ * 改成饱和度更高的实色底色 + 深色/白色文字，保证两种模式下对比度足够。 */
+body[data-style='glass'][data-mode='day'] .status-tag.pending {
+  background: #ffb454;
+  color: #4a2d00;
+}
+body[data-style='glass'][data-mode='day'] .status-tag.approved {
+  background: #3ac48a;
+  color: #0f3a25;
+}
+body[data-style='glass'][data-mode='day'] .status-tag.rejected,
+body[data-style='glass'][data-mode='day'] .status-tag.offline {
+  background: #ff7575;
+  color: #4a0f0f;
+}
+body[data-style='glass'][data-mode='night'] .status-tag.pending {
+  background: rgba(255, 180, 84, 0.55);
+  color: #fff5e0;
+}
+body[data-style='glass'][data-mode='night'] .status-tag.approved {
+  background: rgba(72, 213, 151, 0.55);
+  color: #eafff4;
+}
+body[data-style='glass'][data-mode='night'] .status-tag.rejected,
+body[data-style='glass'][data-mode='night'] .status-tag.offline {
+  background: rgba(255, 117, 117, 0.55);
+  color: #ffeaea;
 }
 
 body[data-style='corporate'] {
