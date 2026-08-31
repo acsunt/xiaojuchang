@@ -1,4 +1,4 @@
-﻿import { useMemo } from 'react';
+import { useMemo } from 'react';
 import type { ThemeEntry, ThemeKey } from '../data/theme-list';
 
 export interface ThemeDropdownPanelProps {
@@ -46,7 +46,11 @@ export function ThemeDropdownPanel({
       className="theme-dropdown-panel"
       style={{
         marginTop: 10,
-        marginBottom: 16,
+        /* 主题面板和下面 hero panel 之间的间距:
+         * .app-header 的 margin-bottom: 10px 已经在上面留了 10px,
+         * 这里只保留少量间距(8px)避免视觉粘连,但不能过大,
+         * 否则"主题面板展开时"下面那一行工具按钮会显得脱节 */
+        marginBottom: 8,
         /* 改用两套都存在的 token：
          * - 默认主题用 --panel（半透明蓝/米白，与其他面板一致）
          * - 非默认主题用 --card-bg（各主题自定义的卡片色）

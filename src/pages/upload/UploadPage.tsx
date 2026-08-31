@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   countPlayBatchItems,
   detectPlayTitleFromContent,
