@@ -1261,6 +1261,10 @@ body[data-style='default'][data-mode='day'] .button.danger {
   position: relative;
   /* 建立独立层叠上下文,避免 ::before 的 z-index 影响父级 */
   isolation: isolate;
+  /* "主题透明度" (--theme-alpha, 0~1) 作用于同一批"文字区"卡片:
+   * 值越大,这些卡片(含文字)越透明,越能露出下面的自定义背景图。
+   * 与 --text-mask 组合使用:先透出背景图,再叠加黑色遮罩加深文字可读性。 */
+  opacity: calc(1 - var(--theme-alpha, 0));
 }
 
 :where(
@@ -5158,9 +5162,9 @@ body {
   inset: 0;
   z-index: -3;
   background-color: var(--bg-color);
-  opacity: calc(1 - var(--theme-alpha));
-  /* 保留 background-color 的过渡(切换主题时才有意义),
-   * 但 opacity 不加 transition,避免拖动 themeAlpha 时闪烁。 */
+  /* 主题透明度 (--theme-alpha) 现在只作用于"文字区遮罩"覆盖的
+   * 卡片/面板容器,而不是这一层全局主题底色。这里 opacity 恒 1,
+   * 避免全局背景色跟随 slider 变化造成整个视口忽明忽暗。 */
   transition: background-color 0.4s ease;
 }
 #theme-bg-layer::before {
