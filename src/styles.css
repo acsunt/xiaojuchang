@@ -4886,7 +4886,11 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 }
 
 /* "发现新功能更新"弹窗:当日志内容较长、弹窗内部出现滚动时,
- * 让底部两个操作按钮 sticky 到弹窗底部,用户不用翻到底才能点。 */
+ * 让底部两个操作按钮 sticky 到弹窗底部,用户不用翻到底才能点。
+ * 顶部不再画分隔线:
+ *  - 手机端窄屏下这条线视觉偏"重"
+ *  - 电脑端深色主题下与 sticky 背景对比过强,也偏突兀
+ * 靠 sticky 背景 + 内边距做视觉分层即可。 */
 .update-prompt-modal .modal-action-row {
   position: sticky;
   bottom: 0;
@@ -4894,15 +4898,6 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   margin: 8px -16px 0;
   padding: 12px 16px;
   background: var(--panel);
-  border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
-}
-
-/* 手机端两个操作按钮上方那条分隔线在窄屏视觉上偏"重",去掉更清爽。
- * sticky/padding/背景仍然保留,只关掉 border-top。 */
-@media (max-width: 720px) {
-  .update-prompt-modal .modal-action-row {
-    border-top: 0;
-  }
 }
 
 .modal-action-row > .button {
@@ -5162,9 +5157,14 @@ body {
   inset: 0;
   z-index: -3;
   background-color: var(--bg-color);
-  /* 主题透明度 (--theme-alpha) 现在只作用于"文字区遮罩"覆盖的
-   * 卡片/面板容器,而不是这一层全局主题底色。这里 opacity 恒 1,
-   * 避免全局背景色跟随 slider 变化造成整个视口忽明忽暗。 */
+  /* "主题透明度" (--theme-alpha, 0~1) 作用在这一层全局主题底色上:
+   *  - alpha=0: 主题底色完全不透明,视觉上就是纯主题背景;
+   *  - alpha>0: 底色变透明,下面的 #custom-bg-layer(自定义背景图)透出来。
+   * 卡片/面板容器上另有一份 opacity: calc(1 - --theme-alpha),
+   * 两者叠加后就是:主题底色 + 卡片一起淡出,让背景图完整显现,
+   * 再靠 --text-mask 单独回加黑色遮罩保证文字可读。
+   * 不给 opacity 加 transition,拖动 slider 时避免帧级动画抖动。 */
+  opacity: calc(1 - var(--theme-alpha, 0));
   transition: background-color 0.4s ease;
 }
 #theme-bg-layer::before {
