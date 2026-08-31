@@ -4893,6 +4893,14 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
 }
 
+/* 手机端两个操作按钮上方那条分隔线在窄屏视觉上偏"重",去掉更清爽。
+ * sticky/padding/背景仍然保留,只关掉 border-top。 */
+@media (max-width: 720px) {
+  .update-prompt-modal .modal-action-row {
+    border-top: 0;
+  }
+}
+
 .modal-action-row > .button {
   flex: 1 1 0;
   min-width: 0;
