@@ -53,7 +53,12 @@ import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaDerivedPanel } from './PlazaDerivedPanel';
-import { getPlayVersionKey, sortPlayVersions } from './play-versions';
+import {
+  collapsePlaysToLatest,
+  getPlayVersionKey,
+  sortPlayVersions,
+  type CollapsedPlayRow,
+} from './play-versions';
 import {
   DEFAULT_CATEGORY,
   PLAYS_UPDATED_EVENT,
@@ -1168,7 +1173,22 @@ export function PlayListPage() {
     );
   }, [exportCategoryOptions]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredPlays.length / pageSize));
+  /* 广场列表按"同标题+同分类"合并成一行,只展示每组最新版本。
+   * filteredPlays 保持扁平结构,用于筛选/搜索/统计;
+   * 页面渲染/分页则走 collapsedFilteredRows。*/
+  const collapsedFilteredRows = useMemo<CollapsedPlayRow[]>(
+    () => collapsePlaysToLatest(filteredPlays),
+    [filteredPlays],
+  );
+
+  const collapsedLatestIds = useMemo(
+    () => collapsedFilteredRows.map((row) => row.latest.id),
+    [collapsedFilteredRows],
+  );
+
+  /* 分页/展示条目数按"折叠后的行数"算,一行代表一组同标题分类的最新版本。 */
+  const totalPages = Math.max(1, Math.ceil(collapsedFilteredRows.length / pageSize));
+  const displayedRowCount = collapsedFilteredRows.length;
 
   useEffect(() => {
     setCurrentPage((current) => Math.min(current, totalPages));
@@ -1180,8 +1200,8 @@ export function PlayListPage() {
 
   const pagedPlays = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
-    return filteredPlays.slice(startIndex, startIndex + pageSize);
-  }, [currentPage, filteredPlays, pageSize]);
+    return collapsedFilteredRows.slice(startIndex, startIndex + pageSize);
+  }, [collapsedFilteredRows, currentPage, pageSize]);
 
   // 控制区面板内部是否仍有可见内容：工具栏展开时含时间排序/搜索/批量操作等；
   // 工具栏收起后，分类/作者条或收藏视图随机选项仍可能显示。三者皆无则不渲染面板外壳，避免残留空白。
@@ -1316,7 +1336,7 @@ export function PlayListPage() {
     { value: 'unique', label: '不重复随机' },
   ];
   const allSelectedOnPage =
-    pagedPlays.length > 0 && pagedPlays.every((play) => selectedIds.includes(play.id));
+    pagedPlays.length > 0 && pagedPlays.every((row) => selectedIds.includes(row.latest.id));
 
   const persistStore = (store: PlayPreferenceStore) => {
     setPreferenceStore(store);
@@ -1586,7 +1606,9 @@ export function PlayListPage() {
     const newestPlay = orderPlaysByNewest(plays)[0];
 
     return {
-      filteredPlayIds: filteredPlays.map((play) => play.id),
+      /* 只保留每组"最新版本"的 id,详情页上一条/下一条按折叠顺序走,
+       * 避免在同一组的原文/版本 1/版本 2 之间来回跳。 */
+      filteredPlayIds: collapsedLatestIds,
       anchorPlayId,
       currentPage,
       scrollY: typeof window === 'undefined' ? 0 : window.scrollY,
@@ -1742,14 +1764,29 @@ export function PlayListPage() {
     );
   };
 
-  const renderCompactMeta = (play: Play) => {
+  /* 广场卡片的第二行元信息:
+   * - 分类
+   * - 作者
+   * - 若同标题同分类存在 >1 个版本,则在作者后面加"衍生"标记,提示打开详情看历次版本
+   * - repo 评论数(若 > 0) */
+  const renderCompactMeta = (play: Play, versionCount = 1) => {
     const repoCount = repoCounts.find((item) => item.playId === play.id)?.count ?? 0;
+    const hasDerivedVersions = versionCount > 1;
 
     return (
       <div className="compact-meta-row compact-meta-row-small">
         <span className="compact-meta-item">◈ {play.category?.trim() || DEFAULT_CATEGORY}</span>
         <span className="compact-meta-item compact-meta-item-with-repo">
           <span>✎ {play.authorName}</span>
+          {hasDerivedVersions ? (
+            <span
+              className="derived-badge"
+              aria-label={`共 ${versionCount} 个版本(含原文)`}
+              title={`共 ${versionCount} 个版本(含原文)`}
+            >
+              衍生
+            </span>
+          ) : null}
           {repoCount > 0 ? (
             <span className="repo-count-meta" aria-label={`评论 ${repoCount} 条`}>
               <span aria-hidden="true">💬</span>
@@ -2330,7 +2367,7 @@ export function PlayListPage() {
               {!toolbarCollapsed ? (
                 <div className="filter-summary wrap-mobile">
                   <span>
-                    当前 {filteredPlays.length} 篇，第 {currentPage} / {totalPages} 页
+                    当前 {displayedRowCount} 篇，第 {currentPage} / {totalPages} 页
                     {selectionMode !== 'idle' ? `，已选 ${selectedIds.length} 篇` : ''}
                   </span>
                   {selectionMode !== 'idle' ? (
@@ -2340,12 +2377,12 @@ export function PlayListPage() {
                         setSelectedIds((current) => {
                           if (allSelectedOnPage) {
                             return current.filter(
-                              (id) => !pagedPlays.some((play) => play.id === id),
+                              (id) => !pagedPlays.some((row) => row.latest.id === id),
                             );
                           }
 
                           const next = new Set(current);
-                          pagedPlays.forEach((play) => next.add(play.id));
+                          pagedPlays.forEach((row) => next.add(row.latest.id));
                           return [...next];
                         })
                       }
@@ -2577,12 +2614,14 @@ export function PlayListPage() {
                   className="card-grid custom-grid"
                   style={{ ['--card-columns' as string]: renderColumns } as CSSProperties}
                 >
-                  {pagedPlays.map((play) => {
+                  {pagedPlays.map((row) => {
+                    const play = row.latest;
                     const checked = selectedIds.includes(play.id);
+                    const versionCount = row.versions.length;
 
                     return (
                       <article
-                        key={play.id}
+                        key={row.key}
                         className={`play-card play-card-shell play-card-clickable ${checked ? 'selected' : ''}`}
                         data-play-id={play.id}
                         onClick={() => openPlayDetail(play)}
@@ -2602,7 +2641,7 @@ export function PlayListPage() {
                                 <span>{selectionMode === 'export' ? '导出' : '选择'}</span>
                               </label>
                             ) : null}
-                            {renderCompactMeta(play)}
+                            {renderCompactMeta(play, versionCount)}
                           </div>
                         </div>
                         <h3>{play.title}</h3>

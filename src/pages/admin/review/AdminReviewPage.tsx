@@ -441,6 +441,22 @@ export function AdminReviewPage() {
   const [reviewContent, setReviewContent] = useState('');
   const [reviewNote, setReviewNote] = useState('');
   const reviewContentRef = useRef<HTMLTextAreaElement | null>(null);
+  /* 审核编辑面板底部的"追加衍生"表单:
+   * 只对已通过条目生效。每次点"衍生"追加一版,填简介 + 内容;
+   * 提交时按顺序 uploadPlay + reviewPlay(approve),让新版本直接落库为已通过。
+   * 与前台上传共享一个思路:共享 作者/标题/分类,只维护简介/内容。 */
+  const [derivedDrafts, setDerivedDrafts] = useState<
+    Array<{ id: string; summary: string; content: string }>
+  >([]);
+  const [derivedSubmitting, setDerivedSubmitting] = useState(false);
+  const makeAdminDerivedDraft = () => ({
+    id:
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `admin-derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    summary: '',
+    content: '',
+  });
 
   /* 复制预览里的标题/正文到剪贴板。
    * 失败时降级用 document.execCommand('copy') + 隐藏 textarea,
@@ -1211,6 +1227,7 @@ export function AdminReviewPage() {
       setReviewCategory('');
       setReviewSummary('');
       setReviewContent('');
+      setDerivedDrafts([]);
       return;
     }
 
@@ -1219,6 +1236,8 @@ export function AdminReviewPage() {
     setReviewCategory(selectedPlay.category || DEFAULT_CATEGORY);
     setReviewSummary(selectedPlay.summary);
     setReviewContent(selectedPlay.content);
+    /* 切换选中条目时清空待追加的衍生版本,避免误提交到别的作品下。 */
+    setDerivedDrafts([]);
   }, [selectedPlay]);
 
   useEffect(() => {
@@ -2033,6 +2052,74 @@ export function AdminReviewPage() {
       setError(reason instanceof Error ? reason.message : '保存修改失败');
     } finally {
       setReviewBusyAction(null);
+    }
+  };
+
+  const addAdminDerivedDraft = () => {
+    setDerivedDrafts((current) => [...current, makeAdminDerivedDraft()]);
+  };
+
+  const removeAdminDerivedDraft = (id: string) => {
+    setDerivedDrafts((current) => current.filter((draft) => draft.id !== id));
+  };
+
+  const updateAdminDerivedDraft = (
+    id: string,
+    patch: Partial<{ summary: string; content: string }>,
+  ) => {
+    setDerivedDrafts((current) =>
+      current.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)),
+    );
+  };
+
+  /* 审核后台"追加衍生":
+   * 只对已通过条目开放。共享作者/标题/分类,每版单独简介/内容;
+   * 提交时按顺序 uploadPlay + reviewPlay(approve, 自动通过备注),
+   * 让新版本直接落库为已通过,前台列表页会自动聚合到同一组。 */
+  const handleSubmitDerivedDrafts = async () => {
+    if (!selectedPlay || selectedPlay.status !== 'approved') {
+      return;
+    }
+    const drafts = derivedDrafts
+      .map((draft) => ({ ...draft, summary: draft.summary.trim(), content: draft.content.trim() }))
+      .filter((draft) => draft.content.length > 0);
+    if (drafts.length === 0) {
+      setError('每个衍生版本都需要填写正文');
+      setFeedbackScope('review');
+      return;
+    }
+
+    const authorName = reviewAuthorName.trim() || selectedPlay.authorName;
+    const title = reviewTitle.trim() || selectedPlay.title;
+    const category = reviewCategory.trim() || selectedPlay.category || DEFAULT_CATEGORY;
+
+    setDerivedSubmitting(true);
+    setFeedbackScope('review');
+    setError('');
+    setSuccessMessage('');
+    setProcessingMessage(`正在追加 ${drafts.length} 个衍生版本`);
+
+    try {
+      for (const draft of drafts) {
+        const created = await playApi.uploadPlay({
+          authorName,
+          title,
+          category,
+          summary: draft.summary,
+          content: draft.content,
+        });
+        await playApi.reviewPlay(created.id, 'approve', '管理员追加衍生版本，自动通过');
+      }
+
+      setDerivedDrafts([]);
+      setProcessingMessage('');
+      setSuccessMessage(`已追加并通过 ${drafts.length} 个衍生版本。`);
+      await refreshAdminAfterReviewMutation(selectedPlay.id);
+    } catch (reason) {
+      setProcessingMessage('');
+      setError(reason instanceof Error ? reason.message : '追加衍生版本失败');
+    } finally {
+      setDerivedSubmitting(false);
     }
   };
 
@@ -3848,6 +3935,84 @@ export function AdminReviewPage() {
                           placeholder="可填写通过原因、拒绝原因或下线说明"
                         />
                       </label>
+
+                      {/* 追加衍生版本:仅对已通过条目开放。
+                        * 每按一次"衍生"追加一版,填简介 + 内容;
+                        * 提交时会依次上传并自动通过,前台列表页按同标题+分类聚合。 */}
+                      {selectedPlay?.status === 'approved' ? (
+                        <div className="stack-gap-sm admin-derived-section">
+                          <div className="stack-gap-sm">
+                            <span className="content-meta">
+                              追加衍生版本:与本篇共享作者/标题/分类,提交后会自动通过并出现在前台"衍生"聚合里。
+                            </span>
+                          </div>
+                          {derivedDrafts.map((draft, index) => (
+                            <div className="upload-derived-block stack-gap-sm" key={draft.id}>
+                              <div className="upload-derived-head">
+                                <strong>{`衍生版本 ${index + 1}`}</strong>
+                                <button
+                                  className="text-button"
+                                  disabled={derivedSubmitting}
+                                  onClick={() => removeAdminDerivedDraft(draft.id)}
+                                  type="button"
+                                >
+                                  删除该版本
+                                </button>
+                              </div>
+                              <label>
+                                <span>简介(可空)</span>
+                                <input
+                                  value={draft.summary}
+                                  onChange={(event) =>
+                                    updateAdminDerivedDraft(draft.id, {
+                                      summary: event.target.value,
+                                    })
+                                  }
+                                  placeholder="留空则前台不展示简介"
+                                />
+                              </label>
+                              <label>
+                                <span>正文</span>
+                                <textarea
+                                  rows={8}
+                                  value={draft.content}
+                                  onChange={(event) =>
+                                    updateAdminDerivedDraft(draft.id, {
+                                      content: event.target.value,
+                                    })
+                                  }
+                                  placeholder="写下这一版本的正文"
+                                />
+                              </label>
+                            </div>
+                          ))}
+                          <div className="inline-actions wrap-mobile">
+                            <button
+                              className="button secondary"
+                              disabled={derivedSubmitting}
+                              onClick={addAdminDerivedDraft}
+                              type="button"
+                            >
+                              衍生
+                            </button>
+                            {derivedDrafts.length > 0 ? (
+                              <button
+                                className="button primary"
+                                disabled={
+                                  derivedSubmitting ||
+                                  derivedDrafts.every((draft) => !draft.content.trim())
+                                }
+                                onClick={() => void handleSubmitDerivedDrafts()}
+                                type="button"
+                              >
+                                {derivedSubmitting
+                                  ? '提交中'
+                                  : `提交并通过（${derivedDrafts.length} 版）`}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className="action-bar split-actions review-action-layout">
                         <div className="inline-actions review-action-row">

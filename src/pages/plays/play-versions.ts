@@ -56,3 +56,49 @@ export const buildPlayVersionGroups = (plays: Play[]) => {
       );
     });
 };
+
+/**
+ * 广场列表折叠：把同 title+category 的多篇合并到"最新版本"这一行,
+ * 保留全组用于导出/详情侧栏展示。
+ * - 保持来源顺序:按"每组最新版本首次在 items 中出现的位置"排列。
+ * - 每组返回 latest = sortPlayVersions 后的最后一项。
+ */
+export type CollapsedPlayRow = {
+  key: string;
+  latest: Play;
+  versions: Play[];
+};
+
+export const collapsePlaysToLatest = (items: Play[]): CollapsedPlayRow[] => {
+  const grouped = new Map<string, Play[]>();
+  const firstSeenOrder = new Map<string, number>();
+
+  items.forEach((play, index) => {
+    const key = getPlayVersionKey(play);
+    const current = grouped.get(key);
+    if (current) {
+      current.push(play);
+    } else {
+      grouped.set(key, [play]);
+      firstSeenOrder.set(key, index);
+    }
+  });
+
+  /* 用每组"最新版本"在 items 中最早出现的位置作为该行的排序锚点,
+   * 保证广场列表按 filteredPlays 的原顺序稳定折叠(排序/筛选逻辑不受破坏)。 */
+  const rows = [...grouped.entries()].map(([key, groupPlays]) => {
+    const sortedVersions = sortPlayVersions(groupPlays);
+    const latest = sortedVersions[sortedVersions.length - 1];
+    const latestIndex = items.findIndex((item) => item.id === latest.id);
+    return {
+      key,
+      latest,
+      versions: sortedVersions,
+      anchor: latestIndex >= 0 ? latestIndex : (firstSeenOrder.get(key) ?? 0),
+    };
+  });
+
+  return rows
+    .sort((left, right) => left.anchor - right.anchor)
+    .map(({ key, latest, versions }) => ({ key, latest, versions }));
+};

@@ -98,6 +98,24 @@ const ClearableField = ({
   </div>
 );
 
+/* 衍生版本填写块:主表单是"原文",derivedVersions 是原文之下依次追加的衍生。
+ * 提交时按顺序调用 uploadPlay(原文) → uploadPlay(版本1) → uploadPlay(版本2)…,
+ * 每个版本共享主表单的作者/分类/标题,只维护自己的简介/内容。 */
+type DerivedVersionDraft = {
+  id: string;
+  summary: string;
+  content: string;
+};
+
+const makeDerivedVersion = (): DerivedVersionDraft => ({
+  id:
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  summary: '',
+  content: '',
+});
+
 export function UploadPage() {
   const [form, setForm] = useState(initialForm);
   const [batchText, setBatchText] = useState('');
@@ -113,11 +131,23 @@ export function UploadPage() {
   const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(
     null,
   );
+  const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
 
+  /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。 */
+  const derivedInvalid = useMemo(
+    () => derivedVersions.some((version) => !version.content.trim()),
+    [derivedVersions],
+  );
+
   const singleDisabled = useMemo(
-    () => submitting || !form.authorName.trim() || !form.title.trim() || !form.content.trim(),
-    [form, submitting],
+    () =>
+      submitting ||
+      !form.authorName.trim() ||
+      !form.title.trim() ||
+      !form.content.trim() ||
+      derivedInvalid,
+    [derivedInvalid, form, submitting],
   );
 
   const batchDisabled = useMemo(
@@ -187,28 +217,56 @@ export function UploadPage() {
   const resetEditingState = () => {
     setEditingHistoryId('');
     setForm(initialForm);
+    setDerivedVersions([]);
   };
 
   const handleSingleSubmit = async () => {
-    const draft = {
-      authorName: form.authorName.trim(),
-      title: form.title.trim(),
-      category: form.category.trim() || DEFAULT_CATEGORY,
+    const authorName = form.authorName.trim();
+    const title = form.title.trim();
+    const category = form.category.trim() || DEFAULT_CATEGORY;
+
+    const originalDraft = {
+      authorName,
+      title,
+      category,
       summary: form.summary.trim(),
       content: form.content.trim(),
     };
 
-    const createdPlay = await playApi.uploadPlay(draft);
-    saveSubmissionRecord(draft, {
+    /* 衍生版本共享 作者/标题/分类,仅各自维护简介 + 内容;
+     * 提交时按顺序上传,依赖列表页/详情页的"同标题+同分类"聚合逻辑。 */
+    const derivedDrafts = derivedVersions.map((version) => ({
+      authorName,
+      title,
+      category,
+      summary: version.summary.trim(),
+      content: version.content.trim(),
+    }));
+
+    const createdOriginal = await playApi.uploadPlay(originalDraft);
+    saveSubmissionRecord(originalDraft, {
       historyId: editingHistoryId || undefined,
-      latestPlayId: createdPlay.id,
+      latestPlayId: createdOriginal.id,
     });
-    rememberOwnedPlayId(createdPlay.id);
-    syncLocalHistory(draft.authorName);
+    rememberOwnedPlayId(createdOriginal.id);
+
+    for (const draft of derivedDrafts) {
+      const created = await playApi.uploadPlay(draft);
+      saveSubmissionRecord(draft, { latestPlayId: created.id });
+      rememberOwnedPlayId(created.id);
+    }
+
+    syncLocalHistory(authorName);
 
     setForm(initialForm);
+    setDerivedVersions([]);
     setEditingHistoryId('');
-    showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
+
+    if (derivedDrafts.length > 0) {
+      showFloatingToast(`已提交原文和 ${derivedDrafts.length} 个衍生版本到待审核池。`);
+    } else {
+      showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
+    }
   };
 
   const handleBatchSubmit = async () => {
@@ -291,7 +349,23 @@ export function UploadPage() {
       summary: record.summary,
       content: record.content,
     });
+    /* 回填单条历史时清空衍生版本列表:历史记录只针对当前一篇,不带衍生上下文。 */
+    setDerivedVersions([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const addDerivedVersion = () => {
+    setDerivedVersions((current) => [...current, makeDerivedVersion()]);
+  };
+
+  const removeDerivedVersion = (id: string) => {
+    setDerivedVersions((current) => current.filter((version) => version.id !== id));
+  };
+
+  const updateDerivedVersion = (id: string, patch: Partial<DerivedVersionDraft>) => {
+    setDerivedVersions((current) =>
+      current.map((version) => (version.id === id ? { ...version, ...patch } : version)),
+    );
   };
 
   const handleClearAuthorHistory = () => {
@@ -535,6 +609,80 @@ export function UploadPage() {
                   />
                 </ClearableField>
               </label>
+
+              {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
+                * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。 */}
+              {derivedVersions.map((version, index) => (
+                <div className="upload-derived-block stack-gap-sm" key={version.id}>
+                  <div className="upload-derived-head">
+                    <strong>{`衍生版本 ${index + 1}`}</strong>
+                    <button
+                      className="text-button"
+                      onClick={() => removeDerivedVersion(version.id)}
+                      type="button"
+                    >
+                      删除该版本
+                    </button>
+                  </div>
+                  <label>
+                    <span>简介（可空）</span>
+                    <ClearableField
+                      onClear={() => updateDerivedVersion(version.id, { summary: '' })}
+                      visible={Boolean(version.summary)}
+                    >
+                      <input
+                        value={version.summary}
+                        onChange={(event) =>
+                          updateDerivedVersion(version.id, { summary: event.target.value })
+                        }
+                        placeholder="不填也可以，列表卡片会直接隐藏简介"
+                      />
+                    </ClearableField>
+                  </label>
+                  <label>
+                    <span>内容</span>
+                    <ClearableField
+                      onClear={() => updateDerivedVersion(version.id, { content: '' })}
+                      visible={Boolean(version.content)}
+                    >
+                      <textarea
+                        rows={10}
+                        value={version.content}
+                        onChange={(event) =>
+                          updateDerivedVersion(version.id, { content: event.target.value })
+                        }
+                        placeholder="写下这一版本的正文，与原文共享作者、标题、分类"
+                      />
+                    </ClearableField>
+                  </label>
+                </div>
+              ))}
+
+              {/* 单篇模式的底部按钮区:衍生按钮 + 上传小剧场按钮
+                * 位置始终在最后一个版本框下方(动态追加时自动往下推)。 */}
+              <div className="inline-actions wrap-mobile upload-single-action-row">
+                <button
+                  className="button secondary"
+                  onClick={addDerivedVersion}
+                  type="button"
+                  disabled={submitting}
+                >
+                  衍生
+                </button>
+                <button
+                  className="button primary upload-submit-button"
+                  disabled={singleDisabled}
+                  type="submit"
+                >
+                  {submitting
+                    ? '提交中...'
+                    : editingHistoryId
+                      ? '重新投稿'
+                      : derivedVersions.length > 0
+                        ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
+                        : '上传小剧场'}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="field-grid">
@@ -583,10 +731,11 @@ export function UploadPage() {
             </div>
           )}
 
-          <div
-            className={`action-bar wrap-mobile ${editingHistoryId ? 'action-bar-half' : 'action-bar-single'}`}
-          >
-            {editingHistoryId ? (
+          {/* 只在回填历史时才显示"取消回填"按钮;
+            * single 模式的提交按钮已经渲染在原文/衍生版本组的底部按钮区,不再重复。
+            * batch 模式的提交按钮由"批量文本"区块内部的 upload-batch-action-row 承担。 */}
+          {editingHistoryId ? (
+            <div className="action-bar wrap-mobile action-bar-half">
               <button
                 className="button ghost upload-reset-button"
                 onClick={resetEditingState}
@@ -594,17 +743,8 @@ export function UploadPage() {
               >
                 取消回填
               </button>
-            ) : null}
-            {mode === 'single' ? (
-              <button
-                className="button primary upload-submit-button"
-                disabled={singleDisabled}
-                type="submit"
-              >
-                {submitting ? '提交中...' : editingHistoryId ? '重新投稿' : '上传小剧场'}
-              </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </form>
 
         <aside className="review-sidebar stack-gap-lg">

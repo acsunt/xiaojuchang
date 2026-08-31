@@ -2087,6 +2087,46 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 4px;
 }
 
+/* 单篇上传:衍生版本块
+ * - 用低对比的分隔条圈住每一版
+ * - 头部左侧写"衍生版本 N",右侧提供"删除该版本"入口 */
+.upload-derived-block {
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--accent, #6c8cff) 45%, var(--border, #d0d0d0) 55%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #6c8cff) 4%, transparent);
+}
+
+.upload-derived-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-single-action-row {
+  justify-content: flex-end;
+}
+
+/* 广场列表 & 详情页里的"衍生"徽标：
+ * - 出现在作者名后、repo 评论数前
+ * - 用 accent 色低饱和描边样式,避免和 repo 数字混淆 */
+.derived-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent, #6c8cff) 55%, transparent);
+  color: color-mix(in srgb, var(--accent, #6c8cff) 88%, var(--text) 12%);
+  background: color-mix(in srgb, var(--accent, #6c8cff) 12%, transparent);
+  font-size: calc(11px * var(--text-scale, 1));
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  margin-left: 2px;
+}
+
 .preview-copy-clamped {
   display: -webkit-box;
   -webkit-box-orient: vertical;
