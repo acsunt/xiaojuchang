@@ -5795,8 +5795,8 @@ body[data-style='glass'] .update-prompt-modal .modal-action-row > .button.primar
  * 「待审核 / 有改动 / 分类 未改 / 简介 未改 / 正文 已改」这些都看不清。
  * 改成饱和度更高的实色底色 + 深色/白色文字，保证两种模式下对比度足够。 */
 body[data-style='glass'][data-mode='day'] .status-tag.pending {
-  background: #ffb454;
-  color: #4a2d00;
+  background: #7c8cf3;
+  color: #ffffff;
 }
 body[data-style='glass'][data-mode='day'] .status-tag.approved {
   background: #3ac48a;
@@ -5808,8 +5808,8 @@ body[data-style='glass'][data-mode='day'] .status-tag.offline {
   color: #4a0f0f;
 }
 body[data-style='glass'][data-mode='night'] .status-tag.pending {
-  background: rgba(255, 180, 84, 0.55);
-  color: #fff5e0;
+  background: rgba(124, 140, 243, 0.6);
+  color: #f2f4ff;
 }
 body[data-style='glass'][data-mode='night'] .status-tag.approved {
   background: rgba(72, 213, 151, 0.55);
@@ -5819,6 +5819,27 @@ body[data-style='glass'][data-mode='night'] .status-tag.rejected,
 body[data-style='glass'][data-mode='night'] .status-tag.offline {
   background: rgba(255, 117, 117, 0.55);
   color: #ffeaea;
+}
+
+/* 非默认、非玻璃拟态的其他主题：审核后台/投稿记录里的状态标签
+ * (待审核 / 已通过 / 已拒绝 / 已下线 / 有改动 / 分类 未改 / 简介 未改 / 正文 已改 …)
+ * 默认样式 (styles.css: .status-tag.*) 是白字 + 20~26% 透明彩色底，
+ * 在这些主题日间浅底 (minimal / neumorphism / corporate / swiss / editorial /
+ * illustration / isometric / retro / futuristic / pastel / brutalism 等) 上，
+ * 白字几乎完全糊到背景里。统一改成饱和度足够的实色底 + 白字，
+ * 保证在任何浅色主题下都能一眼分辨。 */
+body:not([data-style='default']):not([data-style='glass'])[data-mode='day'] .status-tag.pending {
+  background: #7c8cf3;
+  color: #ffffff;
+}
+body:not([data-style='default']):not([data-style='glass'])[data-mode='day'] .status-tag.approved {
+  background: #3ac48a;
+  color: #ffffff;
+}
+body:not([data-style='default']):not([data-style='glass'])[data-mode='day'] .status-tag.rejected,
+body:not([data-style='default']):not([data-style='glass'])[data-mode='day'] .status-tag.offline {
+  background: #ef6a6a;
+  color: #ffffff;
 }
 
 body[data-style='corporate'] {
