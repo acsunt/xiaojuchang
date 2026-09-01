@@ -709,6 +709,9 @@ export function AdminReviewPage() {
   const [draggingTagId, setDraggingTagId] = useState('');
   const [isMobileReviewViewport, setIsMobileReviewViewport] = useState(false);
   const [isMobilePendingExpanded, setIsMobilePendingExpanded] = useState(false);
+  /* repo 审核列表的手机端展开状态,复用 MOBILE_REVIEW_LIST_PREVIEW_COUNT 阈值。
+   * 默认收起,与小剧场审核列表 (isMobilePendingExpanded) 一致的交互。 */
+  const [isMobileRepoExpanded, setIsMobileRepoExpanded] = useState(false);
   const [showJumpButton, setShowJumpButton] = useState(true);
   const [moveCategoryBusy, setMoveCategoryBusy] = useState(false);
   const [moveCategoryMessage, setMoveCategoryMessage] = useState('');
@@ -1078,6 +1081,16 @@ export function AdminReviewPage() {
       ? adminPagedPlays.slice(0, MOBILE_REVIEW_LIST_PREVIEW_COUNT)
       : adminPagedPlays;
   const mobileReviewListLabel = selectedStatus ? statusLabelMap[selectedStatus] : '全部';
+  /* repo 列表：手机端 + 长度超过阈值时，先展示前 MOBILE_REVIEW_LIST_PREVIEW_COUNT 条，
+   * 顶部给「展开/收起」按钮切换。桌面端始终全部展示。
+   * 逻辑复用小剧场审核列表的 shouldCollapseMobileReviewList 模式。 */
+  const shouldCollapseMobileRepoList =
+    isMobileReviewViewport && filteredRepos.length > MOBILE_REVIEW_LIST_PREVIEW_COUNT;
+  const repoListToRender =
+    shouldCollapseMobileRepoList && !isMobileRepoExpanded
+      ? filteredRepos.slice(0, MOBILE_REVIEW_LIST_PREVIEW_COUNT)
+      : filteredRepos;
+  const mobileRepoListLabel = selectedRepoStatus ? repoStatusLabelMap[selectedRepoStatus] : '全部';
   const activeAuditLogs = useMemo(
     () => (selectedAuditLogCategory === 'plays' ? allPlayReviewLogs : allRepoAuditLogs),
     [allPlayReviewLogs, allRepoAuditLogs, selectedAuditLogCategory],
@@ -1160,6 +1173,13 @@ export function AdminReviewPage() {
 
   const bulkSelectedIdSet = useMemo(() => new Set(bulkSelectedIds), [bulkSelectedIds]);
   const deleteSelectedIdSet = useMemo(() => new Set(deleteSelectedIds), [deleteSelectedIds]);
+  /* 「全选/取消全选」判定：当前列表所有待审核都在已选集合里,且非空。
+   * pendingVisibleIds 是当前视图可见的待审核 id 列表,长度为 0 时按钮 disabled。 */
+  const isAllPendingVisibleSelected = useMemo(
+    () =>
+      pendingVisibleIds.length > 0 && pendingVisibleIds.every((id) => bulkSelectedIdSet.has(id)),
+    [pendingVisibleIds, bulkSelectedIdSet],
+  );
   const duplicateApprovedPlays = useMemo(
     () => allPlays.filter((play) => play.status === 'approved'),
     [allPlays],
@@ -3074,13 +3094,30 @@ export function AdminReviewPage() {
                       篇
                     </span>
                   </div>
-                  <button
-                    className="button ghost"
-                    onClick={() => setIsBulkApproveCollapsed((current) => !current)}
-                    type="button"
-                  >
-                    {isBulkApproveCollapsed ? '展开' : '折叠'}
-                  </button>
+                  <div className="inline-actions admin-bulk-review-head-actions">
+                    {/* 全选 / 取消全选：把「展开/折叠」左侧同行的操作抽出来，
+                     * 已经全选（当前待审核 == 已选，且非空）时按钮变成「取消全选」，
+                     * 再点一下相当于走 handleClearBulkSelection 清空。 */}
+                    <button
+                      className="button secondary admin-bulk-review-head-select-all-button"
+                      disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
+                      onClick={
+                        isAllPendingVisibleSelected
+                          ? handleClearBulkSelection
+                          : handleSelectAllPendingVisible
+                      }
+                      type="button"
+                    >
+                      {isAllPendingVisibleSelected ? '取消全选' : '全选'}
+                    </button>
+                    <button
+                      className="button ghost"
+                      onClick={() => setIsBulkApproveCollapsed((current) => !current)}
+                      type="button"
+                    >
+                      {isBulkApproveCollapsed ? '展开' : '折叠'}
+                    </button>
+                  </div>
                 </div>
 
                 {!isBulkApproveCollapsed ? (
@@ -3793,7 +3830,22 @@ export function AdminReviewPage() {
 
               {filteredRepos.length > 0 ? (
                 <div className="stack-gap-md">
-                  {filteredRepos.map((repo) => (
+                  {shouldCollapseMobileRepoList ? (
+                    <div className="inline-actions review-list-mobile-toggle-row">
+                      <span className="content-meta">
+                        手机端先显示前 {MOBILE_REVIEW_LIST_PREVIEW_COUNT} 条，当前“
+                        {mobileRepoListLabel}”repo 列表共 {filteredRepos.length} 条
+                      </span>
+                      <button
+                        className="button ghost"
+                        onClick={() => setIsMobileRepoExpanded((current) => !current)}
+                        type="button"
+                      >
+                        {isMobileRepoExpanded ? '收起' : '展开'}
+                      </button>
+                    </div>
+                  ) : null}
+                  {repoListToRender.map((repo) => (
                     <article className="review-card repo-review-card" key={repo.id}>
                       <div className="content-head wrap-mobile">
                         <div className="stack-gap-xs">
@@ -3829,7 +3881,13 @@ export function AdminReviewPage() {
                           {repoActionMeta.map((item, index) => (
                             <Fragment key={item.action}>
                               <button
-                                className={`button ${item.style}`}
+                                className={
+                                  item.action === 'reject'
+                                    ? 'button danger repo-reject-button'
+                                    : item.action === 'approve'
+                                      ? 'button primary repo-approve-button'
+                                      : `button ${item.style}`
+                                }
                                 disabled={repoBusyAction !== null}
                                 onClick={() => void handleRepoReview(repo.id, item.action)}
                                 type="button"
@@ -3838,7 +3896,7 @@ export function AdminReviewPage() {
                               </button>
                               {index === 0 ? (
                                 <button
-                                  className="button danger"
+                                  className="button warning repo-delete-single-button"
                                   disabled={repoBusyAction !== null}
                                   onClick={() => void handleRepoDelete(repo.id)}
                                   type="button"

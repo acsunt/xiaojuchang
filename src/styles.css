@@ -433,6 +433,30 @@ select option {
   gap: 10px;
 }
 
+/* 衍生版本行内 meta 布局：作者 + 分类靠左，正文占剩余空间且单行省略。
+ * 之前正文若存在会走 .plaza-calendar-play-summary 换行显示，
+ * 现改成与分类同一行，右侧一行以 ... 截断，视觉更紧凑。 */
+.plaza-derived-version-meta {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.plaza-derived-version-meta > .plaza-derived-version-category {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.plaza-derived-version-content-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-soft, var(--sp-text-secondary, #596b7e));
+  font-size: calc(12px * var(--text-scale, 1));
+  text-align: left;
+}
+
 .plaza-filter-header {
   gap: 8px;
 }
@@ -6715,10 +6739,13 @@ body:not([data-style='default']) .checkbox-chip input:checked {
   background-image: var(--btn-bg-image, none);
   border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
 }
-/* 勾子:在亮主题上用面板色 / 在暗主题上用 --btn-color,避免勾子看不见。
- * 用 var(--card-text) 作为兜底,大多数主题的卡片文字色与勾子色一致。 */
+/* 勾子:一律用白色 + 深色 drop-shadow 描边,保证在任何主题的按钮底色上都可见。
+ * 之前用 var(--btn-color) 会在部分主题（如 pastel = 粉底 + 白色 btn-color）产生
+ * "白勾在浅粉底" 几乎看不见的低对比场景。改为固定白勾 + 深色 1px 阴影后,
+ * 无论主题底色是浅色（粉/黄/白）还是深色（蓝/紫/黑）都能清晰识别。 */
 body:not([data-style='default']) .checkbox-chip input:checked::after {
-  border-color: var(--btn-color, var(--card-text, #ffffff));
+  border-color: #ffffff;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
 }
 
 /* ---------- 提示 / Toast ---------- */
@@ -7408,7 +7435,10 @@ body[data-style='brutalism'][data-mode='night'] {
  * 一套主题色，默认主题不碰。 */
 body:not([data-style='default']) .button.primary.admin-approve-all-button,
 body:not([data-style='default']) .button.primary.review-card-approve-button,
-body:not([data-style='default']) .review-action-row > .button.primary.review-primary-action-button {
+body:not([data-style='default']) .review-action-row > .button.primary.review-primary-action-button,
+body:not([data-style='default']) .admin-bulk-review-actions > .button.primary,
+body:not([data-style='default']) .admin-bulk-review-actions > .inline-actions > .button.primary,
+body:not([data-style='default']) .repo-action-row > .button.primary.repo-approve-button {
   background-image: linear-gradient(
     135deg,
     var(--approve-highlight, var(--accent)),
@@ -7427,7 +7457,15 @@ body:not([data-style='default']) .button.primary.admin-approve-all-button:hover:
 body:not([data-style='default']) .button.primary.review-card-approve-button:hover:not(:disabled),
 body:not([data-style='default'])
   .review-action-row
-  > .button.primary.review-primary-action-button:hover:not(:disabled) {
+  > .button.primary.review-primary-action-button:hover:not(:disabled),
+body:not([data-style='default']) .admin-bulk-review-actions > .button.primary:hover:not(:disabled),
+body:not([data-style='default'])
+  .admin-bulk-review-actions
+  > .inline-actions
+  > .button.primary:hover:not(:disabled),
+body:not([data-style='default'])
+  .repo-action-row
+  > .button.primary.repo-approve-button:hover:not(:disabled) {
   background-image: linear-gradient(
     135deg,
     var(--approve-highlight-strong, var(--accent-strong)),
@@ -7439,7 +7477,8 @@ body:not([data-style='default'])
     color-mix(in srgb, var(--approve-highlight, var(--accent)) 40%, transparent);
 }
 
-body:not([data-style='default']) .review-action-row > .button.danger.review-primary-action-button {
+body:not([data-style='default']) .review-action-row > .button.danger.review-primary-action-button,
+body:not([data-style='default']) .repo-action-row > .button.danger.repo-reject-button {
   background-image: linear-gradient(
     135deg,
     var(--reject-highlight, #c62828),
@@ -7455,7 +7494,10 @@ body:not([data-style='default']) .review-action-row > .button.danger.review-prim
 
 body:not([data-style='default'])
   .review-action-row
-  > .button.danger.review-primary-action-button:hover:not(:disabled) {
+  > .button.danger.review-primary-action-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .repo-action-row
+  > .button.danger.repo-reject-button:hover:not(:disabled) {
   background-image: linear-gradient(
     135deg,
     var(--reject-highlight-strong, #8e1b1b),
@@ -7467,7 +7509,14 @@ body:not([data-style='default'])
 }
 
 body:not([data-style='default']) .button.warning.review-card-delete-button,
-body:not([data-style='default']) .button.warning.review-delete-action-button {
+body:not([data-style='default']) .button.warning.review-delete-action-button,
+body:not([data-style='default']) .repo-action-row > .button.warning.repo-delete-single-button,
+body:not([data-style='default']) .admin-bulk-review-actions > .button.danger,
+body:not([data-style='default'])
+  .admin-bulk-review-actions
+  > .inline-actions
+  > .button.danger.admin-bulk-delete-selected-button,
+body:not([data-style='default']) .admin-search-action-row > .button.danger {
   background-image: linear-gradient(
     135deg,
     var(--delete-highlight, #d97706),
@@ -7482,7 +7531,16 @@ body:not([data-style='default']) .button.warning.review-delete-action-button {
 }
 
 body:not([data-style='default']) .button.warning.review-card-delete-button:hover:not(:disabled),
-body:not([data-style='default']) .button.warning.review-delete-action-button:hover:not(:disabled) {
+body:not([data-style='default']) .button.warning.review-delete-action-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .repo-action-row
+  > .button.warning.repo-delete-single-button:hover:not(:disabled),
+body:not([data-style='default']) .admin-bulk-review-actions > .button.danger:hover:not(:disabled),
+body:not([data-style='default'])
+  .admin-bulk-review-actions
+  > .inline-actions
+  > .button.danger.admin-bulk-delete-selected-button:hover:not(:disabled),
+body:not([data-style='default']) .admin-search-action-row > .button.danger:hover:not(:disabled) {
   background-image: linear-gradient(
     135deg,
     var(--delete-highlight-strong, #b45309),
@@ -7530,125 +7588,4 @@ body:not([data-style='default']) .button.warning.review-delete-action-button:hov
   display: inline-flex;
   align-items: center;
   line-height: 1;
-}
-
-/* ============ 非默认主题：审核后台按钮清新配色补丁 ============
- * 需求：把小剧场审核 / repo 审核里的 通过 / 当前待审核 / 拒绝 / 删除
- * 按钮改成偏清新的色调，替换掉之前"通过=深绿、拒绝=砖红、删除=橙"
- * 这类偏土的配色。默认主题保持原样，只在非默认主题下作用于审核后台。
- *
- * 通过：薄荷绿 (#10b981 -> #059669)
- * 待审核筛选主色：天青蓝 (#38bdf8 -> #0284c7)
- * 拒绝：珊瑚红 (#f87171 -> #ef4444)
- * 删除：琥珀橙 (#fbbf24 -> #f59e0b)
- * 提示：全部走 tab-chip.active 保持一致，主 CTA 用 gradient 渐变，
- *      hover 时反向 gradient 增强质感。
- * 优先级：body:not(default) + .review-layout 已经比通用主题选择器强，
- *      再通过枚举 review 相关按钮 class 保证覆盖。 */
-body:not([data-style='default']) .review-layout .button.primary.admin-approve-all-button,
-body:not([data-style='default']) .review-layout .button.primary.review-card-approve-button,
-body:not([data-style='default'])
-  .review-layout
-  .review-action-row
-  > .button.primary.review-primary-action-button {
-  background-image: linear-gradient(135deg, #34d399, #059669);
-  background-color: #10b981;
-  color: #ffffff;
-  border: 1px solid #059669;
-  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.28);
-}
-
-body:not([data-style='default'])
-  .review-layout
-  .button.primary.admin-approve-all-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .button.primary.review-card-approve-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .review-action-row
-  > .button.primary.review-primary-action-button:hover:not(:disabled) {
-  background-image: linear-gradient(135deg, #059669, #34d399);
-  color: #ffffff;
-  opacity: 1;
-  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.38);
-}
-
-body:not([data-style='default'])
-  .review-layout
-  .review-action-row
-  > .button.danger.review-primary-action-button,
-body:not([data-style='default']) .review-layout .repo-action-row > .button.danger {
-  background-image: linear-gradient(135deg, #fb7185, #ef4444);
-  background-color: #f87171;
-  color: #ffffff;
-  border: 1px solid #ef4444;
-  box-shadow: 0 6px 16px rgba(248, 113, 113, 0.28);
-}
-
-body:not([data-style='default'])
-  .review-layout
-  .review-action-row
-  > .button.danger.review-primary-action-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .repo-action-row
-  > .button.danger:hover:not(:disabled) {
-  background-image: linear-gradient(135deg, #ef4444, #fb7185);
-  color: #ffffff;
-  opacity: 1;
-  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.38);
-}
-
-body:not([data-style='default']) .review-layout .button.warning.review-card-delete-button,
-body:not([data-style='default']) .review-layout .button.warning.review-delete-action-button,
-body:not([data-style='default'])
-  .review-layout
-  .repo-review-actions-column
-  > .button.danger.repo-delete-selected-button,
-body:not([data-style='default'])
-  .review-layout
-  .admin-bulk-review-actions
-  > .button.danger.admin-bulk-delete-selected-button {
-  background-image: linear-gradient(135deg, #fbbf24, #f59e0b);
-  background-color: #fbbf24;
-  color: #1a1a1a;
-  border: 1px solid #f59e0b;
-  box-shadow: 0 6px 16px rgba(251, 191, 36, 0.32);
-}
-
-body:not([data-style='default'])
-  .review-layout
-  .button.warning.review-card-delete-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .button.warning.review-delete-action-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .repo-review-actions-column
-  > .button.danger.repo-delete-selected-button:hover:not(:disabled),
-body:not([data-style='default'])
-  .review-layout
-  .admin-bulk-review-actions
-  > .button.danger.admin-bulk-delete-selected-button:hover:not(:disabled) {
-  background-image: linear-gradient(135deg, #f59e0b, #fbbf24);
-  color: #1a1a1a;
-  opacity: 1;
-  box-shadow: 0 8px 22px rgba(245, 158, 11, 0.4);
-}
-
-/* 状态筛选 tab-chip.active（全部 / 待审核 / 已通过 / 已拒绝 / 已下线）：
- * 保持轻量胶囊感，仅激活态用天青蓝底突出"当前所选状态"。 */
-body:not([data-style='default']) .review-layout .tab-chip.active {
-  background-image: linear-gradient(135deg, #7dd3fc, #38bdf8);
-  background-color: #38bdf8;
-  color: #0c4a6e;
-  border: 1px solid #38bdf8;
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.28);
-}
-
-body:not([data-style='default']) .review-layout .tab-chip.active:hover:not(:disabled) {
-  background-image: linear-gradient(135deg, #38bdf8, #7dd3fc);
-  color: #0c4a6e;
-  opacity: 1;
 }

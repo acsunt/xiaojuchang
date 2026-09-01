@@ -56,9 +56,16 @@ export function PlazaDerivedPanel({ plays, onOpenPlay }: PlazaDerivedPanelProps)
                       <strong>{getPlayVersionLabel(index)}</strong>
                       <span>{formatDate(play.createdAt)}</span>
                     </div>
-                    <div className="compact-meta-row compact-meta-row-small">
+                    <div className="compact-meta-row compact-meta-row-small plaza-derived-version-meta">
                       <span>{play.authorName || '匿名'}</span>
-                      <span>{play.category?.trim() || DEFAULT_CATEGORY}</span>
+                      <span className="plaza-derived-version-category">
+                        {play.category?.trim() || DEFAULT_CATEGORY}
+                      </span>
+                      {play.content ? (
+                        <span className="plaza-derived-version-content-inline" title={play.content}>
+                          {play.content}
+                        </span>
+                      ) : null}
                     </div>
                     {play.summary ? (
                       <span className="sub-copy plaza-calendar-play-summary">{play.summary}</span>
