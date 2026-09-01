@@ -1443,6 +1443,8 @@ body[data-style='default'][data-mode='day'] .button.danger {
 
 .admin-bulk-review-panel {
   gap: 14px;
+  /* head 行的全选/展开按钮在手机端需要保持同一行,允许横向滚动而不被压缩 */
+  overflow-x: auto;
 }
 
 .admin-bulk-review-head {
@@ -1452,10 +1454,20 @@ body[data-style='default'][data-mode='day'] .button.danger {
   white-space: nowrap;
 }
 
+/* 第一个 flex 子项 (左侧 strong + 计数): 严格按内容宽度,但要可截断,
+ * 用 min-width: 0 + flex: 0 1 auto,文本长时可压缩避免挤坏右侧按钮。 */
 .admin-bulk-review-head > div {
   display: grid;
   gap: 4px;
   min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-bulk-review-head > div > .content-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-bulk-review-head .button {
@@ -1464,18 +1476,22 @@ body[data-style='default'][data-mode='day'] .button.danger {
 }
 
 /* head 右侧「全选 + 展开/折叠」两个按钮：手机端也强制同一行，
- * 通过 flex + nowrap，让内部按钮即便窄屏也不换到多行。 */
+ * 通过 flex + nowrap + flex-shrink:0，让两个按钮即便在窄屏下也不换行,
+ * 而且有最小宽度保证文字不会被压缩掉。 */
 .admin-bulk-review-head-actions {
   display: inline-flex;
   flex-wrap: nowrap;
   gap: 8px;
   flex-shrink: 0;
   white-space: nowrap;
+  margin-left: auto;
+  min-width: max-content;
 }
 
 .admin-bulk-review-head-actions > .button {
   flex-shrink: 0;
   white-space: nowrap;
+  min-width: max-content;
 }
 
 .admin-bulk-review-progress-block {
@@ -3309,6 +3325,8 @@ body.tag-sort-dragging {
 .admin-review-detail-panel {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, white 12%);
+  /* 顶部 tab-chip 行窄屏下保持同行,这里允许横向滚动而不被压缩到按钮消失 */
+  overflow-x: auto;
 }
 
 .admin-review-detail-grid {
@@ -3346,10 +3364,12 @@ body.tag-sort-dragging {
 }
 
 /* 顶部查看模式 tab-chip 行：手机端也保持同行 (仅三个 tab-chip + "查看模式" 标签)。
- * 通过 flex-wrap: nowrap + 白空 nowrap 让窄屏下不会被挤换行,内容超长时按钮缩窄。 */
+ * specificity 0,2,0 (比 .inline-actions 0,1,0 高),所以 flex-wrap 覆盖能生效。
+ * min-width: max-content 让容器最小按内容撑开,窄屏下不会被压缩到按钮消失。 */
 .admin-review-detail-panel > .admin-review-mode-line {
   flex-wrap: nowrap;
   gap: 8px;
+  min-width: max-content;
 }
 
 .admin-review-detail-panel > .admin-review-mode-line > .content-meta {
@@ -7299,17 +7319,19 @@ body[data-style='glass'][data-mode='night'] {
 }
 
 /* corporate：商务蓝；删除用商务灰蓝 */
+/* corporate：商务简约基调, 通过色用稳重的深青蓝(避开绿色,与 reject 红色也对更明显);
+ * 之前 #2e8a4a / #3fb568 偏亮绿,在白底卡片上像"苍蝇绿",不够商务。 */
 body[data-style='corporate'][data-mode='day'] {
-  --approve-highlight: #2e8a4a;
-  --approve-highlight-strong: #1c5d31;
+  --approve-highlight: #1c5d8a;
+  --approve-highlight-strong: #103d63;
   --reject-highlight: #c0392b;
   --reject-highlight-strong: #922b21;
   --delete-highlight: #566573;
   --delete-highlight-strong: #34495e;
 }
 body[data-style='corporate'][data-mode='night'] {
-  --approve-highlight: #3fb568;
-  --approve-highlight-strong: #2e8a4a;
+  --approve-highlight: #4a8fc7;
+  --approve-highlight-strong: #1c5d8a;
   --reject-highlight: #e74c3c;
   --reject-highlight-strong: #c0392b;
   --delete-highlight: #7f8c9a;
