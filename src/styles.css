@@ -3345,6 +3345,34 @@ body.tag-sort-dragging {
   margin-left: auto;
 }
 
+/* 顶部查看模式 tab-chip 行：手机端也保持同行 (仅三个 tab-chip + "查看模式" 标签)。
+ * 通过 flex-wrap: nowrap + 白空 nowrap 让窄屏下不会被挤换行,内容超长时按钮缩窄。 */
+.admin-review-detail-panel > .admin-review-mode-line {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.admin-review-detail-panel > .admin-review-mode-line > .content-meta {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.admin-review-detail-panel > .admin-review-mode-line > .tab-chip {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* 底部动作行 (删除 / 拒绝 / 保存 / 通过) */
+.admin-review-detail-action-row {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.admin-review-detail-action-row > .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 @media (max-width: 720px) {
   .admin-review-detail-grid-both {
     grid-template-columns: 1fr;
@@ -6796,7 +6824,13 @@ body:not([data-style='default']) .cropper-modal {
  * 非默认主题的卡片底色由 --card-bg 控制，文字色由 --card-text 控制；
  * 原生 accent-color 在自定义勾选标记上无效，必须把背景/边框/勾子颜色
  * 全部映射到主题变量，才能在 15 个主题里都保持一致的可读性。
- * 注意:故意避开部分主题(粗野等)的高饱和实色边框,改用半透明叠加避免视觉太硬。 */
+ * 注意:故意避开部分主题(粗野等)的高饱和实色边框,改用半透明叠加避免视觉太硬。
+ *
+ * 之前的实现用 ::after 画「右下两边 border + 旋转 45°」模拟对勾。
+ * 问题:非默认主题里 input 的 background-image / box-shadow / padding 被各主题
+ * 规则覆盖,把 ::after 挡住或者推出可见区,看上去只是一个填色方块没有勾。
+ * 现在改成 background-image 内嵌 SVG data URL,与 input 一体渲染,不依赖 ::after,
+ * 只要 input 本身没被 display:none / visibility:hidden,勾就在。 */
 body:not([data-style='default']) .checkbox-chip {
   color: var(--card-text, var(--sp-text, #1a1a1a));
 }
@@ -6805,33 +6839,27 @@ body:not([data-style='default']) .checkbox-chip input {
   border: 1.5px solid var(--sp-border, #cbd1d9);
   /* 关闭原生 accent-color,由我们完全自绘（与默认主题行为一致） */
   accent-color: transparent;
+  /* 用 background-image 画 SVG 对勾,勾色用 currentColor 让父 .checkbox-chip 控色 */
 }
 body:not([data-style='default']) .checkbox-chip input:hover {
   border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
 }
-/* checked 状态：强制深靛蓝底 + 白勾，不再依赖 --btn-bg-color。
- * 之前用 --btn-bg-color 在 pastel(#ffb3c6 淡粉) / brutalism-night 白底 等主题上
- * 会出现"浅底 + 白勾 = 完全看不见"，即便加了 drop-shadow 也只能勉强看到轮廓。
- * 直接给一个稳定的深底（近黑深靛 #1a2745）就可以让白勾在所有主题下都清晰。
- * 边框跟着变深，避免 checked 状态还继承浅色描边。 */
+/* checked: 强制深底,background-image 内嵌白色 SVG 勾 (确保即便 input 的 box-shadow
+ * 或父级 background-image 把 ::after 盖住,SVG 仍然跟着 input 一起渲染)。 */
 body:not([data-style='default']) .checkbox-chip input:checked {
   background-color: #1a2745;
-  background-image: none;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23ffffff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: 14px 14px;
   border-color: #1a2745;
 }
-body:not([data-style='default']) .checkbox-chip input:checked::after {
-  border-color: #ffffff;
-  filter: none;
-}
-/* 夜间模式：整体是深底，checked 也用深底容易和底色糊在一起，
- * 改成亮青色底 + 深底色勾，仍然是白/深高对比。 */
+/* 夜间模式：亮青色底 + 深底色勾（同样内嵌 SVG）。 */
 body[data-mode='night']:not([data-style='default']) .checkbox-chip input:checked {
   background-color: #4dd0e1;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%230a1929' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round' d='M3.5 8.5l3 3 6-6'/%3E%3C/svg%3E");
+  background-size: 14px 14px;
   border-color: #4dd0e1;
-}
-body[data-mode='night']:not([data-style='default']) .checkbox-chip input:checked::after {
-  border-color: #0a1929;
-  filter: none;
 }
 
 /* ---------- 提示 / Toast ---------- */

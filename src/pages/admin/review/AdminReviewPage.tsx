@@ -3943,158 +3943,7 @@ export function AdminReviewPage() {
                       </button>
                     </div>
                   ) : null}
-                  {/* 任务 5：三种查看模式 + 选中条目的详情面板。
-                   * 与小剧场审核共用 adminViewMode('preview'/'edit'/'both') 状态。 */}
-                  {selectedRepo ? (
-                    <section className="form-panel stack-gap-md admin-review-detail-panel">
-                      <div className="inline-actions wrap-mobile admin-review-mode-line">
-                        <span className="content-meta">查看模式</span>
-                        <button
-                          className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('preview')}
-                          type="button"
-                        >
-                          仅预览
-                        </button>
-                        <button
-                          className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('edit')}
-                          type="button"
-                        >
-                          仅编辑
-                        </button>
-                        <button
-                          className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('both')}
-                          type="button"
-                        >
-                          编辑 + 预览
-                        </button>
-                        <button
-                          className="button ghost admin-review-detail-close-button"
-                          onClick={() => setSelectedRepoId('')}
-                          type="button"
-                        >
-                          返回列表
-                        </button>
-                      </div>
-
-                      <div
-                        className={
-                          adminViewMode === 'preview'
-                            ? 'admin-review-detail-grid admin-review-detail-grid-preview'
-                            : adminViewMode === 'edit'
-                              ? 'admin-review-detail-grid admin-review-detail-grid-edit'
-                              : 'admin-review-detail-grid admin-review-detail-grid-both'
-                        }
-                      >
-                        {adminViewMode !== 'edit' ? (
-                          <div className="stack-gap-sm admin-review-detail-preview">
-                            <div className="stack-gap-xs">
-                              <span className={`status-tag ${selectedRepo.status}`}>
-                                {repoStatusLabelMap[selectedRepo.status]}
-                              </span>
-                              <strong>{selectedRepo.nickname}</strong>
-                              <span className="content-meta">
-                                《{selectedRepo.playTitle ?? selectedRepo.playId}》 ·{' '}
-                                {new Date(selectedRepo.createdAt).toLocaleString('zh-CN')}
-                              </span>
-                              {selectedRepo.replyToNickname ? (
-                                <span className="content-meta">
-                                  回复 {selectedRepo.replyToNickname}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="admin-review-detail-content">{selectedRepo.content}</p>
-                            {selectedRepo.reviewNote ? (
-                              <p className="sub-copy">审核备注：{selectedRepo.reviewNote}</p>
-                            ) : null}
-                            <div className="inline-actions wrap-mobile repo-action-row">
-                              {repoActionMeta.map((item, index) => (
-                                <Fragment key={item.action}>
-                                  <button
-                                    className={
-                                      item.action === 'reject'
-                                        ? 'button danger repo-reject-button'
-                                        : item.action === 'approve'
-                                          ? 'button primary repo-approve-button'
-                                          : `button ${item.style}`
-                                    }
-                                    disabled={repoBusyAction !== null || repoEditBusy}
-                                    onClick={() =>
-                                      void handleRepoReview(selectedRepo.id, item.action)
-                                    }
-                                    type="button"
-                                  >
-                                    {repoBusyAction === item.action ? '处理中' : item.label}
-                                  </button>
-                                  {index === 0 ? (
-                                    <button
-                                      className="button warning repo-delete-single-button"
-                                      disabled={repoBusyAction !== null || repoEditBusy}
-                                      onClick={() => void handleRepoDelete(selectedRepo.id)}
-                                      type="button"
-                                    >
-                                      {repoBusyAction === 'delete' ? '处理中' : '删除'}
-                                    </button>
-                                  ) : null}
-                                </Fragment>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {adminViewMode !== 'preview' ? (
-                          <div className="stack-gap-sm admin-review-detail-edit">
-                            <label className="stack-gap-xs">
-                              <span>repo 正文</span>
-                              <textarea
-                                disabled={repoEditBusy || repoBusyAction !== null}
-                                onChange={(event) => setRepoEditContentDraft(event.target.value)}
-                                rows={6}
-                                value={repoEditContentDraft}
-                              />
-                            </label>
-                            <label className="stack-gap-xs">
-                              <span>审核备注</span>
-                              <textarea
-                                disabled={repoEditBusy || repoBusyAction !== null}
-                                onChange={(event) => setRepoEditNoteDraft(event.target.value)}
-                                placeholder="可写空，会清空原备注"
-                                rows={3}
-                                value={repoEditNoteDraft}
-                              />
-                            </label>
-                            <div className="inline-actions wrap-mobile">
-                              <button
-                                className="button primary"
-                                disabled={
-                                  repoEditBusy ||
-                                  repoBusyAction !== null ||
-                                  repoEditContentDraft.trim().length === 0
-                                }
-                                onClick={() => void handleSaveRepoEdit()}
-                                type="button"
-                              >
-                                {repoEditBusy ? '保存中' : '保存修改'}
-                              </button>
-                              <button
-                                className="button ghost"
-                                disabled={repoEditBusy || repoBusyAction !== null}
-                                onClick={() => {
-                                  setRepoEditContentDraft(selectedRepo.content);
-                                  setRepoEditNoteDraft(selectedRepo.reviewNote ?? '');
-                                }}
-                                type="button"
-                              >
-                                重置
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    </section>
-                  ) : null}
+                  {/* 任务 5：列表在上, 选中条目后详情面板在下 (在 map 后面)。 */}
 
                   {repoListToRender.map((repo) => {
                     const isRepoSelected = selectedRepoId === repo.id;
@@ -4190,6 +4039,140 @@ export function AdminReviewPage() {
                       </article>
                     );
                   })}
+
+                  {selectedRepo ? (
+                    <section className="form-panel stack-gap-md admin-review-detail-panel">
+                      {/* 顶部 tab-chip 行：查看模式 + 三个 tab-chip 同行 (手机端也同行)
+                       * 没有"返回列表"按钮, 点列表里别的卡片即可切换。 */}
+                      <div className="inline-actions admin-review-mode-line">
+                        <span className="content-meta">查看模式</span>
+                        <button
+                          className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('preview')}
+                          type="button"
+                        >
+                          仅预览
+                        </button>
+                        <button
+                          className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('edit')}
+                          type="button"
+                        >
+                          仅编辑
+                        </button>
+                        <button
+                          className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('both')}
+                          type="button"
+                        >
+                          编辑 + 预览
+                        </button>
+                      </div>
+
+                      <div
+                        className={
+                          adminViewMode === 'preview'
+                            ? 'admin-review-detail-grid admin-review-detail-grid-preview'
+                            : adminViewMode === 'edit'
+                              ? 'admin-review-detail-grid admin-review-detail-grid-edit'
+                              : 'admin-review-detail-grid admin-review-detail-grid-both'
+                        }
+                      >
+                        {adminViewMode !== 'edit' ? (
+                          <div className="stack-gap-sm admin-review-detail-preview">
+                            <div className="stack-gap-xs">
+                              <span className={`status-tag ${selectedRepo.status}`}>
+                                {repoStatusLabelMap[selectedRepo.status]}
+                              </span>
+                              <strong>{selectedRepo.nickname}</strong>
+                              <span className="content-meta">
+                                《{selectedRepo.playTitle ?? selectedRepo.playId}》 ·{' '}
+                                {new Date(selectedRepo.createdAt).toLocaleString('zh-CN')}
+                              </span>
+                              {selectedRepo.replyToNickname ? (
+                                <span className="content-meta">
+                                  回复 {selectedRepo.replyToNickname}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="admin-review-detail-content">{selectedRepo.content}</p>
+                            {selectedRepo.reviewNote ? (
+                              <p className="sub-copy">审核备注：{selectedRepo.reviewNote}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
+
+                        {adminViewMode !== 'preview' ? (
+                          <div className="stack-gap-sm admin-review-detail-edit">
+                            <label className="stack-gap-xs">
+                              <span>repo 正文</span>
+                              <textarea
+                                disabled={repoEditBusy || repoBusyAction !== null}
+                                onChange={(event) => setRepoEditContentDraft(event.target.value)}
+                                rows={6}
+                                value={repoEditContentDraft}
+                              />
+                            </label>
+                            <label className="stack-gap-xs">
+                              <span>审核备注</span>
+                              <textarea
+                                disabled={repoEditBusy || repoBusyAction !== null}
+                                onChange={(event) => setRepoEditNoteDraft(event.target.value)}
+                                placeholder="可写空，会清空原备注"
+                                rows={3}
+                                value={repoEditNoteDraft}
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* 底部动作行：删除 / 拒绝 / 保存 / 通过。
+                       * 把保存按钮从原"仅编辑"模式独立区域移到此处, 与拒绝/删除/通过同行,
+                       * 顺序从左到右: 删除 → 拒绝 → 保存 → 通过。
+                       * 当草稿等于原始内容/备注时保存按钮 disabled，避免误点。 */}
+                      <div className="inline-actions wrap-mobile repo-action-row admin-review-detail-action-row">
+                        <button
+                          className="button warning repo-delete-single-button"
+                          disabled={repoBusyAction !== null || repoEditBusy}
+                          onClick={() => void handleRepoDelete(selectedRepo.id)}
+                          type="button"
+                        >
+                          {repoBusyAction === 'delete' ? '处理中' : '删除'}
+                        </button>
+                        <button
+                          className="button danger repo-reject-button"
+                          disabled={repoBusyAction !== null || repoEditBusy}
+                          onClick={() => void handleRepoReview(selectedRepo.id, 'reject')}
+                          type="button"
+                        >
+                          {repoBusyAction === 'reject' ? '处理中' : '拒绝'}
+                        </button>
+                        <button
+                          className="button primary admin-review-detail-save-button"
+                          disabled={
+                            repoBusyAction !== null ||
+                            repoEditBusy ||
+                            repoEditContentDraft.trim().length === 0 ||
+                            (repoEditContentDraft === selectedRepo.content &&
+                              repoEditNoteDraft === (selectedRepo.reviewNote ?? ''))
+                          }
+                          onClick={() => void handleSaveRepoEdit()}
+                          type="button"
+                        >
+                          {repoEditBusy ? '保存中' : '保存'}
+                        </button>
+                        <button
+                          className="button primary repo-approve-button"
+                          disabled={repoBusyAction !== null || repoEditBusy}
+                          onClick={() => void handleRepoReview(selectedRepo.id, 'approve')}
+                          type="button"
+                        >
+                          {repoBusyAction === 'approve' ? '处理中' : '通过'}
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
                 </div>
               ) : (
                 <div className="empty-panel">
