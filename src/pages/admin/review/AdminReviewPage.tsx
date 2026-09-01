@@ -2418,9 +2418,7 @@ export function AdminReviewPage() {
       ? Array.from(new Set(repoIds.map((id) => id.trim()).filter(Boolean)))
       : pendingVisibleRepos.map((repo) => repo.id);
     if (normalizedIds.length === 0) {
-      setError(
-        repoKeyword.trim() ? '当前搜索结果里没有可通过的 repo' : '当前没有可通过的 repo',
-      );
+      setError(repoKeyword.trim() ? '当前搜索结果里没有可通过的 repo' : '当前没有可通过的 repo');
       return;
     }
 
@@ -3617,8 +3615,7 @@ export function AdminReviewPage() {
                     <button
                       className="button primary"
                       disabled={
-                        repoBusyAction !== null ||
-                        selectedAuthorPendingRepoIds.length === 0
+                        repoBusyAction !== null || selectedAuthorPendingRepoIds.length === 0
                       }
                       onClick={() =>
                         void handleBulkApproveRepos(

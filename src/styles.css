@@ -7590,7 +7590,10 @@ body:not([data-style='default'])
   .review-layout
   .review-action-row
   > .button.danger.review-primary-action-button:hover:not(:disabled),
-body:not([data-style='default']) .review-layout .repo-action-row > .button.danger:hover:not(:disabled) {
+body:not([data-style='default'])
+  .review-layout
+  .repo-action-row
+  > .button.danger:hover:not(:disabled) {
   background-image: linear-gradient(135deg, #ef4444, #fb7185);
   color: #ffffff;
   opacity: 1;
@@ -7599,8 +7602,14 @@ body:not([data-style='default']) .review-layout .repo-action-row > .button.dange
 
 body:not([data-style='default']) .review-layout .button.warning.review-card-delete-button,
 body:not([data-style='default']) .review-layout .button.warning.review-delete-action-button,
-body:not([data-style='default']) .review-layout .repo-review-actions-column > .button.danger.repo-delete-selected-button,
-body:not([data-style='default']) .review-layout .admin-bulk-review-actions > .button.danger.admin-bulk-delete-selected-button {
+body:not([data-style='default'])
+  .review-layout
+  .repo-review-actions-column
+  > .button.danger.repo-delete-selected-button,
+body:not([data-style='default'])
+  .review-layout
+  .admin-bulk-review-actions
+  > .button.danger.admin-bulk-delete-selected-button {
   background-image: linear-gradient(135deg, #fbbf24, #f59e0b);
   background-color: #fbbf24;
   color: #1a1a1a;
@@ -7643,4 +7652,3 @@ body:not([data-style='default']) .review-layout .tab-chip.active:hover:not(:disa
   color: #0c4a6e;
   opacity: 1;
 }
-
