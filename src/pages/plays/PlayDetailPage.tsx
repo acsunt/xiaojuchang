@@ -657,15 +657,15 @@ export function PlayDetailPage() {
                 type="button"
               >
                 修改
-             </button>
+              </button>
               <button
                 className="button secondary detail-upload-derived-button"
                 onClick={handleUploadDerived}
                 type="button"
               >
                 上传衍生
-             </button>
-           </div>
+              </button>
+            </div>
             <div className="inline-actions">
               <span className="content-meta">约 {play.content.length} 字</span>
               <button
