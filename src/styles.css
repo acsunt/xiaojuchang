@@ -1089,9 +1089,47 @@ body[data-style='default'][data-mode='day'] .button.danger {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
 
-/* 衍生版本勾选列表：平铺 checkbox，右侧展示更新时间。
- * - 不再使用 tab-chip 切换，每个版本一行铺开
- * - 当前 url 指向的版本用 .checked 兜底高亮，且 checkbox 禁用 */
+/* 「同标题/分类版本」+ 右侧「平铺」开关同行 */
+.detail-version-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 「平铺」checkbox 标签 */
+.detail-version-flat-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  width: fit-content;
+}
+.detail-version-flat-toggle input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent, #6c8cff);
+  cursor: inherit;
+}
+
+/* 平铺关闭：tab-chip 单选切换（原行为） */
+.detail-version-row {
+  gap: 8px;
+}
+
+.detail-version-row .tab-chip {
+  width: auto;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+/* 平铺开启：每行一个 checkbox，右侧展示更新时间 */
 .detail-version-list {
   list-style: none;
   padding: 0;
@@ -1152,8 +1190,7 @@ body[data-style='default'][data-mode='day'] .button.danger {
   opacity: 0.75;
 }
 
-/* 多版本正文堆叠：每个版本一块 content-panel，
- * 当前查看的版本（来自 url）加 .current 高亮顶部 */
+/* 平铺开启：每个版本一块 content-panel，当前 url 指向的版本加 .current */
 .detail-version-content-stack {
   display: grid;
   gap: 14px;
@@ -5055,6 +5092,19 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 @media (max-width: 720px) {
   .review-log-head-row {
     flex-wrap: nowrap;
+  }
+
+  /* 「上传衍生」按钮：手机端宽度收到文字宽度，避免继承 .button {width:100%}
+   * 占据整行；同时让文字不换行。 */
+  .detail-upload-derived-button {
+    width: fit-content;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* 「平铺」开关：手机端宽度 = 文字宽度，避免把整行撑开。 */
+  .detail-version-flat-toggle {
+    width: fit-content;
   }
 }
 

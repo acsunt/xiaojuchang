@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   countPlayBatchItems,
   detectPlayTitleFromContent,
@@ -35,6 +36,14 @@ const initialForm = {
   summary: '',
   content: '',
 };
+
+export type UploadPrefill = Partial<{
+  authorName: string;
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+}>;
 
 const UPLOAD_CATEGORY_TAGS_OPEN_KEY = 'mini-theater:upload-category-tags-open';
 
@@ -117,6 +126,9 @@ const makeDerivedVersion = (): DerivedVersionDraft => ({
 });
 
 export function UploadPage() {
+  const location = useLocation();
+  const locationState = location.state as { prefill?: UploadPrefill } | null;
+  const prefill = locationState?.prefill;
   const [form, setForm] = useState(initialForm);
   const [batchText, setBatchText] = useState('');
   const [mode, setMode] = useState<UploadMode>('single');
@@ -132,6 +144,26 @@ export function UploadPage() {
     null,
   );
   const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
+
+  /* 从详情页跳转过来的预填：每次 prefill 变化时覆盖当前 form。
+   * 用 JSON 字符串做依赖而不是对象引用，避免 React 浅比较认为未变。 */
+  const prefillKey = JSON.stringify(prefill ?? null);
+  useEffect(() => {
+    if (!prefill) {
+      return;
+    }
+    setForm({
+      authorName: prefill.authorName ?? '',
+      title: prefill.title ?? '',
+      category: prefill.category ?? '',
+      summary: prefill.summary ?? '',
+      content: prefill.content ?? '',
+    });
+    setMode('single');
+    setDerivedVersions([]);
+    setEditingHistoryId('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillKey]);
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
 
   /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。 */
