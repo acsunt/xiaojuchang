@@ -3073,7 +3073,7 @@ export function AdminReviewPage() {
                       </label>
                       <div className="stack-gap-sm admin-bulk-review-actions">
                         <button
-                          className="button primary"
+                          className="button primary admin-approve-all-button"
                           disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
                           onClick={() =>
                             void handleBulkApprove(pendingVisibleIds, '当前列表待审核')
@@ -3414,7 +3414,7 @@ export function AdminReviewPage() {
                     </p>
                   </div>
                   <button
-                    className="button primary"
+                    className="button primary admin-approve-all-button"
                     disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
                     onClick={() => void handleBulkApproveRepos()}
                     type="button"
@@ -3986,7 +3986,7 @@ export function AdminReviewPage() {
                               </label>
                             </div>
                           ))}
-                          <div className="inline-actions wrap-mobile">
+                          <div className="inline-actions wrap-mobile admin-derived-action-row">
                             <button
                               className="button secondary"
                               disabled={derivedSubmitting}

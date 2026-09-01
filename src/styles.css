@@ -1089,14 +1089,79 @@ body[data-style='default'][data-mode='day'] .button.danger {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
 }
 
-.detail-version-row {
+/* 衍生版本勾选列表：平铺 checkbox，右侧展示更新时间。
+ * - 不再使用 tab-chip 切换，每个版本一行铺开
+ * - 当前 url 指向的版本用 .checked 兜底高亮，且 checkbox 禁用 */
+.detail-version-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
   gap: 8px;
 }
 
-.detail-version-row .tab-chip {
-  width: auto;
-  min-height: 36px;
-  padding: 0 12px;
+.detail-version-item {
+  display: block;
+}
+
+.detail-version-row-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-strong);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.detail-version-row-label:hover {
+  background: color-mix(in srgb, var(--accent, #6c8cff) 8%, var(--panel-strong));
+}
+
+.detail-version-row-label.checked {
+  border-color: color-mix(in srgb, var(--accent, #6c8cff) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent, #6c8cff) 10%, var(--panel-strong));
+}
+
+.detail-version-row-label input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: var(--accent, #6c8cff);
+  cursor: inherit;
+}
+
+.detail-version-row-label input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
+.detail-version-label-text {
+  flex: 1 1 auto;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text);
+}
+
+.detail-version-meta {
+  flex: 0 0 auto;
+  font-size: calc(11px * var(--text-scale, 1));
+  color: var(--text-soft, var(--text));
+  opacity: 0.75;
+}
+
+/* 多版本正文堆叠：每个版本一块 content-panel，
+ * 当前查看的版本（来自 url）加 .current 高亮顶部 */
+.detail-version-content-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.detail-version-block.current {
+  border-color: color-mix(in srgb, var(--accent, #6c8cff) 45%, var(--border));
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent, #6c8cff) 14%, transparent);
 }
 
 .detail-meta-switch-wrapper {
@@ -1529,22 +1594,23 @@ body[data-style='default'][data-mode='day'] .button.danger {
   color: white;
 }
 
-/* 状态标签底色：所有主题共用同一套实色 + 白字，保证在任何浅底/深底上都能看清。
- * 语义上 approved / offline 这两个类也被"二次投稿差异"块复用为
- * (有改动 / 已改) 和 (分类 未改 / 简介 未改 / 正文 未改) 的底色。 */
+/* 状态标签底色：所有主题共用同一套低饱和、柔和的实色 + 白字。
+ * 之前用的是 #7c8cf3 / #3ac48a / #ef6a6a，饱和度偏高，在审核后台
+ * "分类 未改 / 简介 未改 / 正文 已改"这类文本背景上视觉上偏刺眼；
+ * 这里整体往低饱和方向调整,字色仍保持白。 */
 .status-tag.pending {
-  background: #7c8cf3;
+  background: #a3b1f4;
   color: #ffffff;
 }
 
 .status-tag.approved {
-  background: #3ac48a;
+  background: #7ad6b1;
   color: #ffffff;
 }
 
 .status-tag.rejected,
 .status-tag.offline {
-  background: #ef6a6a;
+  background: #f09696;
   color: #ffffff;
 }
 
@@ -2155,6 +2221,24 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
     text-overflow: ellipsis;
   }
   .upload-single-action-row > .upload-submit-button {
+    flex: 1 1 auto;
+  }
+
+  /* 审核后台：手机端「衍生 + 提交并通过」同一行 */
+  .admin-derived-action-row {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .admin-derived-action-row > .button {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-derived-action-row > .button.primary {
     flex: 1 1 auto;
   }
 }
@@ -5796,6 +5880,32 @@ body[data-style='glass'] .update-prompt-modal .modal-action-row > .button.primar
   -webkit-backdrop-filter: none;
 }
 
+/* 玻璃拟态：把整个「发现新功能更新」弹窗底色调亮，
+ * 避免继承通用规则里的 rgba(255,255,255,0.08) 导致整体偏暗。
+ * 日间用高透明白底 + 强化边框，夜间用更亮的中性灰。 */
+body[data-style='glass'][data-mode='day'] .update-prompt-modal {
+  background: rgba(255, 255, 255, 0.78);
+  color: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 18px 48px rgba(80, 110, 150, 0.22),
+    0 2px 6px rgba(80, 110, 150, 0.12);
+}
+body[data-style='glass'][data-mode='day'] .update-prompt-modal .modal-action-row {
+  background: rgba(255, 255, 255, 0.92);
+}
+body[data-style='glass'][data-mode='night'] .update-prompt-modal {
+  background: #2f3a42;
+  color: #f5fafd;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+body[data-style='glass'][data-mode='night'] .update-prompt-modal .modal-action-row {
+  background: #38444e;
+}
+
 body[data-style='corporate'] {
   --font-family: '方正润黑简约电子风', sans-serif;
 }
@@ -6723,4 +6833,195 @@ body[data-style='brutalism'][data-mode='night'] .feature-panel h3 {
 .preview-content-block {
   position: relative;
   padding-right: 18px;
+}
+
+/* ---------- 「通过当前待审核」主操作按钮 ----------
+ * 这个按钮是审核后台"批量通过当前列表待审核"的最高频主操作，
+ * 需要在所有主题下都比普通 .button.primary 更醒目。
+ * 每个主题单独给一对 highlight / highlight-strong 色（线性渐变 + 阴影），
+ * 默认主题沿用 --accent 渐变。 */
+.admin-approve-all-button {
+  background-image: linear-gradient(
+    135deg,
+    var(--approve-highlight, var(--accent)),
+    var(--approve-highlight-strong, var(--accent-strong))
+  );
+  background-color: var(--approve-highlight, var(--accent));
+  color: #ffffff;
+  border: 1px solid var(--approve-highlight-strong, var(--accent-strong));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--approve-highlight, var(--accent)) 32%, transparent);
+}
+
+.admin-approve-all-button:hover:not(:disabled) {
+  background-image: linear-gradient(
+    135deg,
+    var(--approve-highlight-strong, var(--accent-strong)),
+    var(--approve-highlight, var(--accent))
+  );
+  opacity: 1;
+  box-shadow: 0 6px 18px
+    color-mix(in srgb, var(--approve-highlight, var(--accent)) 40%, transparent);
+}
+
+/* 默认主题：高饱和度蓝 */
+body[data-style='default'][data-mode='day'] {
+  --approve-highlight: #1c8a4f;
+  --approve-highlight-strong: #0f6a3a;
+}
+body[data-style='default'][data-mode='night'] {
+  --approve-highlight: #2ec27e;
+  --approve-highlight-strong: #1c8a4f;
+}
+
+/* minimal：低饱和度灰蓝主题，给一个稳重的深绿 */
+body[data-style='minimal'][data-mode='day'] {
+  --approve-highlight: #2f6f4a;
+  --approve-highlight-strong: #214d33;
+}
+body[data-style='minimal'][data-mode='night'] {
+  --approve-highlight: #4caa74;
+  --approve-highlight-strong: #2f6f4a;
+}
+
+/* neumorphism：浅色拟态，深绿主操作 */
+body[data-style='neumorphism'][data-mode='day'] {
+  --approve-highlight: #2c8f5e;
+  --approve-highlight-strong: #1c5d3c;
+}
+body[data-style='neumorphism'][data-mode='night'] {
+  --approve-highlight: #43b07e;
+  --approve-highlight-strong: #2c8f5e;
+}
+
+/* glass：青色系 */
+body[data-style='glass'][data-mode='day'] {
+  --approve-highlight: #2da693;
+  --approve-highlight-strong: #1a7a6c;
+}
+body[data-style='glass'][data-mode='night'] {
+  --approve-highlight: #45d0bd;
+  --approve-highlight-strong: #2da693;
+}
+
+/* corporate：商务蓝 */
+body[data-style='corporate'][data-mode='day'] {
+  --approve-highlight: #2e8a4a;
+  --approve-highlight-strong: #1c5d31;
+}
+body[data-style='corporate'][data-mode='night'] {
+  --approve-highlight: #3fb568;
+  --approve-highlight-strong: #2e8a4a;
+}
+
+/* gradient：粉橙渐变背景，给高对比的深绿 */
+body[data-style='gradient'][data-mode='day'] {
+  --approve-highlight: #1f8a4a;
+  --approve-highlight-strong: #0f5d2e;
+}
+body[data-style='gradient'][data-mode='night'] {
+  --approve-highlight: #33c97a;
+  --approve-highlight-strong: #1f8a4a;
+}
+
+/* memphis：黄黑高对比 */
+body[data-style='memphis'][data-mode='day'] {
+  --approve-highlight: #e21d68;
+  --approve-highlight-strong: #ad154d;
+}
+body[data-style='memphis'][data-mode='night'] {
+  --approve-highlight: #ff3377;
+  --approve-highlight-strong: #e21d68;
+}
+
+/* cyberpunk：霓虹粉 */
+body[data-style='cyberpunk'][data-mode='day'] {
+  --approve-highlight: #00b894;
+  --approve-highlight-strong: #008f74;
+}
+body[data-style='cyberpunk'][data-mode='night'] {
+  --approve-highlight: #1affc4;
+  --approve-highlight-strong: #00b894;
+}
+
+/* swiss：瑞士设计，黑红 */
+body[data-style='swiss'][data-mode='day'] {
+  --approve-highlight: #cc2a2a;
+  --approve-highlight-strong: #8e1a1a;
+}
+body[data-style='swiss'][data-mode='night'] {
+  --approve-highlight: #ff5252;
+  --approve-highlight-strong: #cc2a2a;
+}
+
+/* editorial：编辑风，砖红 */
+body[data-style='editorial'][data-mode='day'] {
+  --approve-highlight: #ad4a2c;
+  --approve-highlight-strong: #803418;
+}
+body[data-style='editorial'][data-mode='night'] {
+  --approve-highlight: #d97a4a;
+  --approve-highlight-strong: #ad4a2c;
+}
+
+/* illustration：插画风，洋红 */
+body[data-style='illustration'][data-mode='day'] {
+  --approve-highlight: #2a8d4a;
+  --approve-highlight-strong: #1b5d2f;
+}
+body[data-style='illustration'][data-mode='night'] {
+  --approve-highlight: #48c070;
+  --approve-highlight-strong: #2a8d4a;
+}
+
+/* isometric：等距，靛蓝 */
+body[data-style='isometric'][data-mode='day'] {
+  --approve-highlight: #2a8a5a;
+  --approve-highlight-strong: #1a5d3a;
+}
+body[data-style='isometric'][data-mode='night'] {
+  --approve-highlight: #45c08a;
+  --approve-highlight-strong: #2a8a5a;
+}
+
+/* retro：复古，金棕 */
+body[data-style='retro'][data-mode='day'] {
+  --approve-highlight: #a85a18;
+  --approve-highlight-strong: #753a08;
+}
+body[data-style='retro'][data-mode='night'] {
+  --approve-highlight: #d28435;
+  --approve-highlight-strong: #a85a18;
+}
+
+/* futuristic：未来感，青蓝 */
+body[data-style='futuristic'][data-mode='day'] {
+  --approve-highlight: #1c8aa8;
+  --approve-highlight-strong: #0c5d75;
+}
+body[data-style='futuristic'][data-mode='night'] {
+  --approve-highlight: #33c5e0;
+  --approve-highlight-strong: #1c8aa8;
+}
+
+/* pastel：粉彩，柔和豆绿 */
+body[data-style='pastel'][data-mode='day'] {
+  --approve-highlight: #4a9a6a;
+  --approve-highlight-strong: #2c6d45;
+}
+body[data-style='pastel'][data-mode='night'] {
+  --approve-highlight: #75c896;
+  --approve-highlight-strong: #4a9a6a;
+}
+
+/* brutalism：粗野主义，黑底高对比 */
+body[data-style='brutalism'][data-mode='day'] {
+  --approve-highlight: #1a1a1a;
+  --approve-highlight-strong: #000000;
+}
+body[data-style='brutalism'][data-mode='night'] {
+  --approve-highlight: #00e676;
+  --approve-highlight-strong: #00b85f;
 }

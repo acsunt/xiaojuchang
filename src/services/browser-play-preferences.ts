@@ -6,6 +6,7 @@ const PLAZA_AUTO_REFRESH_KEY = 'mini-theater.plaza-auto-refresh';
 const PLAZA_CONTROLS_COLLAPSED_KEY = 'mini-theater:plaza-controls-collapsed';
 const PLAZA_TOOLBAR_COLLAPSED_KEY = 'mini-theater:plaza-toolbar-collapsed';
 const PLAZA_TOOLBAR_UPDATED_EVENT = 'mini-theater:plaza-toolbar-updated';
+const DETAIL_VERSION_SELECTION_KEY = 'mini-theater:detail-version-selection';
 const PLAZA_NAVIGATION_SNAPSHOT_TTL = 30 * 60 * 1000;
 const FAVORITE_RANDOM_WEIGHT = 3;
 
@@ -208,6 +209,48 @@ export const updatePlazaNavigationSnapshot = (patch: Partial<PlazaNavigationSnap
 
 export const clearPlazaNavigationSnapshot = () => {
   clearSessionStore(PLAZA_NAVIGATION_SNAPSHOT_KEY);
+};
+
+/* ---------- 详情页衍生版本勾选状态 ----------
+ * 按 getPlayVersionKey 键存一组「该版本组里被勾选显示的 play id」。
+ * 默认全选：读取时用传入的 candidateIds 补齐缺失项。 */
+export const getDetailVersionSelection = (groupKey: string, candidateIds: string[]): string[] => {
+  if (!groupKey || candidateIds.length === 0) {
+    return [];
+  }
+
+  const raw = readStore<Record<string, string[]>>(DETAIL_VERSION_SELECTION_KEY, {});
+  const stored = Array.isArray(raw[groupKey]) ? raw[groupKey] : null;
+  const storedSet = new Set(stored ?? []);
+  const candidateSet = new Set(candidateIds);
+
+  // 第一次访问或脏数据 → 默认全选 candidate
+  if (!stored || stored.length === 0) {
+    return [...candidateIds];
+  }
+
+  // 过滤掉已经不在 candidate 里的旧 id
+  const filtered = stored.filter((id) => candidateSet.has(id));
+
+  // 候选里新出现的版本（衍生版本刚加进来）默认勾选
+  candidateIds.forEach((id) => {
+    if (!storedSet.has(id)) {
+      filtered.push(id);
+    }
+  });
+
+  return filtered;
+};
+
+export const setDetailVersionSelection = (groupKey: string, selectedIds: string[]) => {
+  if (!groupKey) {
+    return;
+  }
+
+  const raw = readStore<Record<string, string[]>>(DETAIL_VERSION_SELECTION_KEY, {});
+  const next = { ...raw, [groupKey]: uniq(selectedIds) };
+  writeStore(DETAIL_VERSION_SELECTION_KEY, next);
+  return next[groupKey];
 };
 
 export const getPlazaAutoRefresh = () => {
