@@ -566,6 +566,7 @@ export function PlayDetailPage() {
           {visibleVersionItems.map((item) => {
             const versionIndex = versionItems.findIndex((row) => row.id === item.id);
             const isCurrent = item.id === id;
+            const isOriginal = versionIndex === 0;
             return (
               <article
                 className={
@@ -581,7 +582,7 @@ export function PlayDetailPage() {
                       {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : 0)}
                       {isCurrent ? '（当前查看）' : ''}
                     </h3>
-                    {isCurrent ? (
+                    {isOriginal ? (
                       <button
                         className="button secondary detail-upload-derived-button"
                         onClick={handleUploadDerived}
@@ -600,7 +601,7 @@ export function PlayDetailPage() {
                       type="button"
                       title="复制正文"
                     >
-                      ⧉
+                      �
                     </button>
                   </div>
                 </div>

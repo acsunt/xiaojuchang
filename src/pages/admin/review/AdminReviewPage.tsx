@@ -224,6 +224,111 @@ const reviewActionLabelMap: Record<ReviewAction, string> = {
   offline: '下线',
 };
 
+/* 行级 diff：把 before / after 按行切分，公共行 (LCS) 原样，
+ * 其余分别标 removed / added。
+ * 用 O(n*m) DP 对短文本够用,长文也能跑。 */
+type DiffSegment = { kind: 'same' | 'removed' | 'added'; text: string };
+
+/* 把文本切成 "unit"：每个汉字单独成一个 unit,每个英文/数字单词成一个 unit,
+ * 连续空白成一个 unit,单个标点/其他符号成一个 unit。
+ * 这样 LCS 能在中文长文里精确到"字",在英文段落里精确到"词"。 */
+const tokenizeDiffUnits = (value: string): string[] => {
+  if (!value) {
+    return [];
+  }
+  /* 正则优先级：
+   * 1. 连续 [a-zA-Z0-9_]（含下划线常见于英文标识符）
+   * 2. 连续 CJK Unified Ideographs / 扩展
+   * 3. 连续空白
+   * 4. 单个其他字符（标点、emoji 等） */
+  const regex =
+    /[A-Za-z0-9_]+|[\u3400-\u9fff\uf900-\ufaff]+|[^\S\n]+|[^\u3400-\u9fff\uf900-\ufaffA-Za-z0-9_\s]/gu;
+  const matches = value.match(regex);
+  return matches ? matches : [];
+};
+
+const lcsSegments = (a: string[], b: string[]): DiffSegment[] => {
+  const n = a.length;
+  const m = b.length;
+
+  /* dp[i][j] = a[0..i-1] 与 b[0..j-1] 的 LCS 长度 */
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = 1; i <= n; i += 1) {
+    for (let j = 1; j <= m; j += 1) {
+      if (a[i - 1] === b[j - 1]) {
+        dp[i][j] = dp[i - 1][j - 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+  }
+
+  const segments: DiffSegment[] = [];
+  let i = n;
+  let j = m;
+  while (i > 0 && j > 0) {
+    if (a[i - 1] === b[j - 1]) {
+      segments.push({ kind: 'same', text: a[i - 1] });
+      i -= 1;
+      j -= 1;
+    } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+      segments.push({ kind: 'removed', text: a[i - 1] });
+      i -= 1;
+    } else {
+      segments.push({ kind: 'added', text: b[j - 1] });
+      j -= 1;
+    }
+  }
+  while (i > 0) {
+    segments.push({ kind: 'removed', text: a[i - 1] });
+    i -= 1;
+  }
+  while (j > 0) {
+    segments.push({ kind: 'added', text: b[j - 1] });
+    j -= 1;
+  }
+  return segments.reverse();
+};
+
+/* Unit-level diff：把前后两段文本按中文字/英文词/数字/标点切成 unit,
+ * 再做 LCS,得到一段段 "same / removed / added" 标记的 unit 序列。 */
+const buildUnitDiff = (before: string, after: string): DiffSegment[] => {
+  const segments = lcsSegments(tokenizeDiffUnits(before ?? ''), tokenizeDiffUnits(after ?? ''));
+  /* 合并相邻同 kind 的 unit,渲染时少一些 span。 */
+  const merged: DiffSegment[] = [];
+  for (const segment of segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.kind === segment.kind) {
+      last.text += segment.text;
+    } else {
+      merged.push({ ...segment });
+    }
+  }
+  return merged;
+};
+
+const renderDiffSegments = (segments: DiffSegment[]) =>
+  segments.map((segment, index) => {
+    if (!segment.text) {
+      return null;
+    }
+    if (segment.kind === 'same') {
+      return <span key={index}>{segment.text}</span>;
+    }
+    if (segment.kind === 'removed') {
+      return (
+        <span className="diff-segment diff-segment-removed" key={index}>
+          {segment.text}
+        </span>
+      );
+    }
+    return (
+      <span className="diff-segment diff-segment-added" key={index}>
+        {segment.text}
+      </span>
+    );
+  });
+
 const repoAuditActionLabelMap: Record<RepoAuditAction, string> = {
   approve: '通过',
   reject: '拒绝',
@@ -3855,21 +3960,32 @@ export function AdminReviewPage() {
                           ))}
                         </div>
                         <div className="stack-gap-sm">
-                          {submissionDiffItems.map((item) =>
-                            item.changed ? (
+                          {submissionDiffItems.map((item) => {
+                            if (!item.changed) {
+                              return null;
+                            }
+                            /* 短字段（如分类）不值得走 unit-level 高亮,直接显示原文。 */
+                            const useUnitDiff = item.label !== '分类';
+                            const beforeSegments = useUnitDiff
+                              ? renderDiffSegments(buildUnitDiff(item.before, item.after))
+                              : item.before || '（空）';
+                            const afterSegments = useUnitDiff
+                              ? renderDiffSegments(buildUnitDiff(item.before, item.after))
+                              : item.after || '（空）';
+                            return (
                               <article className="diff-card" key={item.label}>
                                 <strong>{item.label}</strong>
                                 <div className="diff-copy-row">
                                   <span className="content-meta">上一版</span>
-                                  <p>{item.before || '（空）'}</p>
+                                  <p>{item.before ? beforeSegments : '（空）'}</p>
                                 </div>
                                 <div className="diff-copy-row diff-copy-row-next">
                                   <span className="content-meta">当前版</span>
-                                  <p>{item.after || '（空）'}</p>
+                                  <p>{item.after ? afterSegments : '（空）'}</p>
                                 </div>
                               </article>
-                            ) : null,
-                          )}
+                            );
+                          })}
                         </div>
                       </div>
                     ) : null}

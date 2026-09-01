@@ -3477,6 +3477,44 @@ body.tag-sort-dragging {
   border-top: 1px dashed var(--border);
 }
 
+/* Unit-level diff 高亮：removed = 上一版里被移除/改掉的部分,
+ * added = 当前版里新加/改入的部分。背景色按 status-tag 同一色板
+ * (pending 紫 / approved 绿 / rejected 红) 调淡雅 + 加删除线,让上下两栏
+ * 一眼能看出修改位置。 */
+.diff-copy-row p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-segment {
+  border-radius: 4px;
+  padding: 0 2px;
+  margin: 0 1px;
+}
+
+.diff-segment-removed {
+  background: rgba(240, 150, 150, 0.45);
+  color: #6b1f1f;
+  text-decoration: line-through;
+  text-decoration-color: rgba(107, 31, 31, 0.55);
+}
+
+.diff-segment-added {
+  background: rgba(122, 214, 177, 0.45);
+  color: #0f3a25;
+}
+
+body[data-mode='night'] .diff-segment-removed {
+  background: rgba(240, 150, 150, 0.28);
+  color: #ffd3d3;
+  text-decoration-color: rgba(255, 211, 211, 0.7);
+}
+
+body[data-mode='night'] .diff-segment-added {
+  background: rgba(122, 214, 177, 0.28);
+  color: #d3f6e3;
+}
+
 .tag-sort-gesture-note {
   padding: 10px 12px;
   border-radius: 14px;
@@ -7099,4 +7137,18 @@ body[data-style='brutalism'][data-mode='night'] {
 .detail-content-head-title .detail-upload-derived-button {
   margin-left: 0;
   flex: 0 0 auto;
+}
+
+/* 详情页 content-head 右侧 "字数 + 复制" / "字数 + 复制 + 上传衍生"
+ * 这组 inline-actions：字数是行内 span，按钮是 icon-button / .button，
+ * 默认基线对齐会让"约 xxx 字"文字相对按钮偏下一些。
+ * 给字数 span 加 inline-flex + center，让它和按钮视觉上同一水平线。 */
+.detail-content-head-with-derived .inline-actions {
+  align-items: center;
+}
+
+.detail-content-head-with-derived .inline-actions .content-meta {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
