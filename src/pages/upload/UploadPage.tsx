@@ -351,8 +351,6 @@ export function UploadPage() {
      * 提交时按顺序上传,依赖列表页/详情页的"同标题+同分类"聚合逻辑。
      * 从详情页「上传衍生」进来时,原文和已有衍生只用于回填展示,只有被改过的
      * 会作为新一版重新投,加上末尾新增的衍生一起提交。 */
-    let submittedCount = 0;
-
     if (!appendDerived) {
       const createdOriginal = await playApi.uploadPlay(originalDraft);
       saveSubmissionRecord(originalDraft, {
@@ -396,7 +394,6 @@ export function UploadPage() {
       const created = await playApi.uploadPlay(originalDraft);
       saveSubmissionRecord(originalDraft, { latestPlayId: created.id });
       rememberOwnedPlayId(created.id);
-      submittedCount += 1;
     }
 
     for (const version of derivedVersions) {
@@ -417,7 +414,6 @@ export function UploadPage() {
       const created = await playApi.uploadPlay(draft);
       saveSubmissionRecord(draft, { latestPlayId: created.id });
       rememberOwnedPlayId(created.id);
-      submittedCount += 1;
     }
 
     syncLocalHistory(authorName);
