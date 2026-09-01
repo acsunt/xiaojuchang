@@ -4042,31 +4042,38 @@ export function AdminReviewPage() {
 
                   {selectedRepo ? (
                     <section className="form-panel stack-gap-md admin-review-detail-panel">
-                      {/* 顶部 tab-chip 行：查看模式 + 三个 tab-chip 同行 (手机端也同行)
-                       * 没有"返回列表"按钮, 点列表里别的卡片即可切换。 */}
-                      <div className="inline-actions admin-review-mode-line">
-                        <span className="content-meta">查看模式</span>
-                        <button
-                          className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('preview')}
-                          type="button"
-                        >
-                          仅预览
-                        </button>
-                        <button
-                          className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('edit')}
-                          type="button"
-                        >
-                          仅编辑
-                        </button>
-                        <button
-                          className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => setAdminViewMode('both')}
-                          type="button"
-                        >
-                          编辑 + 预览
-                        </button>
+                      {/* 与小剧场审核完全对齐：上半行 = admin-review-mode-line,
+                       * 左半 = admin-mode-lefthalf (查看模式 + 3 个 tab-chip),
+                       * 右半 = admin-mode-righthalf (repo 没有"上一篇/下一篇"也不展示 diff,
+                       * 但容器结构保持一致)。 */}
+                      <div className="admin-review-mode-line">
+                        <div className="inline-actions wrap-mobile admin-review-view-mode-row admin-mode-lefthalf">
+                          <span className="content-meta">查看模式</span>
+                          <button
+                            className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
+                            onClick={() => setAdminViewMode('preview')}
+                            type="button"
+                          >
+                            仅预览
+                          </button>
+                          <button
+                            className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
+                            onClick={() => setAdminViewMode('edit')}
+                            type="button"
+                          >
+                            仅编辑
+                          </button>
+                          <button
+                            className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
+                            onClick={() => setAdminViewMode('both')}
+                            type="button"
+                          >
+                            编辑 + 预览
+                          </button>
+                        </div>
+                        {/* 右半空壳：与小剧场审核的 admin-mode-righthalf 容器结构对齐,
+                         * repo 没有"上一篇/下一篇"按钮,留空壳保持两半布局。 */}
+                        <div className="inline-actions admin-adjacent-row admin-mode-righthalf" />
                       </div>
 
                       <div
@@ -4079,23 +4086,30 @@ export function AdminReviewPage() {
                         }
                       >
                         {adminViewMode !== 'edit' ? (
-                          <div className="stack-gap-sm admin-review-detail-preview">
-                            <div className="stack-gap-xs">
+                          <div className="detail-panel stack-gap-md admin-review-detail-preview">
+                            <div className="card-topline">
                               <span className={`status-tag ${selectedRepo.status}`}>
                                 {repoStatusLabelMap[selectedRepo.status]}
                               </span>
+                              <span>{selectedRepo.playTitle ?? selectedRepo.playId}</span>
+                            </div>
+                            <div className="preview-section-header">
                               <strong>{selectedRepo.nickname}</strong>
                               <span className="content-meta">
-                                《{selectedRepo.playTitle ?? selectedRepo.playId}》 ·{' '}
                                 {new Date(selectedRepo.createdAt).toLocaleString('zh-CN')}
                               </span>
-                              {selectedRepo.replyToNickname ? (
-                                <span className="content-meta">
-                                  回复 {selectedRepo.replyToNickname}
-                                </span>
-                              ) : null}
                             </div>
-                            <p className="admin-review-detail-content">{selectedRepo.content}</p>
+                            {selectedRepo.replyToNickname ? (
+                              <p className="sub-copy">回复 {selectedRepo.replyToNickname}</p>
+                            ) : null}
+                            <div className="inline-detail-block stack-gap-md preview-content-block">
+                              <div className="preview-section-header">
+                                <span className="content-meta">
+                                  正文约 {selectedRepo.content.length} 字
+                                </span>
+                              </div>
+                              <p className="admin-review-detail-content">{selectedRepo.content}</p>
+                            </div>
                             {selectedRepo.reviewNote ? (
                               <p className="sub-copy">审核备注：{selectedRepo.reviewNote}</p>
                             ) : null}
@@ -4103,7 +4117,13 @@ export function AdminReviewPage() {
                         ) : null}
 
                         {adminViewMode !== 'preview' ? (
-                          <div className="stack-gap-sm admin-review-detail-edit">
+                          <div className="detail-panel stack-gap-md admin-review-detail-edit">
+                            <div className="preview-section-header">
+                              <strong>编辑 repo</strong>
+                              <span className="content-meta">
+                                原 {selectedRepo.content.length} 字
+                              </span>
+                            </div>
                             <label className="stack-gap-xs">
                               <span>repo 正文</span>
                               <textarea

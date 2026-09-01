@@ -3318,6 +3318,7 @@ body.tag-sort-dragging {
 
 /* ---------- 任务 5：repo 审核「详情面板」三种查看模式 ----------
  * 与小剧场审核共用 adminViewMode ('preview' / 'edit' / 'both')。
+ * 容器布局完全照搬 plays 审核：admin-review-mode-line 内分 admin-mode-lefthalf / admin-mode-righthalf。
  * 仅预览：上下排版（单列）
  * 仅编辑：上下排版（单列）
  * 编辑 + 预览：左右双列(grid-template-columns: 1fr 1fr,手机端降为单列)
@@ -3325,8 +3326,7 @@ body.tag-sort-dragging {
 .admin-review-detail-panel {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, white 12%);
-  /* 顶部 tab-chip 行窄屏下保持同行,这里允许横向滚动而不被压缩到按钮消失 */
-  overflow-x: auto;
+  /* 顶部 mode-line 窄屏下,左右两半分别 wrap 自然换行;不需要额外强制。 */
 }
 
 .admin-review-detail-grid {
@@ -3361,25 +3361,6 @@ body.tag-sort-dragging {
 
 .admin-review-detail-close-button {
   margin-left: auto;
-}
-
-/* 顶部查看模式 tab-chip 行：手机端也保持同行 (仅三个 tab-chip + "查看模式" 标签)。
- * specificity 0,2,0 (比 .inline-actions 0,1,0 高),所以 flex-wrap 覆盖能生效。
- * min-width: max-content 让容器最小按内容撑开,窄屏下不会被压缩到按钮消失。 */
-.admin-review-detail-panel > .admin-review-mode-line {
-  flex-wrap: nowrap;
-  gap: 8px;
-  min-width: max-content;
-}
-
-.admin-review-detail-panel > .admin-review-mode-line > .content-meta {
-  white-space: nowrap;
-  flex: 0 0 auto;
-}
-
-.admin-review-detail-panel > .admin-review-mode-line > .tab-chip {
-  white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 /* 底部动作行 (删除 / 拒绝 / 保存 / 通过) */
