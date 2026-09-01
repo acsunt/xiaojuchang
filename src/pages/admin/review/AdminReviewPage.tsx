@@ -38,6 +38,13 @@ import {
 } from '../../../services/admin-duplicate-review';
 import { playApi } from '../../../services/play-api';
 import {
+  getAdminReviewDiffFlat,
+  setAdminReviewDiffFlat,
+  getAdminReviewDiffRange,
+  setAdminReviewDiffRange,
+  type AdminReviewDiffRange,
+} from '../../../services/browser-play-preferences';
+import {
   DEFAULT_CATEGORY,
   PLAYS_UPDATED_EVENT,
   TAGS_UPDATED_EVENT,
@@ -533,6 +540,10 @@ export function AdminReviewPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
   const [selectedPlayId, setSelectedPlayId] = useState('');
+  /* 差异对照：依次排开 + 展示范围。本地持久化，默认 flat=true + 'changed'。
+   * flat 勾选后按平铺渲染，不做红绿差异标记；不勾选则用词级红绿 diff。 */
+  const [diffFlat, setDiffFlat] = useState<boolean>(() => getAdminReviewDiffFlat());
+  const [diffRange, setDiffRange] = useState<AdminReviewDiffRange>(() => getAdminReviewDiffRange());
   const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
   const [allPlayReviewLogs, setAllPlayReviewLogs] = useState<ReviewLog[]>([]);
   const [allRepoAuditLogs, setAllRepoAuditLogs] = useState<RepoAuditLog[]>([]);
@@ -3863,6 +3874,53 @@ export function AdminReviewPage() {
                     </button>
                   </div>
                   <div className="inline-actions admin-adjacent-row admin-mode-righthalf">
+                    {previousSubmission ? (
+                      <>
+                        <div
+                          className="inline-actions admin-diff-range-group"
+                          role="group"
+                          aria-label="差异展示范围"
+                        >
+                          {(
+                            [
+                              { value: 'changed', label: '有改动' },
+                              { value: 'unchanged', label: '无改动' },
+                              { value: 'all', label: '全部' },
+                            ] as Array<{ value: AdminReviewDiffRange; label: string }>
+                          ).map((option) => (
+                            <button
+                              key={option.value}
+                              className={
+                                diffRange === option.value ? 'tab-chip active' : 'tab-chip'
+                              }
+                              onClick={() => {
+                                setDiffRange(option.value);
+                                setAdminReviewDiffRange(option.value);
+                                if (option.value === 'changed') {
+                                  setDiffFlat(true);
+                                  setAdminReviewDiffFlat(true);
+                                }
+                              }}
+                              type="button"
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                        <label className="detail-version-flat-toggle admin-diff-flat-toggle">
+                          <input
+                            checked={diffFlat}
+                            onChange={(event) => {
+                              const next = event.target.checked;
+                              setDiffFlat(next);
+                              setAdminReviewDiffFlat(next);
+                            }}
+                            type="checkbox"
+                          />
+                          <span>依次排开</span>
+                        </label>
+                      </>
+                    ) : null}
                     <button
                       className="button secondary admin-mode-adjacent-button"
                       disabled={!adminPrevPlayId}
@@ -3961,23 +4019,45 @@ export function AdminReviewPage() {
                           ))}
                         </div>
                         <div className="stack-gap-sm">
-                          {submissionDiffItems.map((item) => {
-                            if (!item.changed) {
-                              return null;
-                            }
-                            /* 单栏词级 diff：红色删除、绿色新增，不再上下对照。 */
-                            const segments = renderDiffSegments(
-                              buildUnitDiff(item.before, item.after),
-                            );
-                            return (
-                              <article className="diff-card" key={item.label}>
-                                <strong>{item.label}</strong>
-                                <div className="diff-copy-row">
-                                  <p>{item.before || item.after ? segments : '（空）'}</p>
-                                </div>
-                              </article>
-                            );
-                          })}
+                          {submissionDiffItems
+                            .filter((item) => {
+                              if (diffRange === 'changed') return item.changed;
+                              if (diffRange === 'unchanged') return !item.changed;
+                              return true;
+                            })
+                            .map((item) => {
+                              /* diffFlat = true：像详情页平铺一样，上下两栏依次排开原文/新版，
+                               *              不做红绿差异标记；
+                               * diffFlat = false：单栏词级 diff，红色删除、绿色新增。 */
+                              if (diffFlat) {
+                                return (
+                                  <article className="diff-card" key={item.label}>
+                                    <strong>{item.label}</strong>
+                                    <div className="stack-gap-sm admin-diff-flat-body">
+                                      <div className="admin-diff-flat-row">
+                                        <span className="content-meta">上一版</span>
+                                        <p>{item.before || '（空）'}</p>
+                                      </div>
+                                      <div className="admin-diff-flat-row">
+                                        <span className="content-meta">当前版本</span>
+                                        <p>{item.after || '（空）'}</p>
+                                      </div>
+                                    </div>
+                                  </article>
+                                );
+                              }
+                              const segments = renderDiffSegments(
+                                buildUnitDiff(item.before, item.after),
+                              );
+                              return (
+                                <article className="diff-card" key={item.label}>
+                                  <strong>{item.label}</strong>
+                                  <div className="diff-copy-row">
+                                    <p>{item.before || item.after ? segments : '（空）'}</p>
+                                  </div>
+                                </article>
+                              );
+                            })}
                         </div>
                       </div>
                     ) : null}

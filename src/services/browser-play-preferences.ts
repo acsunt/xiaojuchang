@@ -8,6 +8,8 @@ const PLAZA_TOOLBAR_COLLAPSED_KEY = 'mini-theater:plaza-toolbar-collapsed';
 const PLAZA_TOOLBAR_UPDATED_EVENT = 'mini-theater:plaza-toolbar-updated';
 const DETAIL_FLAT_VIEW_KEY = 'mini-theater:detail-flat-view';
 const DETAIL_VERSION_SELECTION_KEY = 'mini-theater:detail-version-selection';
+const ADMIN_REVIEW_DIFF_FLAT_KEY = 'mini-theater:admin-review-diff-flat';
+const ADMIN_REVIEW_DIFF_RANGE_KEY = 'mini-theater:admin-review-diff-range';
 const PLAZA_NAVIGATION_SNAPSHOT_TTL = 30 * 60 * 1000;
 const FAVORITE_RANDOM_WEIGHT = 3;
 
@@ -265,6 +267,46 @@ export const setDetailVersionSelection = (groupKey: string, selectedIds: string[
   const next = { ...raw, [groupKey]: uniq(selectedIds) };
   writeStore(DETAIL_VERSION_SELECTION_KEY, next);
   return next[groupKey];
+};
+
+/* ---------- 审核后台差异对照：依次排开 / 展示范围 ----------
+ * 依次排开(flat)：勾选后按详情页平铺样式渲染，不做红绿差异标记；
+ *                 不勾选则用原来的红绿词级 diff。
+ * 展示范围(range)：changed / unchanged / all,决定下方展示的字段范围。
+ * 默认：flat = true,range = 'changed'。 */
+export type AdminReviewDiffRange = 'changed' | 'unchanged' | 'all';
+
+export const getAdminReviewDiffFlat = () => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  const raw = window.localStorage.getItem(ADMIN_REVIEW_DIFF_FLAT_KEY);
+  return raw === null ? true : raw === 'true';
+};
+
+export const setAdminReviewDiffFlat = (enabled: boolean) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(ADMIN_REVIEW_DIFF_FLAT_KEY, String(enabled));
+  }
+  return enabled;
+};
+
+export const getAdminReviewDiffRange = (): AdminReviewDiffRange => {
+  if (typeof window === 'undefined') {
+    return 'changed';
+  }
+  const raw = window.localStorage.getItem(ADMIN_REVIEW_DIFF_RANGE_KEY);
+  if (raw === 'unchanged' || raw === 'all' || raw === 'changed') {
+    return raw;
+  }
+  return 'changed';
+};
+
+export const setAdminReviewDiffRange = (range: AdminReviewDiffRange) => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(ADMIN_REVIEW_DIFF_RANGE_KEY, range);
+  }
+  return range;
 };
 
 export const getPlazaAutoRefresh = () => {

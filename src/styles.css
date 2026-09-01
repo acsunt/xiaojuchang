@@ -3261,11 +3261,44 @@ body.tag-sort-dragging {
   flex: 0 0 auto;
 }
 
+/* 差异对照工具条：有改动 / 无改动 / 全部 + 依次排开 */
+.admin-diff-range-group {
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.admin-diff-range-group .tab-chip {
+  width: auto;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.admin-diff-flat-toggle {
+  white-space: nowrap;
+}
+
+/* 依次排开时的字段块：上一版 / 当前版本 两栏依次排开，不做红绿差异标记。 */
+.admin-diff-flat-body {
+  gap: 8px;
+}
+
+.admin-diff-flat-row {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-diff-flat-row p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 720px) {
   .admin-review-mode-line .admin-mode-righthalf {
     margin-left: 0;
     width: 100%;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
   }
@@ -3273,6 +3306,9 @@ body.tag-sort-dragging {
     width: auto;
     flex: 0 0 auto;
     white-space: nowrap;
+  }
+  .admin-diff-range-group {
+    flex-wrap: wrap;
   }
   .admin-review-mode-line {
     flex-direction: column;
@@ -5994,6 +6030,58 @@ body[data-style='glass'][data-mode='night'] .update-prompt-modal .modal-action-r
   background: #38444e;
 }
 
+/* 玻璃拟态：「发现新增内容 / 新增了 N 条小剧场」弹窗
+ * 结构和 .update-prompt-modal 类似，也会被卡片规则涂成半透明毛玻璃底，
+ * 导致弹窗和背后的模糊层几乎看不清边界。这里参照上面的更新弹窗，
+ * 把弹窗底色和按钮改成不透明明亮版。 */
+body[data-style='glass'][data-mode='day'] .plaza-refresh-modal {
+  background: rgba(255, 255, 255, 0.82);
+  color: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 18px 48px rgba(80, 110, 150, 0.22),
+    0 2px 6px rgba(80, 110, 150, 0.12);
+}
+body[data-style='glass'][data-mode='night'] .plaza-refresh-modal {
+  background: #2f3a42;
+  color: #f5fafd;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+}
+body[data-style='glass'] .plaza-refresh-modal h3,
+body[data-style='glass'] .plaza-refresh-modal .sub-copy {
+  color: inherit;
+}
+body[data-style='glass'] .plaza-refresh-modal .plaza-refresh-modal-actions > .button.secondary {
+  background: var(--panel-strong, #ffffff);
+  color: var(--text);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body[data-style='glass'][data-mode='night']
+  .plaza-refresh-modal
+  .plaza-refresh-modal-actions
+  > .button.secondary {
+  background: #38444e;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+body[data-style='glass'] .plaza-refresh-modal .plaza-refresh-modal-actions > .button.primary {
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  background-color: var(--accent);
+  color: #fff;
+  border: 1px solid transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 body[data-style='corporate'] {
   --font-family: '方正润黑简约电子风', sans-serif;
 }
@@ -6935,7 +7023,7 @@ body[data-style='brutalism'][data-mode='night'] .feature-panel h3 {
     var(--approve-highlight-strong, var(--accent-strong))
   );
   background-color: var(--approve-highlight, var(--accent));
-  color: #ffffff;
+  color: var(--approve-highlight-text, #ffffff);
   border: 1px solid var(--approve-highlight-strong, var(--accent-strong));
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -6968,150 +7056,399 @@ body[data-style='default'][data-mode='night'] {
 body[data-style='minimal'][data-mode='day'] {
   --approve-highlight: #2f6f4a;
   --approve-highlight-strong: #214d33;
+  --reject-highlight: #c62828;
+  --reject-highlight-strong: #8e1b1b;
+  --delete-highlight: #d97706;
+  --delete-highlight-strong: #b45309;
 }
 body[data-style='minimal'][data-mode='night'] {
   --approve-highlight: #4caa74;
   --approve-highlight-strong: #2f6f4a;
+  --reject-highlight: #ff6b6b;
+  --reject-highlight-strong: #e04848;
+  --delete-highlight: #f0b429;
+  --delete-highlight-strong: #d49a16;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* neumorphism：浅色拟态，深绿主操作 */
 body[data-style='neumorphism'][data-mode='day'] {
   --approve-highlight: #2c8f5e;
   --approve-highlight-strong: #1c5d3c;
+  --reject-highlight: #d64545;
+  --reject-highlight-strong: #a83232;
+  --delete-highlight: #e8a317;
+  --delete-highlight-strong: #c4840c;
+  --delete-highlight-text: #1a1a1a;
 }
 body[data-style='neumorphism'][data-mode='night'] {
   --approve-highlight: #43b07e;
   --approve-highlight-strong: #2c8f5e;
+  --reject-highlight: #f07171;
+  --reject-highlight-strong: #d44d4d;
+  --delete-highlight: #f0b429;
+  --delete-highlight-strong: #d49a16;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* glass：青色系 */
 body[data-style='glass'][data-mode='day'] {
   --approve-highlight: #2da693;
   --approve-highlight-strong: #1a7a6c;
+  --reject-highlight: #e05a7a;
+  --reject-highlight-strong: #c43d62;
+  --delete-highlight: #e8a020;
+  --delete-highlight-strong: #c47e10;
+  --delete-highlight-text: #1a1a1a;
 }
 body[data-style='glass'][data-mode='night'] {
   --approve-highlight: #45d0bd;
   --approve-highlight-strong: #2da693;
+  --approve-highlight-text: #08332c;
+  --reject-highlight: #ff6b9a;
+  --reject-highlight-strong: #e04878;
+  --delete-highlight: #ffc44d;
+  --delete-highlight-strong: #e0a628;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* corporate：商务蓝 */
 body[data-style='corporate'][data-mode='day'] {
   --approve-highlight: #2e8a4a;
   --approve-highlight-strong: #1c5d31;
+  --reject-highlight: #c0392b;
+  --reject-highlight-strong: #922b21;
+  --delete-highlight: #d68910;
+  --delete-highlight-strong: #a66a0c;
 }
 body[data-style='corporate'][data-mode='night'] {
   --approve-highlight: #3fb568;
   --approve-highlight-strong: #2e8a4a;
+  --reject-highlight: #e74c3c;
+  --reject-highlight-strong: #c0392b;
+  --delete-highlight: #f0b429;
+  --delete-highlight-strong: #d49a16;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* gradient：粉橙渐变背景，给高对比的深绿 */
 body[data-style='gradient'][data-mode='day'] {
   --approve-highlight: #1f8a4a;
   --approve-highlight-strong: #0f5d2e;
+  --reject-highlight: #c41e3a;
+  --reject-highlight-strong: #8e1528;
+  --delete-highlight: #5b4cdb;
+  --delete-highlight-strong: #3d32a0;
 }
 body[data-style='gradient'][data-mode='night'] {
   --approve-highlight: #33c97a;
   --approve-highlight-strong: #1f8a4a;
+  --reject-highlight: #ff4d6d;
+  --reject-highlight-strong: #e02d50;
+  --delete-highlight: #ffcc4d;
+  --delete-highlight-strong: #e0aa28;
+  --delete-highlight-text: #1a1a1a;
 }
 
-/* memphis：黄黑高对比 */
+/* memphis：黄黑高对比；通过已是玫红，拒绝用深紫、删除用橙 */
 body[data-style='memphis'][data-mode='day'] {
   --approve-highlight: #e21d68;
   --approve-highlight-strong: #ad154d;
+  --reject-highlight: #5e35b1;
+  --reject-highlight-strong: #4527a0;
+  --delete-highlight: #ff6f00;
+  --delete-highlight-strong: #e65100;
 }
 body[data-style='memphis'][data-mode='night'] {
   --approve-highlight: #ff3377;
   --approve-highlight-strong: #e21d68;
+  --reject-highlight: #7c4dff;
+  --reject-highlight-strong: #651fff;
+  --delete-highlight: #ffd600;
+  --delete-highlight-strong: #f9a825;
+  --delete-highlight-text: #111111;
 }
 
-/* cyberpunk：霓虹粉 */
+/* cyberpunk：通过用霓虹青绿，拒绝用品红，删除用电光橙 */
 body[data-style='cyberpunk'][data-mode='day'] {
   --approve-highlight: #00b894;
   --approve-highlight-strong: #008f74;
+  --reject-highlight: #c400a5;
+  --reject-highlight-strong: #8e0078;
+  --delete-highlight: #e65100;
+  --delete-highlight-strong: #bf360c;
 }
 body[data-style='cyberpunk'][data-mode='night'] {
   --approve-highlight: #1affc4;
   --approve-highlight-strong: #00b894;
+  --approve-highlight-text: #041a14;
+  --reject-highlight: #ff00de;
+  --reject-highlight-strong: #cc00b0;
+  --delete-highlight: #ffea00;
+  --delete-highlight-strong: #f9a825;
+  --delete-highlight-text: #111111;
 }
 
-/* swiss：瑞士设计，黑红 */
+/* swiss：通过沿用主题红，拒绝用黑、删除用金，避免三个都是红 */
 body[data-style='swiss'][data-mode='day'] {
   --approve-highlight: #cc2a2a;
   --approve-highlight-strong: #8e1a1a;
+  --reject-highlight: #111111;
+  --reject-highlight-strong: #000000;
+  --delete-highlight: #f9a825;
+  --delete-highlight-strong: #c47e10;
+  --delete-highlight-text: #111111;
 }
 body[data-style='swiss'][data-mode='night'] {
   --approve-highlight: #ff5252;
   --approve-highlight-strong: #cc2a2a;
+  --reject-highlight: #f5f5f5;
+  --reject-highlight-strong: #d0d0d0;
+  --reject-highlight-text: #111111;
+  --delete-highlight: #ffd54f;
+  --delete-highlight-strong: #f9a825;
+  --delete-highlight-text: #111111;
 }
 
-/* editorial：编辑风，砖红 */
+/* editorial：编辑风，通过用砖红，拒绝用酒红，删除用暗金 */
 body[data-style='editorial'][data-mode='day'] {
   --approve-highlight: #ad4a2c;
   --approve-highlight-strong: #803418;
+  --reject-highlight: #8b1e3f;
+  --reject-highlight-strong: #5c1429;
+  --delete-highlight: #c9a227;
+  --delete-highlight-strong: #9a7a18;
+  --delete-highlight-text: #1a1a1a;
 }
 body[data-style='editorial'][data-mode='night'] {
   --approve-highlight: #d97a4a;
   --approve-highlight-strong: #ad4a2c;
+  --reject-highlight: #e05a7a;
+  --reject-highlight-strong: #c43d62;
+  --delete-highlight: #e8c547;
+  --delete-highlight-strong: #c4a428;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* illustration：插画风，洋红 */
 body[data-style='illustration'][data-mode='day'] {
   --approve-highlight: #2a8d4a;
   --approve-highlight-strong: #1b5d2f;
+  --reject-highlight: #e53935;
+  --reject-highlight-strong: #c62828;
+  --delete-highlight: #fb8c00;
+  --delete-highlight-strong: #ef6c00;
 }
 body[data-style='illustration'][data-mode='night'] {
   --approve-highlight: #48c070;
   --approve-highlight-strong: #2a8d4a;
+  --reject-highlight: #ff6b6b;
+  --reject-highlight-strong: #e04848;
+  --delete-highlight: #ffb74d;
+  --delete-highlight-strong: #f0a020;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* isometric：等距，靛蓝 */
 body[data-style='isometric'][data-mode='day'] {
   --approve-highlight: #2a8a5a;
   --approve-highlight-strong: #1a5d3a;
+  --reject-highlight: #d32f2f;
+  --reject-highlight-strong: #b71c1c;
+  --delete-highlight: #f9a825;
+  --delete-highlight-strong: #f57f17;
+  --delete-highlight-text: #1a1a1a;
 }
 body[data-style='isometric'][data-mode='night'] {
   --approve-highlight: #45c08a;
   --approve-highlight-strong: #2a8a5a;
+  --reject-highlight: #ef5350;
+  --reject-highlight-strong: #e53935;
+  --delete-highlight: #ffd54f;
+  --delete-highlight-strong: #ffca28;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* retro：复古，金棕 */
+/* retro：通过已是锈橙，拒绝用深红、删除用墨褐，避免两个暖色撞车 */
 body[data-style='retro'][data-mode='day'] {
   --approve-highlight: #a85a18;
   --approve-highlight-strong: #753a08;
+  --reject-highlight: #8b1a1a;
+  --reject-highlight-strong: #5c1010;
+  --delete-highlight: #3d2b1f;
+  --delete-highlight-strong: #2b1f14;
 }
 body[data-style='retro'][data-mode='night'] {
   --approve-highlight: #d28435;
   --approve-highlight-strong: #a85a18;
+  --reject-highlight: #ff5252;
+  --reject-highlight-strong: #e53935;
+  --delete-highlight: #ffe082;
+  --delete-highlight-strong: #ffd54f;
+  --delete-highlight-text: #2b1f14;
 }
 
 /* futuristic：未来感，青蓝 */
 body[data-style='futuristic'][data-mode='day'] {
   --approve-highlight: #1c8aa8;
   --approve-highlight-strong: #0c5d75;
+  --reject-highlight: #e5396d;
+  --reject-highlight-strong: #c2185b;
+  --delete-highlight: #ff8f00;
+  --delete-highlight-strong: #ef6c00;
 }
 body[data-style='futuristic'][data-mode='night'] {
   --approve-highlight: #33c5e0;
   --approve-highlight-strong: #1c8aa8;
+  --approve-highlight-text: #042028;
+  --reject-highlight: #ff2d78;
+  --reject-highlight-strong: #e01060;
+  --delete-highlight: #ffd740;
+  --delete-highlight-strong: #ffc107;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* pastel：粉彩，柔和豆绿 */
 body[data-style='pastel'][data-mode='day'] {
   --approve-highlight: #4a9a6a;
   --approve-highlight-strong: #2c6d45;
+  --reject-highlight: #e0526c;
+  --reject-highlight-strong: #c43d58;
+  --delete-highlight: #e89a3c;
+  --delete-highlight-strong: #c47e20;
+  --delete-highlight-text: #1a1a1a;
 }
 body[data-style='pastel'][data-mode='night'] {
   --approve-highlight: #75c896;
   --approve-highlight-strong: #4a9a6a;
+  --approve-highlight-text: #14301c;
+  --reject-highlight: #ff7a9a;
+  --reject-highlight-strong: #e05a7a;
+  --delete-highlight: #ffcc80;
+  --delete-highlight-strong: #f0b429;
+  --delete-highlight-text: #1a1a1a;
 }
 
 /* brutalism：粗野主义，黑底高对比 */
 body[data-style='brutalism'][data-mode='day'] {
   --approve-highlight: #1a1a1a;
   --approve-highlight-strong: #000000;
+  --reject-highlight: #d32f2f;
+  --reject-highlight-strong: #b71c1c;
+  --delete-highlight: #ffeb3b;
+  --delete-highlight-strong: #fbc02d;
+  --delete-highlight-text: #111111;
 }
 body[data-style='brutalism'][data-mode='night'] {
   --approve-highlight: #00e676;
   --approve-highlight-strong: #00b85f;
+  --approve-highlight-text: #04140a;
+  --reject-highlight: #ff1744;
+  --reject-highlight-strong: #d50000;
+  --delete-highlight: #ffeb3b;
+  --delete-highlight-strong: #fbc02d;
+  --delete-highlight-text: #111111;
+}
+
+/* ---------- 非默认主题：小剧场审核「通过 / 拒绝 / 删除」 ----------
+ * 非默认主题会把 .button.primary / .danger / .warning 全部压成同一套
+ * --btn-bg-color，导致三个操作看不出差别。
+ * 这里用更高优先级把「通过」对齐「通过当前待审核」，拒绝和删除再各给
+ * 一套主题色，默认主题不碰。 */
+body:not([data-style='default']) .button.primary.admin-approve-all-button,
+body:not([data-style='default']) .button.primary.review-card-approve-button,
+body:not([data-style='default'])
+  .review-action-row
+  > .button.primary.review-primary-action-button {
+  background-image: linear-gradient(
+    135deg,
+    var(--approve-highlight, var(--accent)),
+    var(--approve-highlight-strong, var(--accent-strong))
+  );
+  background-color: var(--approve-highlight, var(--accent));
+  color: var(--approve-highlight-text, #ffffff);
+  border: 1px solid var(--approve-highlight-strong, var(--accent-strong));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--approve-highlight, var(--accent)) 32%, transparent);
+}
+
+body:not([data-style='default']) .button.primary.admin-approve-all-button:hover:not(:disabled),
+body:not([data-style='default']) .button.primary.review-card-approve-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-action-row
+  > .button.primary.review-primary-action-button:hover:not(:disabled) {
+  background-image: linear-gradient(
+    135deg,
+    var(--approve-highlight-strong, var(--accent-strong)),
+    var(--approve-highlight, var(--accent))
+  );
+  color: var(--approve-highlight-text, #ffffff);
+  opacity: 1;
+  box-shadow: 0 6px 18px
+    color-mix(in srgb, var(--approve-highlight, var(--accent)) 40%, transparent);
+}
+
+body:not([data-style='default'])
+  .review-action-row
+  > .button.danger.review-primary-action-button {
+  background-image: linear-gradient(
+    135deg,
+    var(--reject-highlight, #c62828),
+    var(--reject-highlight-strong, #8e1b1b)
+  );
+  background-color: var(--reject-highlight, #c62828);
+  color: var(--reject-highlight-text, #ffffff);
+  border: 1px solid var(--reject-highlight-strong, #8e1b1b);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--reject-highlight, #c62828) 32%, transparent);
+}
+
+body:not([data-style='default'])
+  .review-action-row
+  > .button.danger.review-primary-action-button:hover:not(:disabled) {
+  background-image: linear-gradient(
+    135deg,
+    var(--reject-highlight-strong, #8e1b1b),
+    var(--reject-highlight, #c62828)
+  );
+  color: var(--reject-highlight-text, #ffffff);
+  opacity: 1;
+  box-shadow: 0 6px 18px
+    color-mix(in srgb, var(--reject-highlight, #c62828) 40%, transparent);
+}
+
+body:not([data-style='default']) .button.warning.review-card-delete-button,
+body:not([data-style='default']) .button.warning.review-delete-action-button {
+  background-image: linear-gradient(
+    135deg,
+    var(--delete-highlight, #d97706),
+    var(--delete-highlight-strong, #b45309)
+  );
+  background-color: var(--delete-highlight, #d97706);
+  color: var(--delete-highlight-text, #ffffff);
+  border: 1px solid var(--delete-highlight-strong, #b45309);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--delete-highlight, #d97706) 32%, transparent);
+}
+
+body:not([data-style='default']) .button.warning.review-card-delete-button:hover:not(:disabled),
+body:not([data-style='default']) .button.warning.review-delete-action-button:hover:not(:disabled) {
+  background-image: linear-gradient(
+    135deg,
+    var(--delete-highlight-strong, #b45309),
+    var(--delete-highlight, #d97706)
+  );
+  color: var(--delete-highlight-text, #ffffff);
+  opacity: 1;
+  box-shadow: 0 6px 18px
+    color-mix(in srgb, var(--delete-highlight, #d97706) 40%, transparent);
 }
 
 /* 详情页"小剧场正文" / 衍生版本标题 行：标题与"上传衍生"按钮紧挨同行，
