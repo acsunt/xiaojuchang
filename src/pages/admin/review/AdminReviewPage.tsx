@@ -537,6 +537,8 @@ export function AdminReviewPage() {
   const [repoDeleteBusy, setRepoDeleteBusy] = useState(false);
   const [repoDeleteProgress, setRepoDeleteProgress] = useState<DeleteProgress | null>(null);
   const [isRepoMultiSelectMode, setIsRepoMultiSelectMode] = useState(false);
+  /* repo 审核的"按作者一键通过"下拉：与小剧场 bulkAuthorName 一一对应。 */
+  const [repoBulkAuthorName, setRepoBulkAuthorName] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
   const [selectedPlayId, setSelectedPlayId] = useState('');
@@ -1124,6 +1126,23 @@ export function AdminReviewPage() {
     [deleteAuthorName, filteredPlays],
   );
 
+  /* repo 审核"按作者一键通过":以待审核 repo 里的作者集合作为下拉候选。
+   * 备注:repo 的作者字段是 playAuthorName(所属小剧场作者),按作者过滤更符合直觉。 */
+  const pendingRepoAuthorOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(pendingVisibleRepos.map((repo) => repo.playAuthorName ?? '').filter(Boolean)),
+      ).sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    [pendingVisibleRepos],
+  );
+  const selectedAuthorPendingRepoIds = useMemo(
+    () =>
+      pendingVisibleRepos
+        .filter((repo) => (repo.playAuthorName ?? '') === repoBulkAuthorName)
+        .map((repo) => repo.id),
+    [pendingVisibleRepos, repoBulkAuthorName],
+  );
+
   const parsedBulkSelectCount = Number.parseInt(bulkSelectCountInput.trim(), 10);
   const bulkSelectCount = Number.isFinite(parsedBulkSelectCount)
     ? Math.max(0, parsedBulkSelectCount)
@@ -1428,6 +1447,12 @@ export function AdminReviewPage() {
       setBulkAuthorName('');
     }
   }, [bulkAuthorName, pendingAuthorOptions]);
+
+  useEffect(() => {
+    if (repoBulkAuthorName && !pendingRepoAuthorOptions.includes(repoBulkAuthorName)) {
+      setRepoBulkAuthorName('');
+    }
+  }, [repoBulkAuthorName, pendingRepoAuthorOptions]);
 
   useEffect(() => {
     if (deleteAuthorName && !deleteAuthorOptions.includes(deleteAuthorName)) {
@@ -2386,10 +2411,21 @@ export function AdminReviewPage() {
     }
   };
 
-  const handleBulkApproveRepos = async () => {
-    const pendingRepos = pendingVisibleRepos;
-    if (pendingRepos.length === 0) {
-      setError(repoKeyword.trim() ? '当前搜索结果里没有待审核 repo' : '当前没有待审核 repo');
+  /* repo 批量通过：可选传入一组 repoIds + label,配合"通过当前待审核 / 通过该作者 / 通过已选"三种入口。
+   * 兼容旧签名(无参 = 通过当前列表所有待审核 repo)。 */
+  const handleBulkApproveRepos = async (repoIds?: string[], label?: string) => {
+    const normalizedIds = repoIds
+      ? Array.from(new Set(repoIds.map((id) => id.trim()).filter(Boolean)))
+      : pendingVisibleRepos.map((repo) => repo.id);
+    if (normalizedIds.length === 0) {
+      setError(
+        repoKeyword.trim() ? '当前搜索结果里没有可通过的 repo' : '当前没有可通过的 repo',
+      );
+      return;
+    }
+
+    const targetLabel = label ?? '当前待审核 repo';
+    if (!window.confirm(`确认一键通过${targetLabel}吗？共 ${normalizedIds.length} 条。`)) {
       return;
     }
 
@@ -2397,13 +2433,13 @@ export function AdminReviewPage() {
     setError('');
     setSuccessMessage('');
     try {
-      for (const repo of pendingRepos) {
-        await playApi.reviewRepo(repo.id, 'approve', repoReviewNote);
+      for (const repoId of normalizedIds) {
+        await playApi.reviewRepo(repoId, 'approve', repoReviewNote);
       }
-      markReposApprovedLocally(pendingRepos.map((repo) => repo.id));
+      markReposApprovedLocally(normalizedIds);
       await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
       setRepoReviewNote('');
-      setSuccessMessage(`已通过 ${pendingRepos.length} 条 repo。`);
+      setSuccessMessage(`已通过 ${normalizedIds.length} 条 repo。`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'repo 批量通过失败');
     } finally {
@@ -3216,14 +3252,26 @@ export function AdminReviewPage() {
                             ? '批量处理中'
                             : `通过该作者（${selectedAuthorPendingIds.length}）`}
                         </button>
-                        <button
-                          className="button primary"
-                          disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
-                          onClick={() => void handleBulkApprove(bulkSelectedIds, '已勾选内容')}
-                          type="button"
-                        >
-                          {bulkTask ? '批量处理中' : `通过已选（${bulkSelectedIds.length}）`}
-                        </button>
+                        <div className="inline-actions admin-bulk-review-select-actions">
+                          <button
+                            className="button danger admin-bulk-delete-selected-button"
+                            disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                            onClick={() =>
+                              void handleBatchDelete(bulkSelectedIds, '已勾选待审核内容')
+                            }
+                            type="button"
+                          >
+                            {deleteBusy ? '删除处理中' : `删除已选（${bulkSelectedIds.length}）`}
+                          </button>
+                          <button
+                            className="button primary"
+                            disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                            onClick={() => void handleBulkApprove(bulkSelectedIds, '已勾选内容')}
+                            type="button"
+                          >
+                            {bulkTask ? '批量处理中' : `通过已选（${bulkSelectedIds.length}）`}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </>
@@ -3530,16 +3578,96 @@ export function AdminReviewPage() {
                       独立于小剧场审核状态机，只处理 repo 的通过、拒绝和删除。
                     </p>
                   </div>
-                  <button
-                    className="button primary admin-approve-all-button"
-                    disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
-                    onClick={() => void handleBulkApproveRepos()}
-                    type="button"
-                  >
-                    {repoBusyAction === 'approve'
-                      ? '处理中'
-                      : `通过当前待审核（${pendingVisibleRepos.length}）`}
-                  </button>
+                </div>
+
+                {/* 复刻小剧场审核：左侧「按作者一键通过」下拉 + 右侧三竖列按钮
+                 * (当前待审核 / 通过该作者 / 通过已选)。「通过已选」左侧同样加
+                 * 「删除已选」并做二次确认，与小剧场审核保持一致。 */}
+                <div className="field-grid two-columns admin-bulk-review-grid">
+                  <label>
+                    <span>按作者一键通过</span>
+                    <select
+                      value={repoBulkAuthorName}
+                      onChange={(event) => setRepoBulkAuthorName(event.target.value)}
+                    >
+                      <option value="">先选作者</option>
+                      {pendingRepoAuthorOptions.map((authorName) => (
+                        <option key={authorName} value={authorName}>
+                          {authorName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="stack-gap-sm admin-bulk-review-actions">
+                    <button
+                      className="button primary admin-approve-all-button"
+                      disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
+                      onClick={() =>
+                        void handleBulkApproveRepos(
+                          pendingVisibleRepos.map((repo) => repo.id),
+                          '当前列表待审核 repo',
+                        )
+                      }
+                      type="button"
+                    >
+                      {repoBusyAction === 'approve'
+                        ? '处理中'
+                        : `通过当前待审核（${pendingVisibleRepos.length}）`}
+                    </button>
+                    <button
+                      className="button primary"
+                      disabled={
+                        repoBusyAction !== null ||
+                        selectedAuthorPendingRepoIds.length === 0
+                      }
+                      onClick={() =>
+                        void handleBulkApproveRepos(
+                          selectedAuthorPendingRepoIds,
+                          `作者 ${repoBulkAuthorName} 的待审核 repo`,
+                        )
+                      }
+                      type="button"
+                    >
+                      {repoBusyAction === 'approve'
+                        ? '处理中'
+                        : `通过该作者（${selectedAuthorPendingRepoIds.length}）`}
+                    </button>
+                    <div className="inline-actions admin-bulk-review-select-actions">
+                      <button
+                        className="button danger admin-bulk-delete-selected-button"
+                        disabled={
+                          repoBusyAction !== null ||
+                          repoDeleteBusy ||
+                          !isRepoMultiSelectMode ||
+                          repoDeleteSelectedIds.length === 0
+                        }
+                        onClick={() =>
+                          void handleBatchDeleteRepos(repoDeleteSelectedIds, '已勾选 repo')
+                        }
+                        type="button"
+                      >
+                        {repoDeleteBusy
+                          ? '删除处理中'
+                          : `删除已选（${repoDeleteSelectedIds.length}）`}
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={
+                          repoBusyAction !== null ||
+                          !isRepoMultiSelectMode ||
+                          repoDeleteSelectedIds.length === 0
+                        }
+                        onClick={() =>
+                          void handleBulkApproveRepos(repoDeleteSelectedIds, '已勾选 repo')
+                        }
+                        type="button"
+                      >
+                        {repoBusyAction === 'approve'
+                          ? '处理中'
+                          : `通过已选（${repoDeleteSelectedIds.length}）`}
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="inline-actions wrap-mobile">
                   {repoStatusTabs.map((tab) => (
@@ -3606,6 +3734,8 @@ export function AdminReviewPage() {
                     placeholder="可填写通过或拒绝说明"
                   />
                 </label>
+                {/* 多选控制条：多选 / 全选 / 清空已选。删除已选和通过已选已上移到
+                 * 「按作者一键通过」右侧的三竖列按钮里，这里不再重复。 */}
                 <div className="inline-actions admin-search-action-row">
                   <button
                     className={
@@ -3626,18 +3756,6 @@ export function AdminReviewPage() {
                     type="button"
                   >
                     全选
-                  </button>
-                  <button
-                    className="button danger"
-                    disabled={
-                      repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteSelectedIds.length === 0
-                    }
-                    onClick={() =>
-                      void handleBatchDeleteRepos(repoDeleteSelectedIds, '已勾选 repo')
-                    }
-                    type="button"
-                  >
-                    {repoDeleteBusy ? '删除处理中' : `删除（${repoDeleteSelectedIds.length}）`}
                   </button>
                   <button
                     className="button ghost"
@@ -4035,11 +4153,43 @@ export function AdminReviewPage() {
                                     <strong>{item.label}</strong>
                                     <div className="stack-gap-sm admin-diff-flat-body">
                                       <div className="admin-diff-flat-row">
-                                        <span className="content-meta">上一版</span>
+                                        <div className="admin-diff-flat-row-head">
+                                          <span className="content-meta">上一版</span>
+                                          <button
+                                            type="button"
+                                            className="preview-copy-btn admin-diff-flat-copy-btn"
+                                            title={`复制上一版${item.label}`}
+                                            aria-label={`复制上一版${item.label}`}
+                                            onClick={() => {
+                                              void copyToClipboard(
+                                                item.before,
+                                                `上一版${item.label}`,
+                                              );
+                                            }}
+                                          >
+                                            <i className="fas fa-copy" />
+                                          </button>
+                                        </div>
                                         <p>{item.before || '（空）'}</p>
                                       </div>
                                       <div className="admin-diff-flat-row">
-                                        <span className="content-meta">当前版本</span>
+                                        <div className="admin-diff-flat-row-head">
+                                          <span className="content-meta">当前版本</span>
+                                          <button
+                                            type="button"
+                                            className="preview-copy-btn admin-diff-flat-copy-btn"
+                                            title={`复制当前版本${item.label}`}
+                                            aria-label={`复制当前版本${item.label}`}
+                                            onClick={() => {
+                                              void copyToClipboard(
+                                                item.after,
+                                                `当前版本${item.label}`,
+                                              );
+                                            }}
+                                          >
+                                            <i className="fas fa-copy" />
+                                          </button>
+                                        </div>
                                         <p>{item.after || '（空）'}</p>
                                       </div>
                                     </div>

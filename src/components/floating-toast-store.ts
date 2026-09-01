@@ -5,7 +5,7 @@
  *   - 在 App 根部挂一次 <FloatingToastHost />
  *   - 任意位置调用 showFloatingToast('文案') / showFloatingToast('文案', 'error')
  *
- * 成功提示悬浮 1 秒后自动消失；错误提示悬浮 2.5 秒后自动消失。
+ * 成功和错误提示统一悬浮 1.5 秒后自动消失。
  *
  * 这里只放"非组件"导出（常量 + 触发函数），组件本体保留在 FloatingToast.tsx
  * 以满足 react-refresh/only-export-components 规则。
@@ -14,9 +14,9 @@
 export type FloatingToastTone = 'success' | 'error';
 
 /** 成功提示悬浮时长 */
-export const TOAST_SUCCESS_MS = 1000;
+export const TOAST_SUCCESS_MS = 1500;
 /** 错误提示悬浮时长 */
-export const TOAST_ERROR_MS = 2500;
+export const TOAST_ERROR_MS = 1500;
 
 type ToastItem = {
   id: number;

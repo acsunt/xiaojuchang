@@ -3288,6 +3288,19 @@ body.tag-sort-dragging {
   gap: 4px;
 }
 
+/* 依次排开对照时的字段头部：把"上一版" / "当前版本"标签与右侧复制按钮
+ * 拉到同一行，复制按钮尺寸与预览区一致，视觉延续。 */
+.admin-diff-flat-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-diff-flat-copy-btn {
+  flex: 0 0 auto;
+}
+
 .admin-diff-flat-row p {
   margin: 0;
   white-space: pre-wrap;
@@ -6082,6 +6095,43 @@ body[data-style='glass'] .plaza-refresh-modal .plaza-refresh-modal-actions > .bu
   -webkit-backdrop-filter: none;
 }
 
+/* 玻璃拟态：全局悬浮提示（app toast）
+ * 全站规则 body:not([data-style='default']) .app-toast 把玻璃主题下的 toast
+ * 底色继承成 --card-bg（rgba(255,255,255,0.45) / rgba(255,255,255,0.08)），
+ * 白底半透明 + 半透明文字导致成功/错误文案糊在背景上看不清。
+ * 这里保留玻璃拟态的毛玻璃观感，但把底色降到更实的半透明色 +
+ * 提高文字对比度，同时用 success / danger token 上色让语义可辨。 */
+body[data-style='glass'] .app-toast {
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+body[data-style='glass'][data-mode='day'] .app-toast-success {
+  background: rgba(72, 187, 120, 0.22);
+  color: #0f4c2f;
+  border: 1px solid rgba(72, 187, 120, 0.55);
+  box-shadow: 0 8px 22px rgba(20, 83, 45, 0.16);
+}
+body[data-style='glass'][data-mode='night'] .app-toast-success {
+  background: rgba(72, 213, 151, 0.28);
+  color: #eaffea;
+  border: 1px solid rgba(72, 213, 151, 0.55);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+body[data-style='glass'][data-mode='day'] .app-toast-error {
+  background: rgba(229, 82, 82, 0.22);
+  color: #6a1414;
+  border: 1px solid rgba(229, 82, 82, 0.55);
+  box-shadow: 0 8px 22px rgba(120, 20, 20, 0.16);
+}
+body[data-style='glass'][data-mode='night'] .app-toast-error {
+  background: rgba(255, 117, 117, 0.3);
+  color: #ffe4e4;
+  border: 1px solid rgba(255, 117, 117, 0.55);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
 body[data-style='corporate'] {
   --font-family: '方正润黑简约电子风', sans-serif;
 }
@@ -7481,3 +7531,116 @@ body:not([data-style='default']) .button.warning.review-delete-action-button:hov
   align-items: center;
   line-height: 1;
 }
+
+/* ============ 非默认主题：审核后台按钮清新配色补丁 ============
+ * 需求：把小剧场审核 / repo 审核里的 通过 / 当前待审核 / 拒绝 / 删除
+ * 按钮改成偏清新的色调，替换掉之前"通过=深绿、拒绝=砖红、删除=橙"
+ * 这类偏土的配色。默认主题保持原样，只在非默认主题下作用于审核后台。
+ *
+ * 通过：薄荷绿 (#10b981 -> #059669)
+ * 待审核筛选主色：天青蓝 (#38bdf8 -> #0284c7)
+ * 拒绝：珊瑚红 (#f87171 -> #ef4444)
+ * 删除：琥珀橙 (#fbbf24 -> #f59e0b)
+ * 提示：全部走 tab-chip.active 保持一致，主 CTA 用 gradient 渐变，
+ *      hover 时反向 gradient 增强质感。
+ * 优先级：body:not(default) + .review-layout 已经比通用主题选择器强，
+ *      再通过枚举 review 相关按钮 class 保证覆盖。 */
+body:not([data-style='default']) .review-layout .button.primary.admin-approve-all-button,
+body:not([data-style='default']) .review-layout .button.primary.review-card-approve-button,
+body:not([data-style='default'])
+  .review-layout
+  .review-action-row
+  > .button.primary.review-primary-action-button {
+  background-image: linear-gradient(135deg, #34d399, #059669);
+  background-color: #10b981;
+  color: #ffffff;
+  border: 1px solid #059669;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.28);
+}
+
+body:not([data-style='default'])
+  .review-layout
+  .button.primary.admin-approve-all-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-layout
+  .button.primary.review-card-approve-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-layout
+  .review-action-row
+  > .button.primary.review-primary-action-button:hover:not(:disabled) {
+  background-image: linear-gradient(135deg, #059669, #34d399);
+  color: #ffffff;
+  opacity: 1;
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.38);
+}
+
+body:not([data-style='default'])
+  .review-layout
+  .review-action-row
+  > .button.danger.review-primary-action-button,
+body:not([data-style='default']) .review-layout .repo-action-row > .button.danger {
+  background-image: linear-gradient(135deg, #fb7185, #ef4444);
+  background-color: #f87171;
+  color: #ffffff;
+  border: 1px solid #ef4444;
+  box-shadow: 0 6px 16px rgba(248, 113, 113, 0.28);
+}
+
+body:not([data-style='default'])
+  .review-layout
+  .review-action-row
+  > .button.danger.review-primary-action-button:hover:not(:disabled),
+body:not([data-style='default']) .review-layout .repo-action-row > .button.danger:hover:not(:disabled) {
+  background-image: linear-gradient(135deg, #ef4444, #fb7185);
+  color: #ffffff;
+  opacity: 1;
+  box-shadow: 0 8px 22px rgba(239, 68, 68, 0.38);
+}
+
+body:not([data-style='default']) .review-layout .button.warning.review-card-delete-button,
+body:not([data-style='default']) .review-layout .button.warning.review-delete-action-button,
+body:not([data-style='default']) .review-layout .repo-review-actions-column > .button.danger.repo-delete-selected-button,
+body:not([data-style='default']) .review-layout .admin-bulk-review-actions > .button.danger.admin-bulk-delete-selected-button {
+  background-image: linear-gradient(135deg, #fbbf24, #f59e0b);
+  background-color: #fbbf24;
+  color: #1a1a1a;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 6px 16px rgba(251, 191, 36, 0.32);
+}
+
+body:not([data-style='default'])
+  .review-layout
+  .button.warning.review-card-delete-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-layout
+  .button.warning.review-delete-action-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-layout
+  .repo-review-actions-column
+  > .button.danger.repo-delete-selected-button:hover:not(:disabled),
+body:not([data-style='default'])
+  .review-layout
+  .admin-bulk-review-actions
+  > .button.danger.admin-bulk-delete-selected-button:hover:not(:disabled) {
+  background-image: linear-gradient(135deg, #f59e0b, #fbbf24);
+  color: #1a1a1a;
+  opacity: 1;
+  box-shadow: 0 8px 22px rgba(245, 158, 11, 0.4);
+}
+
+/* 状态筛选 tab-chip.active（全部 / 待审核 / 已通过 / 已拒绝 / 已下线）：
+ * 保持轻量胶囊感，仅激活态用天青蓝底突出"当前所选状态"。 */
+body:not([data-style='default']) .review-layout .tab-chip.active {
+  background-image: linear-gradient(135deg, #7dd3fc, #38bdf8);
+  background-color: #38bdf8;
+  color: #0c4a6e;
+  border: 1px solid #38bdf8;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.28);
+}
+
+body:not([data-style='default']) .review-layout .tab-chip.active:hover:not(:disabled) {
+  background-image: linear-gradient(135deg, #38bdf8, #7dd3fc);
+  color: #0c4a6e;
+  opacity: 1;
+}
+
