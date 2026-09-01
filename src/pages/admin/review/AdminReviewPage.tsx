@@ -1346,6 +1346,34 @@ export function AdminReviewPage() {
     ];
   }, [previousSubmission, selectedPlay]);
 
+  /* 根据 selectedPlay 与上一版的内容差异比例判断本次属于"修改"还是"新增衍生"：
+   *  - 内容改动比例较低（≤30%）视为对原版本的修改;
+   *  - 内容改动比例较高（>30%）视为新增的衍生版本。
+   * 仅在存在 previousSubmission 时计算。 */
+  const submissionClassification = useMemo<
+    | { kind: 'modify'; ratio: number; label: string }
+    | { kind: 'derived'; ratio: number; label: string }
+    | null
+  >(() => {
+    if (!selectedPlay || !previousSubmission) {
+      return null;
+    }
+    const before = previousSubmission.content ?? '';
+    const after = selectedPlay.content ?? '';
+    if (before === after) {
+      return { kind: 'modify', ratio: 0, label: '修改' };
+    }
+    const segments = buildUnitDiff(before, after);
+    const changedLength = segments
+      .filter((segment) => segment.kind !== 'same')
+      .reduce((total, segment) => total + segment.text.length, 0);
+    const baseLength = Math.max(before.length, after.length, 1);
+    const ratio = Math.min(1, changedLength / baseLength);
+    return ratio <= 0.3
+      ? { kind: 'modify', ratio, label: '修改' }
+      : { kind: 'derived', ratio, label: '新增衍生' };
+  }, [previousSubmission, selectedPlay]);
+
   const metrics = useMemo(() => {
     const total = hasLoadedAllPlays ? allPlays.length : playMetricsSource.length;
     const approved = hasLoadedAllPlays
@@ -4454,8 +4482,24 @@ export function AdminReviewPage() {
                     {previousSubmission ? (
                       <div className="stack-gap-md diff-panel">
                         <div className="content-head">
-                          <h3>二次投稿差异</h3>
-                          <span className="content-meta">对比上一版同标题同作者内容</span>
+                          <div>
+                            <h3>本次投稿差异</h3>
+                            <span className="content-meta">
+                              对比上一版同标题同作者内容,帮助判断本次为「修改」或「新增衍生」
+                            </span>
+                          </div>
+                          {submissionClassification ? (
+                            <span
+                              className={
+                                submissionClassification.kind === 'modify'
+                                  ? 'status-tag approved'
+                                  : 'status-tag pending'
+                              }
+                              title={`与上一版内容改动比例约 ${(submissionClassification.ratio * 100).toFixed(0)}%`}
+                            >
+                              {submissionClassification.label}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="inline-actions wrap-mobile diff-chip-row">
                           {submissionDiffItems.map((item) => (

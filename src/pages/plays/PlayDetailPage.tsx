@@ -410,7 +410,11 @@ export function PlayDetailPage() {
 
   /* 上传衍生：跳到 /upload 单篇模式。
    * - 原文填进主表单；已有衍生版本按顺序回填到衍生块；
-   * - 末尾再追加一个空的新衍生，提交时只上传新增的那几版。 */
+   * - 末尾再追加一个空的新衍生，提交时只上传新增的那几版。
+   *
+   * 修改任意版本：跳到 /upload,只回填那一版的内容,
+   * 提交后会在同 title+category 同组的尾部追加一版。
+   */
   const handleUploadDerived = () => {
     const original = versionItems[0] ?? play;
     if (!original) {
@@ -429,6 +433,24 @@ export function PlayDetailPage() {
             content: item.content,
           })),
           appendDerived: true,
+        },
+      },
+    });
+  };
+
+  const handleEditVersion = (target: Play) => {
+    if (!target) {
+      return;
+    }
+    navigate('/upload', {
+      state: {
+        prefill: {
+          authorName: target.authorName,
+          title: target.title,
+          category: target.category,
+          summary: target.summary,
+          content: target.content,
+          editOriginalId: target.id,
         },
       },
     });
@@ -589,6 +611,13 @@ export function PlayDetailPage() {
                       {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : 0)}
                       {isCurrent ? '（当前查看）' : ''}
                     </h3>
+                    <button
+                      className="button secondary detail-edit-version-button"
+                      onClick={() => handleEditVersion(item)}
+                      type="button"
+                    >
+                      修改
+                    </button>
                     {isOriginal ? (
                       <button
                         className="button secondary detail-upload-derived-button"
@@ -623,13 +652,20 @@ export function PlayDetailPage() {
             <div className="detail-content-head-title">
               <h3>小剧场正文</h3>
               <button
+                className="button secondary detail-edit-version-button"
+                onClick={() => handleEditVersion(play)}
+                type="button"
+              >
+                修改
+             </button>
+              <button
                 className="button secondary detail-upload-derived-button"
                 onClick={handleUploadDerived}
                 type="button"
               >
                 上传衍生
-              </button>
-            </div>
+             </button>
+           </div>
             <div className="inline-actions">
               <span className="content-meta">约 {play.content.length} 字</span>
               <button

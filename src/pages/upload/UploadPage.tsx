@@ -45,6 +45,7 @@ export type UploadPrefill = Partial<{
   content: string;
   existingDerived: Array<{ summary: string; content: string }>;
   appendDerived: boolean;
+  editOriginalId: string;
 }>;
 
 const UPLOAD_CATEGORY_TAGS_OPEN_KEY = 'mini-theater:upload-category-tags-open';
@@ -147,22 +148,21 @@ export function UploadPage() {
     null,
   );
   const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
-  /* appendDerived 模式下的初始快照：原文和已有衍生的 summary/content。
-   * 提交时会拿 form / derivedVersions 与之对比，任何被改过的旧版本都会
-   * 作为新一版投稿，和纯新增的衍生一起上传。 */
+  /* 「修改」模式下的初始快照：原文的 summary/content。
+   * 提交时拿 form 与之对比,有改动才允许提交。 */
   const [originalSnapshot, setOriginalSnapshot] = useState<{
     summary: string;
     content: string;
   } | null>(null);
-  const [derivedSnapshots, setDerivedSnapshots] = useState<
-    Record<string, { summary: string; content: string }>
-  >({});
 
   /* 从详情页跳转过来的预填：每次 prefill 变化时覆盖当前 form。
    * 用 JSON 字符串做依赖而不是对象引用，避免 React 浅比较认为未变。
-   * appendDerived 时：原文 + 已有衍生只用于展示，末尾追加一个空的新衍生。 */
+   * appendDerived 时：原文 + 已有衍生只用于展示，末尾追加一个空的新衍生。
+   * editOriginalId 时：只预填原文，提交即作为同一标题同分类的下一版。 */
   const prefillKey = JSON.stringify(prefill ?? null);
   const appendDerived = Boolean(prefill?.appendDerived);
+  const editOriginalId = prefill?.editOriginalId ?? '';
+  const isEditOriginal = editOriginalId.length > 0;
   useEffect(() => {
     if (!prefill) {
       return;
@@ -181,17 +181,14 @@ export function UploadPage() {
       content: item.content ?? '',
       locked: true,
     }));
-    setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
+    if (isEditOriginal) {
+      /* 「修改」模式只展示原文,不预填任何已有版本,也不在末尾追加新衍生。 */
+      setDerivedVersions([]);
+    } else {
+      setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
+    }
     setOriginalSnapshot(
-      appendDerived ? { summary: prefill.summary ?? '', content: prefill.content ?? '' } : null,
-    );
-    setDerivedSnapshots(
-      appendDerived
-        ? existing.reduce<Record<string, { summary: string; content: string }>>((acc, item) => {
-            acc[item.id] = { summary: item.summary, content: item.content };
-            return acc;
-          }, {})
-        : {},
+      isEditOriginal ? { summary: prefill.summary ?? '', content: prefill.content ?? '' } : null,
     );
     setEditingHistoryId('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,50 +201,41 @@ export function UploadPage() {
     [derivedVersions],
   );
 
-  /* 已有版本里，被用户改过的（appendDerived 才有意义） */
-  const changedLockedDerived = useMemo(() => {
-    if (!appendDerived) return [] as DerivedVersionDraft[];
-    return derivedVersions.filter((version) => {
-      if (!version.locked) return false;
-      const snap = derivedSnapshots[version.id];
-      if (!snap) return false;
-      return snap.summary !== version.summary || snap.content !== version.content;
-    });
-  }, [appendDerived, derivedVersions, derivedSnapshots]);
-
-  /* 原文是否被改过 */
+  /* 「修改原文」模式下,原文与快照对比,用于启用提交按钮与文案。 */
   const originalChanged = useMemo(() => {
-    if (!appendDerived || !originalSnapshot) return false;
+    if (!isEditOriginal || !originalSnapshot) return false;
     return originalSnapshot.summary !== form.summary || originalSnapshot.content !== form.content;
-  }, [appendDerived, originalSnapshot, form.summary, form.content]);
+  }, [isEditOriginal, originalSnapshot, form.summary, form.content]);
 
-  /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。
-   * 新增衍生必须填内容；已有衍生若改过也必须有内容；未改的 locked 版本不参与校验。 */
+  /* appendDerived 模式下,只校验末尾新增的衍生是否都填了内容;
+   * 「修改原文」模式不涉及衍生版本。 */
   const derivedInvalid = useMemo(() => {
+    if (isEditOriginal) return false;
     if (newDerivedVersions.some((version) => !version.content.trim())) {
       return true;
     }
-    if (changedLockedDerived.some((version) => !version.content.trim())) {
-      return true;
-    }
     return false;
-  }, [newDerivedVersions, changedLockedDerived]);
+  }, [isEditOriginal, newDerivedVersions]);
 
-  /* appendDerived 模式下提交条件：至少有一份要投的稿件（新增衍生 /
-   * 改过的原文 / 改过的已有版本）。 */
-  const appendHasSomethingToSubmit =
-    newDerivedVersions.length > 0 || changedLockedDerived.length > 0 || originalChanged;
+  /* appendDerived 模式下,必须至少有一个末尾新增的衍生版本才会允许提交。 */
+  const appendHasSomethingToSubmit = !isEditOriginal && newDerivedVersions.length > 0;
 
   const singleDisabled = useMemo(
     () =>
       submitting ||
       !form.authorName.trim() ||
       !form.title.trim() ||
-      (appendDerived ? !appendHasSomethingToSubmit : !form.content.trim()) ||
+      (isEditOriginal
+        ? !originalChanged
+        : appendDerived
+          ? !appendHasSomethingToSubmit
+          : !form.content.trim()) ||
       derivedInvalid,
     [
       appendDerived,
       appendHasSomethingToSubmit,
+      isEditOriginal,
+      originalChanged,
       derivedInvalid,
       form.authorName,
       form.title,
@@ -339,10 +327,27 @@ export function UploadPage() {
       content: form.content.trim(),
     };
 
-    /* 衍生版本共享 作者/标题/分类,仅各自维护简介 + 内容;
-     * 提交时按顺序上传,依赖列表页/详情页的"同标题+同分类"聚合逻辑。
-     * 从详情页「上传衍生」进来时,原文和已有衍生只用于回填展示,只有被改过的
-     * 会作为新一版重新投,加上末尾新增的衍生一起提交。 */
+    /* 三个模式:
+     * 1) isEditOriginal：详情页「修改原文」入口,只把改动后的原文作为新一版投稿,
+     *    不带任何衍生。
+     * 2) appendDerived：详情页「上传衍生」入口,只追加末尾新增的衍生版本,
+     *    原文和已有版本不允许改字(改字请走「修改原文」/后续编辑入口)。
+     * 3) 普通模式:先投原文,再按顺序投衍生。 */
+    if (isEditOriginal) {
+      const created = await playApi.uploadPlay(originalDraft);
+      saveSubmissionRecord(originalDraft, { latestPlayId: created.id });
+      rememberOwnedPlayId(created.id);
+
+      syncLocalHistory(authorName);
+      setForm(initialForm);
+      setDerivedVersions([]);
+      setOriginalSnapshot(null);
+      setEditingHistoryId('');
+
+      showFloatingToast('原文已重新投稿到待审核池。');
+      return;
+    }
+
     if (!appendDerived) {
       const createdOriginal = await playApi.uploadPlay(originalDraft);
       saveSubmissionRecord(originalDraft, {
@@ -377,22 +382,8 @@ export function UploadPage() {
       return;
     }
 
-    /* appendDerived 模式：按顺序遍历 derivedVersions，locked 且改过的
-     * 补投一版；紧接着（在同一位置附近）投末尾新增的空版本。
-     * 若原文改过，先投一版原文。 */
-    if (originalChanged) {
-      const created = await playApi.uploadPlay(originalDraft);
-      saveSubmissionRecord(originalDraft, { latestPlayId: created.id });
-      rememberOwnedPlayId(created.id);
-    }
-
-    for (const version of derivedVersions) {
-      const isNew = !version.locked;
-      const snap = version.locked ? derivedSnapshots[version.id] : null;
-      const changed =
-        Boolean(snap) && (snap!.summary !== version.summary || snap!.content !== version.content);
-      if (!isNew && !changed) continue;
-
+    /* appendDerived 模式:只追加末尾新增的衍生版本。 */
+    for (const version of newDerivedVersions) {
       const draft = {
         authorName,
         title,
@@ -409,19 +400,9 @@ export function UploadPage() {
     setForm(initialForm);
     setDerivedVersions([]);
     setOriginalSnapshot(null);
-    setDerivedSnapshots({});
     setEditingHistoryId('');
 
-    const changedOldCount = changedLockedDerived.length + (originalChanged ? 1 : 0);
-    if (changedOldCount > 0 && newDerivedVersions.length > 0) {
-      showFloatingToast(
-        `已提交 ${newDerivedVersions.length} 个新衍生，另外重投 ${changedOldCount} 个改动版本到待审核池。`,
-      );
-    } else if (changedOldCount > 0) {
-      showFloatingToast(`已重投 ${changedOldCount} 个改动版本到待审核池。`);
-    } else {
-      showFloatingToast(`已提交 ${newDerivedVersions.length} 个衍生版本到待审核池。`);
-    }
+    showFloatingToast(`已提交 ${newDerivedVersions.length} 个新增衍生版本到待审核池。`);
   };
 
   const handleBatchSubmit = async () => {
@@ -598,26 +579,6 @@ export function UploadPage() {
             </button>
           </div>
 
-          {/* 从详情页「上传衍生」跳过来时,顶部加一条说明,帮用户分清两种改动:
-           *  - 在「原文」/「已有版本」里改字,提交后会被作为新一版重新投稿,与详情里的旧版本同组叠加;
-           *  - 点「衍生」追加在末尾的空版本框,提交后才是真正新增的衍生版本。
-           * 仅展示,不限制编辑;原文改动时会另外用标记徽章提示。 */}
-          {mode === 'single' && appendDerived ? (
-            <div className="callout callout-info upload-derived-explainer">
-              <strong>「上传衍生」模式</strong>
-              <ul className="upload-derived-explainer-list">
-                <li>
-                  在「原文」或下方任一「已有版本」框里改动内容,提交后会以
-                  <em>新一版</em>
-                  形式重投,与现有版本同标题同分类聚合。
-                </li>
-                <li>
-                  点「衍生」按钮在末尾追加的空版本框里写新内容,提交后才是真正的「新增衍生版本」。
-                </li>
-              </ul>
-            </div>
-          ) : null}
-
           <div className="field-grid">
             <label>
               <span>作者</span>
@@ -785,21 +746,14 @@ export function UploadPage() {
                     placeholder="把正文填在这里，我会逐字逐句地认真看"
                   />
                 </ClearableField>
-                {appendDerived && originalChanged ? (
-                  <span className="content-meta upload-derived-change-hint">原文改动待重投</span>
-                ) : null}
               </label>
 
               {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
                * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。
-               * appendDerived 模式下：已有版本也允许改动，改过的会以新一版形式重新提交。 */}
+               * 「上传衍生」模式下,原文与已有版本都不允许改字(改字请走详情页「修改原文」)。 */}
               {derivedVersions.map((version, index) => {
-                const snap = version.locked ? derivedSnapshots[version.id] : null;
-                const changed =
-                  Boolean(snap) &&
-                  (snap!.summary !== version.summary || snap!.content !== version.content);
                 const headLabel = version.locked
-                  ? `已有版本 ${index + 1}${changed ? '（改动待重投）' : ''}`
+                  ? `已有版本 ${index + 1}`
                   : `衍生版本 ${index + 1}${appendDerived ? '（新增）' : ''}`;
                 return (
                   <div className="upload-derived-block stack-gap-sm" key={version.id}>
@@ -868,23 +822,15 @@ export function UploadPage() {
                 >
                   {submitting
                     ? '提交中...'
-                    : editingHistoryId
-                      ? '重新投稿'
-                      : appendDerived
-                        ? (() => {
-                            const changedOld =
-                              changedLockedDerived.length + (originalChanged ? 1 : 0);
-                            if (changedOld > 0 && newDerivedVersions.length > 0) {
-                              return `上传衍生（新增 ${newDerivedVersions.length} + 重投 ${changedOld}）`;
-                            }
-                            if (changedOld > 0) {
-                              return `重投改动版本（${changedOld}）`;
-                            }
-                            return `上传衍生（${newDerivedVersions.length} 版）`;
-                          })()
-                        : derivedVersions.length > 0
-                          ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
-                          : '上传小剧场'}
+                    : isEditOriginal
+                      ? '提交修改'
+                      : editingHistoryId
+                        ? '重新投稿'
+                        : appendDerived
+                          ? `上传衍生（${newDerivedVersions.length} 版）`
+                          : derivedVersions.length > 0
+                            ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
+                            : '上传小剧场'}
                 </button>
               </div>
             </div>
