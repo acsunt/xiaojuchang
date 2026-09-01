@@ -238,11 +238,12 @@ const tokenizeDiffUnits = (value: string): string[] => {
   }
   /* 正则优先级：
    * 1. 连续 [a-zA-Z0-9_]（含下划线常见于英文标识符）
-   * 2. 连续 CJK Unified Ideographs / 扩展
-   * 3. 连续空白
-   * 4. 单个其他字符（标点、emoji 等） */
+   * 2. 单个 CJK 汉字
+   * 3. 连续空白（不含换行）
+   * 4. 换行
+   * 5. 单个其他字符（标点、emoji 等） */
   const regex =
-    /[A-Za-z0-9_]+|[\u3400-\u9fff\uf900-\ufaff]+|[^\S\n]+|[^\u3400-\u9fff\uf900-\ufaffA-Za-z0-9_\s]/gu;
+    /[A-Za-z0-9_]+|[\u3400-\u9fff\uf900-\ufaff]|[^\S\n]+|\n|[^\u3400-\u9fff\uf900-\ufaffA-Za-z0-9_\s]/gu;
   const matches = value.match(regex);
   return matches ? matches : [];
 };
@@ -3964,29 +3965,54 @@ export function AdminReviewPage() {
                             if (!item.changed) {
                               return null;
                             }
-                            /* 短字段（如分类）不值得走 unit-level 高亮,直接显示原文。 */
-                            const useUnitDiff = item.label !== '分类';
-                            const beforeSegments = useUnitDiff
-                              ? renderDiffSegments(buildUnitDiff(item.before, item.after))
-                              : item.before || '（空）';
-                            const afterSegments = useUnitDiff
-                              ? renderDiffSegments(buildUnitDiff(item.before, item.after))
-                              : item.after || '（空）';
+                            /* 单栏词级 diff：红色删除、绿色新增，不再上下对照。 */
+                            const segments = renderDiffSegments(
+                              buildUnitDiff(item.before, item.after),
+                            );
                             return (
                               <article className="diff-card" key={item.label}>
                                 <strong>{item.label}</strong>
                                 <div className="diff-copy-row">
-                                  <span className="content-meta">上一版</span>
-                                  <p>{item.before ? beforeSegments : '（空）'}</p>
-                                </div>
-                                <div className="diff-copy-row diff-copy-row-next">
-                                  <span className="content-meta">当前版</span>
-                                  <p>{item.after ? afterSegments : '（空）'}</p>
+                                  <p>{item.before || item.after ? segments : '（空）'}</p>
                                 </div>
                               </article>
                             );
                           })}
                         </div>
+                      </div>
+                    ) : null}
+                    {adminViewMode === 'preview' ? (
+                      <div className="action-bar split-actions review-action-layout">
+                        <div className="inline-actions review-action-row">
+                          {actionMeta.map((item) => (
+                            <button
+                              key={item.action}
+                              className={`button ${item.style} review-primary-action-button`}
+                              disabled={reviewMutationBusy}
+                              onClick={() => void handleReview(item.action)}
+                              type="button"
+                            >
+                              {reviewBusyAction === item.action ? '正在处理' : item.label}
+                            </button>
+                          ))}
+                          <button
+                            className="button warning review-delete-action-button"
+                            disabled={reviewMutationBusy}
+                            onClick={() => void handleDeletePlay()}
+                            type="button"
+                          >
+                            {reviewBusyAction === 'delete' ? '正在处理' : '删除'}
+                          </button>
+                        </div>
+                        {feedbackScope === 'review' && processingMessage ? (
+                          <div className="feedback info">{processingMessage}</div>
+                        ) : null}
+                        {feedbackScope === 'review' && successMessage ? (
+                          <div className="feedback success">{successMessage}</div>
+                        ) : null}
+                        {feedbackScope === 'review' && error ? (
+                          <div className="feedback error">{error}</div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

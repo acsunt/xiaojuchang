@@ -408,20 +408,27 @@ export function PlayDetailPage() {
       ? versionItems.filter((item) => selectedVersionIds.includes(item.id) || item.id === id)
       : versionItems;
 
-  /* 上传衍生：跳到 /upload 单篇模式，预填原文内容，
-   * 让用户基于原文版本再追加一版。 */
+  /* 上传衍生：跳到 /upload 单篇模式。
+   * - 原文填进主表单；已有衍生版本按顺序回填到衍生块；
+   * - 末尾再追加一个空的新衍生，提交时只上传新增的那几版。 */
   const handleUploadDerived = () => {
-    if (!play) {
+    const original = versionItems[0] ?? play;
+    if (!original) {
       return;
     }
     navigate('/upload', {
       state: {
         prefill: {
-          authorName: play.authorName,
-          title: play.title,
-          category: play.category,
-          summary: play.summary,
-          content: play.content,
+          authorName: original.authorName,
+          title: original.title,
+          category: original.category,
+          summary: original.summary,
+          content: original.content,
+          existingDerived: versionItems.slice(1).map((item) => ({
+            summary: item.summary,
+            content: item.content,
+          })),
+          appendDerived: true,
         },
       },
     });
@@ -601,7 +608,7 @@ export function PlayDetailPage() {
                       type="button"
                       title="复制正文"
                     >
-                      �
+                      ⧉
                     </button>
                   </div>
                 </div>

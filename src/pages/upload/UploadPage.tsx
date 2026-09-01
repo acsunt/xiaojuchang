@@ -43,6 +43,8 @@ export type UploadPrefill = Partial<{
   category: string;
   summary: string;
   content: string;
+  existingDerived: Array<{ summary: string; content: string }>;
+  appendDerived: boolean;
 }>;
 
 const UPLOAD_CATEGORY_TAGS_OPEN_KEY = 'mini-theater:upload-category-tags-open';
@@ -114,6 +116,7 @@ type DerivedVersionDraft = {
   id: string;
   summary: string;
   content: string;
+  locked?: boolean;
 };
 
 const makeDerivedVersion = (): DerivedVersionDraft => ({
@@ -146,8 +149,10 @@ export function UploadPage() {
   const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
 
   /* 从详情页跳转过来的预填：每次 prefill 变化时覆盖当前 form。
-   * 用 JSON 字符串做依赖而不是对象引用，避免 React 浅比较认为未变。 */
+   * 用 JSON 字符串做依赖而不是对象引用，避免 React 浅比较认为未变。
+   * appendDerived 时：原文 + 已有衍生只用于展示，末尾追加一个空的新衍生。 */
   const prefillKey = JSON.stringify(prefill ?? null);
+  const appendDerived = Boolean(prefill?.appendDerived);
   useEffect(() => {
     if (!prefill) {
       return;
@@ -160,15 +165,26 @@ export function UploadPage() {
       content: prefill.content ?? '',
     });
     setMode('single');
-    setDerivedVersions([]);
+    const existing = (prefill.existingDerived ?? []).map((item) => ({
+      ...makeDerivedVersion(),
+      summary: item.summary ?? '',
+      content: item.content ?? '',
+      locked: true,
+    }));
+    setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
     setEditingHistoryId('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillKey]);
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
 
-  /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。 */
+  /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。
+   * 详情页「上传衍生」回填的已有版本带 locked,不参与校验。 */
   const derivedInvalid = useMemo(
-    () => derivedVersions.some((version) => !version.content.trim()),
+    () => derivedVersions.some((version) => !version.locked && !version.content.trim()),
+    [derivedVersions],
+  );
+  const newDerivedVersions = useMemo(
+    () => derivedVersions.filter((version) => !version.locked),
     [derivedVersions],
   );
 
@@ -177,9 +193,9 @@ export function UploadPage() {
       submitting ||
       !form.authorName.trim() ||
       !form.title.trim() ||
-      !form.content.trim() ||
+      (appendDerived ? newDerivedVersions.length === 0 : !form.content.trim()) ||
       derivedInvalid,
-    [derivedInvalid, form, submitting],
+    [appendDerived, derivedInvalid, form, newDerivedVersions.length, submitting],
   );
 
   const batchDisabled = useMemo(
@@ -266,8 +282,9 @@ export function UploadPage() {
     };
 
     /* 衍生版本共享 作者/标题/分类,仅各自维护简介 + 内容;
-     * 提交时按顺序上传,依赖列表页/详情页的"同标题+同分类"聚合逻辑。 */
-    const derivedDrafts = derivedVersions.map((version) => ({
+     * 提交时按顺序上传,依赖列表页/详情页的"同标题+同分类"聚合逻辑。
+     * 从详情页「上传衍生」进来时,原文和已有衍生只用于回填展示,不重复投稿。 */
+    const derivedDrafts = (appendDerived ? newDerivedVersions : derivedVersions).map((version) => ({
       authorName,
       title,
       category,
@@ -275,12 +292,14 @@ export function UploadPage() {
       content: version.content.trim(),
     }));
 
-    const createdOriginal = await playApi.uploadPlay(originalDraft);
-    saveSubmissionRecord(originalDraft, {
-      historyId: editingHistoryId || undefined,
-      latestPlayId: createdOriginal.id,
-    });
-    rememberOwnedPlayId(createdOriginal.id);
+    if (!appendDerived) {
+      const createdOriginal = await playApi.uploadPlay(originalDraft);
+      saveSubmissionRecord(originalDraft, {
+        historyId: editingHistoryId || undefined,
+        latestPlayId: createdOriginal.id,
+      });
+      rememberOwnedPlayId(createdOriginal.id);
+    }
 
     for (const draft of derivedDrafts) {
       const created = await playApi.uploadPlay(draft);
@@ -294,7 +313,9 @@ export function UploadPage() {
     setDerivedVersions([]);
     setEditingHistoryId('');
 
-    if (derivedDrafts.length > 0) {
+    if (appendDerived) {
+      showFloatingToast(`已提交 ${derivedDrafts.length} 个衍生版本到待审核池。`);
+    } else if (derivedDrafts.length > 0) {
       showFloatingToast(`已提交原文和 ${derivedDrafts.length} 个衍生版本到待审核池。`);
     } else {
       showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
@@ -391,7 +412,9 @@ export function UploadPage() {
   };
 
   const removeDerivedVersion = (id: string) => {
-    setDerivedVersions((current) => current.filter((version) => version.id !== id));
+    setDerivedVersions((current) =>
+      current.filter((version) => version.locked || version.id !== id),
+    );
   };
 
   const updateDerivedVersion = (id: string, patch: Partial<DerivedVersionDraft>) => {
@@ -647,20 +670,26 @@ export function UploadPage() {
               {derivedVersions.map((version, index) => (
                 <div className="upload-derived-block stack-gap-sm" key={version.id}>
                   <div className="upload-derived-head">
-                    <strong>{`衍生版本 ${index + 1}`}</strong>
-                    <button
-                      className="text-button"
-                      onClick={() => removeDerivedVersion(version.id)}
-                      type="button"
-                    >
-                      删除该版本
-                    </button>
+                    <strong>
+                      {version.locked
+                        ? `已有版本 ${index + 1}`
+                        : `衍生版本 ${index + 1}${appendDerived ? '（新增）' : ''}`}
+                    </strong>
+                    {version.locked ? null : (
+                      <button
+                        className="text-button"
+                        onClick={() => removeDerivedVersion(version.id)}
+                        type="button"
+                      >
+                        删除该版本
+                      </button>
+                    )}
                   </div>
                   <label>
                     <span>简介（可空）</span>
                     <ClearableField
                       onClear={() => updateDerivedVersion(version.id, { summary: '' })}
-                      visible={Boolean(version.summary)}
+                      visible={!version.locked && Boolean(version.summary)}
                     >
                       <input
                         value={version.summary}
@@ -668,6 +697,7 @@ export function UploadPage() {
                           updateDerivedVersion(version.id, { summary: event.target.value })
                         }
                         placeholder="不填也可以，列表卡片会直接隐藏简介"
+                        readOnly={version.locked}
                       />
                     </ClearableField>
                   </label>
@@ -675,7 +705,7 @@ export function UploadPage() {
                     <span>内容</span>
                     <ClearableField
                       onClear={() => updateDerivedVersion(version.id, { content: '' })}
-                      visible={Boolean(version.content)}
+                      visible={!version.locked && Boolean(version.content)}
                     >
                       <textarea
                         rows={10}
@@ -684,6 +714,7 @@ export function UploadPage() {
                           updateDerivedVersion(version.id, { content: event.target.value })
                         }
                         placeholder="写下这一版本的正文，与原文共享作者、标题、分类"
+                        readOnly={version.locked}
                       />
                     </ClearableField>
                   </label>
@@ -710,9 +741,11 @@ export function UploadPage() {
                     ? '提交中...'
                     : editingHistoryId
                       ? '重新投稿'
-                      : derivedVersions.length > 0
-                        ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
-                        : '上传小剧场'}
+                      : appendDerived
+                        ? `上传衍生（${newDerivedVersions.length} 版）`
+                        : derivedVersions.length > 0
+                          ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
+                          : '上传小剧场'}
                 </button>
               </div>
             </div>
