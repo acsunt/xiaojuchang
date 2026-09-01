@@ -557,6 +557,25 @@ export const playApi = {
     return Promise.resolve();
   },
 
+  /* 任务 5：管理员更新 repo 的正文 / 审核备注。后端 PATCH /api/admin/repos/:id。 */
+  async updateRepo(
+    repoId: string,
+    patch: { content?: string; note?: string },
+  ): Promise<Repo | null> {
+    if (apiMode === 'remote') {
+      const repo = await jsonRequest<Repo | null>(`/api/admin/repos/${repoId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
+      emitPublicPlaysUpdated();
+      return repo;
+    }
+
+    const repo = mockDb.updateRepo(repoId, patch);
+    emitPublicPlaysUpdated();
+    return Promise.resolve(repo);
+  },
+
   async deleteRejectedReposByVisitor(visitorId: string): Promise<number> {
     if (apiMode === 'remote') {
       const result = await jsonRequest<{ deletedCount: number }>(

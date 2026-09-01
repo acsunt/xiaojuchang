@@ -37,7 +37,7 @@ export type ReviewLog = {
   playTitle?: string;
 };
 
-export type RepoAuditAction = RepoReviewAction | 'delete';
+export type RepoAuditAction = RepoReviewAction | 'delete' | 'edit';
 
 export type RepoAuditLog = {
   id: string;

@@ -341,6 +341,7 @@ const repoAuditActionLabelMap: Record<RepoAuditAction, string> = {
   approve: '通过',
   reject: '拒绝',
   delete: '删除',
+  edit: '编辑',
 };
 
 type AdminPanel =
@@ -542,6 +543,13 @@ export function AdminReviewPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
   const [selectedPlayId, setSelectedPlayId] = useState('');
+  /* 任务 5：repo 审核面板点击一条卡片后进入"详情查看"，与 selectedPlay 对齐。
+   * 切换面板/筛选时清掉，避免选中的 repo 不在新视图里。 */
+  const [selectedRepoId, setSelectedRepoId] = useState('');
+  /* 任务 5：repo 详情编辑草稿（仅"仅编辑 / 编辑+预览"模式使用）。 */
+  const [repoEditContentDraft, setRepoEditContentDraft] = useState('');
+  const [repoEditNoteDraft, setRepoEditNoteDraft] = useState('');
+  const [repoEditBusy, setRepoEditBusy] = useState(false);
   /* 差异对照：依次排开 + 展示范围。本地持久化，默认 flat=true + 'changed'。
    * flat 勾选后按平铺渲染，不做红绿差异标记；不勾选则用词级红绿 diff。 */
   const [diffFlat, setDiffFlat] = useState<boolean>(() => getAdminReviewDiffFlat());
@@ -700,6 +708,8 @@ export function AdminReviewPage() {
   const [bulkAuthorName, setBulkAuthorName] = useState('');
   const [bulkSelectCountInput, setBulkSelectCountInput] = useState('');
   const [isBulkApproveCollapsed, setIsBulkApproveCollapsed] = useState(false);
+  /* repo 一键通过面板的折叠状态,与小剧场审核的 isBulkApproveCollapsed 对齐。 */
+  const [isRepoBulkApproveCollapsed, setIsRepoBulkApproveCollapsed] = useState(false);
   const [deleteSelectedIds, setDeleteSelectedIds] = useState<string[]>([]);
   const [deleteAuthorName, setDeleteAuthorName] = useState('');
   const [deleteSelectCountInput, setDeleteSelectCountInput] = useState('');
@@ -1069,6 +1079,13 @@ export function AdminReviewPage() {
     () => new Set(repoDeleteSelectedIds),
     [repoDeleteSelectedIds],
   );
+  /* repo 「全选/取消全选」判定：当前视图内所有 repo 都在已选集合里且非空。 */
+  const isAllRepoVisibleSelected = useMemo(
+    () =>
+      repoDeleteVisibleIds.length > 0 &&
+      repoDeleteVisibleIds.every((id) => repoDeleteSelectedIdSet.has(id)),
+    [repoDeleteVisibleIds, repoDeleteSelectedIdSet],
+  );
   const adminTotalPages = Math.max(1, Math.ceil(filteredPlays.length / adminPageSize));
   const adminPagedPlays = useMemo(() => {
     const startIndex = (adminCurrentPage - 1) * adminPageSize;
@@ -1218,6 +1235,23 @@ export function AdminReviewPage() {
     () => filteredPlays.find((play) => play.id === selectedPlayId) ?? null,
     [filteredPlays, selectedPlayId],
   );
+
+  /* 任务 5：repo 详情视图当前选中的 repo，与列表 filteredRepos 对齐。 */
+  const selectedRepo = useMemo(
+    () => filteredRepos.find((repo) => repo.id === selectedRepoId) ?? null,
+    [filteredRepos, selectedRepoId],
+  );
+  /* 同步选中的 repo 变更时把草稿初始化为它的当前内容/备注，方便编辑。 */
+  useEffect(() => {
+    if (selectedRepo) {
+      setRepoEditContentDraft(selectedRepo.content);
+      setRepoEditNoteDraft(selectedRepo.reviewNote ?? '');
+    }
+  }, [selectedRepo]);
+  /* 切换面板或筛选时清掉选中的 repo。 */
+  useEffect(() => {
+    setSelectedRepoId('');
+  }, [activePanel, selectedRepoStatus]);
 
   // 在当前过滤后的全集里取上一篇/下一篇 id；不在当前页时跳到对应页
   const findAdjacentPlayId = (plays: Play[], currentId: string, offset: -1 | 1): string => {
@@ -2356,6 +2390,37 @@ export function AdminReviewPage() {
     }
   };
 
+  /* 任务 5：保存 repo 编辑（仅"仅编辑/编辑+预览"模式）。 */
+  const handleSaveRepoEdit = async () => {
+    if (!selectedRepo) {
+      return;
+    }
+    const content = repoEditContentDraft.trim();
+    const note = repoEditNoteDraft.trim();
+    if (content.length === 0) {
+      setError('repo 正文不能为空');
+      return;
+    }
+    if (!window.confirm('确认保存对这条 repo 的修改？')) {
+      return;
+    }
+    setRepoEditBusy(true);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const updated = await playApi.updateRepo(selectedRepo.id, { content, note });
+      if (updated) {
+        syncRepoStateLocally(updated);
+        await Promise.all([loadRepos(selectedRepoStatus), loadAllRepos()]);
+        setSuccessMessage('repo 已更新。');
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'repo 更新失败');
+    } finally {
+      setRepoEditBusy(false);
+    }
+  };
+
   const handleRepoDelete = async (repoId: string) => {
     if (!window.confirm('确认删除这条 repo 吗？删除后不可恢复。')) {
       return;
@@ -3123,9 +3188,6 @@ export function AdminReviewPage() {
                 {!isBulkApproveCollapsed ? (
                   <>
                     <div className="stack-gap-sm admin-bulk-review-progress-block">
-                      <span className="content-meta">
-                        批量通过会按小批次提交到 bulk API，可在批次之间暂停、继续或停止。
-                      </span>
                       {bulkProgress ? (
                         <div className="admin-bulk-review-progress" role="status">
                           <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
@@ -3605,227 +3667,263 @@ export function AdminReviewPage() {
         <section className="review-main review-main-wide stack-gap-lg">
           {activePanel === 'repo' ? (
             <div className="stack-gap-md">
-              <div className="form-panel stack-gap-md">
-                <div className="content-head wrap-mobile">
+              <div className="form-panel stack-gap-md admin-bulk-review-panel">
+                {/* 对齐小剧场审核：一键通过标题 + 计数 + 展开/收起 + 全选。
+                 * 折叠内的 field-grid 与操作按钮和 activePanel === 'review' 分支保持一致。 */}
+                <div className="content-head admin-bulk-review-head">
                   <div>
-                    <h3>repo 审核</h3>
-                    <p className="sub-copy">
-                      独立于小剧场审核状态机，只处理 repo 的通过、拒绝和删除。
-                    </p>
+                    <strong>一键通过</strong>
+                    <span className="content-meta">
+                      当前列表待审核 {pendingVisibleRepos.length} 篇，已选{' '}
+                      {repoDeleteSelectedIds.length} 篇
+                    </span>
+                  </div>
+                  <div className="inline-actions admin-bulk-review-head-actions">
+                    <button
+                      className="button secondary admin-bulk-review-head-select-all-button"
+                      disabled={repoBusyAction !== null || repoDeleteVisibleIds.length === 0}
+                      onClick={
+                        isAllRepoVisibleSelected
+                          ? handleClearRepoDeleteSelection
+                          : handleSelectAllVisibleForRepoDelete
+                      }
+                      type="button"
+                    >
+                      {isAllRepoVisibleSelected ? '取消全选' : '全选'}
+                    </button>
+                    <button
+                      className="button ghost"
+                      onClick={() => setIsRepoBulkApproveCollapsed((current) => !current)}
+                      type="button"
+                    >
+                      {isRepoBulkApproveCollapsed ? '展开' : '折叠'}
+                    </button>
                   </div>
                 </div>
 
-                {/* 复刻小剧场审核：左侧「按作者一键通过」下拉 + 右侧三竖列按钮
-                 * (当前待审核 / 通过该作者 / 通过已选)。「通过已选」左侧同样加
-                 * 「删除已选」并做二次确认，与小剧场审核保持一致。 */}
-                <div className="field-grid two-columns admin-bulk-review-grid">
-                  <label>
-                    <span>按作者一键通过</span>
-                    <select
-                      value={repoBulkAuthorName}
-                      onChange={(event) => setRepoBulkAuthorName(event.target.value)}
-                    >
-                      <option value="">先选作者</option>
-                      {pendingRepoAuthorOptions.map((authorName) => (
-                        <option key={authorName} value={authorName}>
-                          {authorName}
-                        </option>
+                {!isRepoBulkApproveCollapsed ? (
+                  <>
+                    {/* 复刻小剧场审核：左侧「按作者一键通过」下拉 + 右侧三竖列按钮
+                     * (当前待审核 / 通过该作者 / 通过已选)。「通过已选」左侧同样加
+                     * 「删除已选」并做二次确认，与小剧场审核保持一致。 */}
+                    <div className="field-grid two-columns admin-bulk-review-grid">
+                      <label>
+                        <span>按作者一键通过</span>
+                        <select
+                          value={repoBulkAuthorName}
+                          onChange={(event) => setRepoBulkAuthorName(event.target.value)}
+                        >
+                          <option value="">先选作者</option>
+                          {pendingRepoAuthorOptions.map((authorName) => (
+                            <option key={authorName} value={authorName}>
+                              {authorName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="stack-gap-sm admin-bulk-review-actions">
+                        <button
+                          className="button primary admin-approve-all-button"
+                          disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
+                          onClick={() =>
+                            void handleBulkApproveRepos(
+                              pendingVisibleRepos.map((repo) => repo.id),
+                              '当前列表待审核 repo',
+                            )
+                          }
+                          type="button"
+                        >
+                          {repoBusyAction === 'approve'
+                            ? '处理中'
+                            : `通过当前待审核（${pendingVisibleRepos.length}）`}
+                        </button>
+                        <button
+                          className="button primary"
+                          disabled={
+                            repoBusyAction !== null || selectedAuthorPendingRepoIds.length === 0
+                          }
+                          onClick={() =>
+                            void handleBulkApproveRepos(
+                              selectedAuthorPendingRepoIds,
+                              `作者 ${repoBulkAuthorName} 的待审核 repo`,
+                            )
+                          }
+                          type="button"
+                        >
+                          {repoBusyAction === 'approve'
+                            ? '处理中'
+                            : `通过该作者（${selectedAuthorPendingRepoIds.length}）`}
+                        </button>
+                        <div className="inline-actions admin-bulk-review-select-actions">
+                          <button
+                            className="button danger admin-bulk-delete-selected-button"
+                            disabled={
+                              repoBusyAction !== null ||
+                              repoDeleteBusy ||
+                              !isRepoMultiSelectMode ||
+                              repoDeleteSelectedIds.length === 0
+                            }
+                            onClick={() =>
+                              void handleBatchDeleteRepos(repoDeleteSelectedIds, '已勾选 repo')
+                            }
+                            type="button"
+                          >
+                            {repoDeleteBusy
+                              ? '删除处理中'
+                              : `删除已选（${repoDeleteSelectedIds.length}）`}
+                          </button>
+                          <button
+                            className="button primary"
+                            disabled={
+                              repoBusyAction !== null ||
+                              !isRepoMultiSelectMode ||
+                              repoDeleteSelectedIds.length === 0
+                            }
+                            onClick={() =>
+                              void handleBulkApproveRepos(repoDeleteSelectedIds, '已勾选 repo')
+                            }
+                            type="button"
+                          >
+                            {repoBusyAction === 'approve'
+                              ? '处理中'
+                              : `通过已选（${repoDeleteSelectedIds.length}）`}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="inline-actions wrap-mobile">
+                      {repoStatusTabs.map((tab) => (
+                        <button
+                          className={
+                            selectedRepoStatus === tab.value ? 'tab-chip active' : 'tab-chip'
+                          }
+                          key={tab.label}
+                          onClick={() => handleRepoStatusTabChange(tab.value)}
+                          type="button"
+                        >
+                          {tab.label}
+                        </button>
                       ))}
-                    </select>
-                  </label>
-                  <div className="stack-gap-sm admin-bulk-review-actions">
-                    <button
-                      className="button primary admin-approve-all-button"
-                      disabled={repoBusyAction !== null || pendingVisibleRepos.length === 0}
-                      onClick={() =>
-                        void handleBulkApproveRepos(
-                          pendingVisibleRepos.map((repo) => repo.id),
-                          '当前列表待审核 repo',
-                        )
-                      }
-                      type="button"
+                    </div>
+                    <label>
+                      <span>repo 搜索</span>
+                      <ClearableField
+                        visible={Boolean(repoKeyword.trim())}
+                        onClear={() => setRepoKeyword('')}
+                      >
+                        <input
+                          value={repoKeyword}
+                          onChange={(event) => setRepoKeyword(event.target.value)}
+                          placeholder="默认从全部 repo 里搜昵称、标题、作者或正文"
+                        />
+                      </ClearableField>
+                    </label>
+                    <div
+                      className="inline-actions wrap-mobile admin-search-field-row"
+                      role="group"
+                      aria-label="repo 搜索范围"
                     >
-                      {repoBusyAction === 'approve'
-                        ? '处理中'
-                        : `通过当前待审核（${pendingVisibleRepos.length}）`}
-                    </button>
-                    <button
-                      className="button primary"
-                      disabled={
-                        repoBusyAction !== null || selectedAuthorPendingRepoIds.length === 0
-                      }
-                      onClick={() =>
-                        void handleBulkApproveRepos(
-                          selectedAuthorPendingRepoIds,
-                          `作者 ${repoBulkAuthorName} 的待审核 repo`,
-                        )
-                      }
-                      type="button"
-                    >
-                      {repoBusyAction === 'approve'
-                        ? '处理中'
-                        : `通过该作者（${selectedAuthorPendingRepoIds.length}）`}
-                    </button>
-                    <div className="inline-actions admin-bulk-review-select-actions">
+                      {repoSearchFieldOptions.map((item) => (
+                        <button
+                          aria-pressed={isSearchFieldActive(repoSearchFields, item.value)}
+                          className={
+                            isSearchFieldActive(repoSearchFields, item.value)
+                              ? 'tab-chip active'
+                              : 'tab-chip'
+                          }
+                          key={item.value}
+                          onClick={() =>
+                            setRepoSearchFields((current) => toggleSearchField(current, item.value))
+                          }
+                          type="button"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
+                      {repoMetrics.map((item) => (
+                        <div key={item.label} className="metric-card-lite">
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <label>
+                      <span>repo 审核备注</span>
+                      <textarea
+                        rows={3}
+                        value={repoReviewNote}
+                        onChange={(event) => setRepoReviewNote(event.target.value)}
+                        placeholder="可填写通过或拒绝说明"
+                      />
+                    </label>
+                    {/* 多选控制条：多选 / 全选 / 清空已选。删除已选和通过已选已上移到
+                     * 「按作者一键通过」右侧的三竖列按钮里，这里不再重复。 */}
+                    <div className="inline-actions admin-search-action-row">
                       <button
-                        className="button danger admin-bulk-delete-selected-button"
+                        className={
+                          isRepoMultiSelectMode ? 'button secondary active' : 'button secondary'
+                        }
+                        disabled={repoDeleteBusy}
+                        onClick={handleToggleRepoMultiSelectMode}
+                        type="button"
+                      >
+                        多选
+                      </button>
+                      <button
+                        className="button secondary"
                         disabled={
-                          repoBusyAction !== null ||
+                          repoDeleteBusy ||
+                          !isRepoMultiSelectMode ||
+                          repoDeleteVisibleIds.length === 0
+                        }
+                        onClick={handleSelectAllVisibleForRepoDelete}
+                        type="button"
+                      >
+                        全选
+                      </button>
+                      <button
+                        className="button ghost"
+                        disabled={
                           repoDeleteBusy ||
                           !isRepoMultiSelectMode ||
                           repoDeleteSelectedIds.length === 0
                         }
-                        onClick={() =>
-                          void handleBatchDeleteRepos(repoDeleteSelectedIds, '已勾选 repo')
-                        }
+                        onClick={handleClearRepoDeleteSelection}
                         type="button"
                       >
-                        {repoDeleteBusy
-                          ? '删除处理中'
-                          : `删除已选（${repoDeleteSelectedIds.length}）`}
-                      </button>
-                      <button
-                        className="button primary"
-                        disabled={
-                          repoBusyAction !== null ||
-                          !isRepoMultiSelectMode ||
-                          repoDeleteSelectedIds.length === 0
-                        }
-                        onClick={() =>
-                          void handleBulkApproveRepos(repoDeleteSelectedIds, '已勾选 repo')
-                        }
-                        type="button"
-                      >
-                        {repoBusyAction === 'approve'
-                          ? '处理中'
-                          : `通过已选（${repoDeleteSelectedIds.length}）`}
+                        清空已选
                       </button>
                     </div>
-                  </div>
-                </div>
-                <div className="inline-actions wrap-mobile">
-                  {repoStatusTabs.map((tab) => (
-                    <button
-                      className={selectedRepoStatus === tab.value ? 'tab-chip active' : 'tab-chip'}
-                      key={tab.label}
-                      onClick={() => handleRepoStatusTabChange(tab.value)}
-                      type="button"
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-                <label>
-                  <span>repo 搜索</span>
-                  <ClearableField
-                    visible={Boolean(repoKeyword.trim())}
-                    onClear={() => setRepoKeyword('')}
-                  >
-                    <input
-                      value={repoKeyword}
-                      onChange={(event) => setRepoKeyword(event.target.value)}
-                      placeholder="默认从全部 repo 里搜昵称、标题、作者或正文"
-                    />
-                  </ClearableField>
-                </label>
-                <div
-                  className="inline-actions wrap-mobile admin-search-field-row"
-                  role="group"
-                  aria-label="repo 搜索范围"
-                >
-                  {repoSearchFieldOptions.map((item) => (
-                    <button
-                      aria-pressed={isSearchFieldActive(repoSearchFields, item.value)}
-                      className={
-                        isSearchFieldActive(repoSearchFields, item.value)
-                          ? 'tab-chip active'
-                          : 'tab-chip'
-                      }
-                      key={item.value}
-                      onClick={() =>
-                        setRepoSearchFields((current) => toggleSearchField(current, item.value))
-                      }
-                      type="button"
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="metric-strip metric-strip-admin metric-strip-admin-responsive">
-                  {repoMetrics.map((item) => (
-                    <div key={item.label} className="metric-card-lite">
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <label>
-                  <span>repo 审核备注</span>
-                  <textarea
-                    rows={3}
-                    value={repoReviewNote}
-                    onChange={(event) => setRepoReviewNote(event.target.value)}
-                    placeholder="可填写通过或拒绝说明"
-                  />
-                </label>
-                {/* 多选控制条：多选 / 全选 / 清空已选。删除已选和通过已选已上移到
-                 * 「按作者一键通过」右侧的三竖列按钮里，这里不再重复。 */}
-                <div className="inline-actions admin-search-action-row">
-                  <button
-                    className={
-                      isRepoMultiSelectMode ? 'button secondary active' : 'button secondary'
-                    }
-                    disabled={repoDeleteBusy}
-                    onClick={handleToggleRepoMultiSelectMode}
-                    type="button"
-                  >
-                    多选
-                  </button>
-                  <button
-                    className="button secondary"
-                    disabled={
-                      repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteVisibleIds.length === 0
-                    }
-                    onClick={handleSelectAllVisibleForRepoDelete}
-                    type="button"
-                  >
-                    全选
-                  </button>
-                  <button
-                    className="button ghost"
-                    disabled={
-                      repoDeleteBusy || !isRepoMultiSelectMode || repoDeleteSelectedIds.length === 0
-                    }
-                    onClick={handleClearRepoDeleteSelection}
-                    type="button"
-                  >
-                    清空已选
-                  </button>
-                </div>
-                {repoDeleteProgress ? (
-                  <div className="admin-bulk-review-progress" role="status">
-                    <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
-                      <strong>{repoDeleteBusy ? '删除中' : '删除结果'}</strong>
-                      <span className="content-meta">
-                        {repoDeleteProgress.label} · 已完成 {repoDeleteProgress.completed} /{' '}
-                        {repoDeleteProgress.total} 条
-                      </span>
-                    </div>
-                    <div aria-hidden="true" className="admin-bulk-review-progress-track">
-                      <div
-                        className="admin-bulk-review-progress-fill"
-                        style={{
-                          width: `${repoDeleteProgress.total === 0 ? 0 : (repoDeleteProgress.completed / repoDeleteProgress.total) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
+                    {repoDeleteProgress ? (
+                      <div className="admin-bulk-review-progress" role="status">
+                        <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                          <strong>{repoDeleteBusy ? '删除中' : '删除结果'}</strong>
+                          <span className="content-meta">
+                            {repoDeleteProgress.label} · 已完成 {repoDeleteProgress.completed} /{' '}
+                            {repoDeleteProgress.total} 条
+                          </span>
+                        </div>
+                        <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                          <div
+                            className="admin-bulk-review-progress-fill"
+                            style={{
+                              width: `${repoDeleteProgress.total === 0 ? 0 : (repoDeleteProgress.completed / repoDeleteProgress.total) * 100}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    {processingMessage && repoDeleteBusy ? (
+                      <div className="feedback info">{processingMessage}</div>
+                    ) : null}
+                    {successMessage ? (
+                      <div className="feedback success">{successMessage}</div>
+                    ) : null}
+                    {error ? <div className="feedback error">{error}</div> : null}
+                  </>
                 ) : null}
-                {processingMessage && repoDeleteBusy ? (
-                  <div className="feedback info">{processingMessage}</div>
-                ) : null}
-                {successMessage ? <div className="feedback success">{successMessage}</div> : null}
-                {error ? <div className="feedback error">{error}</div> : null}
               </div>
 
               {filteredRepos.length > 0 ? (
@@ -3845,75 +3943,253 @@ export function AdminReviewPage() {
                       </button>
                     </div>
                   ) : null}
-                  {repoListToRender.map((repo) => (
-                    <article className="review-card repo-review-card" key={repo.id}>
-                      <div className="content-head wrap-mobile">
-                        <div className="stack-gap-xs">
-                          {isRepoMultiSelectMode ? (
-                            <label
-                              className="checkbox-chip review-card-checkbox"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              <input
-                                checked={repoDeleteSelectedIdSet.has(repo.id)}
-                                disabled={repoDeleteBusy}
-                                onChange={() => handleToggleRepoDeleteSelection(repo.id)}
-                                type="checkbox"
-                              />
-                              <span>
-                                {repoDeleteSelectedIdSet.has(repo.id) ? '已选' : '多选删除'}
+                  {/* 任务 5：三种查看模式 + 选中条目的详情面板。
+                   * 与小剧场审核共用 adminViewMode('preview'/'edit'/'both') 状态。 */}
+                  {selectedRepo ? (
+                    <section className="form-panel stack-gap-md admin-review-detail-panel">
+                      <div className="inline-actions wrap-mobile admin-review-mode-line">
+                        <span className="content-meta">查看模式</span>
+                        <button
+                          className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('preview')}
+                          type="button"
+                        >
+                          仅预览
+                        </button>
+                        <button
+                          className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('edit')}
+                          type="button"
+                        >
+                          仅编辑
+                        </button>
+                        <button
+                          className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
+                          onClick={() => setAdminViewMode('both')}
+                          type="button"
+                        >
+                          编辑 + 预览
+                        </button>
+                        <button
+                          className="button ghost admin-review-detail-close-button"
+                          onClick={() => setSelectedRepoId('')}
+                          type="button"
+                        >
+                          返回列表
+                        </button>
+                      </div>
+
+                      <div
+                        className={
+                          adminViewMode === 'preview'
+                            ? 'admin-review-detail-grid admin-review-detail-grid-preview'
+                            : adminViewMode === 'edit'
+                              ? 'admin-review-detail-grid admin-review-detail-grid-edit'
+                              : 'admin-review-detail-grid admin-review-detail-grid-both'
+                        }
+                      >
+                        {adminViewMode !== 'edit' ? (
+                          <div className="stack-gap-sm admin-review-detail-preview">
+                            <div className="stack-gap-xs">
+                              <span className={`status-tag ${selectedRepo.status}`}>
+                                {repoStatusLabelMap[selectedRepo.status]}
                               </span>
+                              <strong>{selectedRepo.nickname}</strong>
+                              <span className="content-meta">
+                                《{selectedRepo.playTitle ?? selectedRepo.playId}》 ·{' '}
+                                {new Date(selectedRepo.createdAt).toLocaleString('zh-CN')}
+                              </span>
+                              {selectedRepo.replyToNickname ? (
+                                <span className="content-meta">
+                                  回复 {selectedRepo.replyToNickname}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="admin-review-detail-content">{selectedRepo.content}</p>
+                            {selectedRepo.reviewNote ? (
+                              <p className="sub-copy">审核备注：{selectedRepo.reviewNote}</p>
+                            ) : null}
+                            <div className="inline-actions wrap-mobile repo-action-row">
+                              {repoActionMeta.map((item, index) => (
+                                <Fragment key={item.action}>
+                                  <button
+                                    className={
+                                      item.action === 'reject'
+                                        ? 'button danger repo-reject-button'
+                                        : item.action === 'approve'
+                                          ? 'button primary repo-approve-button'
+                                          : `button ${item.style}`
+                                    }
+                                    disabled={repoBusyAction !== null || repoEditBusy}
+                                    onClick={() =>
+                                      void handleRepoReview(selectedRepo.id, item.action)
+                                    }
+                                    type="button"
+                                  >
+                                    {repoBusyAction === item.action ? '处理中' : item.label}
+                                  </button>
+                                  {index === 0 ? (
+                                    <button
+                                      className="button warning repo-delete-single-button"
+                                      disabled={repoBusyAction !== null || repoEditBusy}
+                                      onClick={() => void handleRepoDelete(selectedRepo.id)}
+                                      type="button"
+                                    >
+                                      {repoBusyAction === 'delete' ? '处理中' : '删除'}
+                                    </button>
+                                  ) : null}
+                                </Fragment>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {adminViewMode !== 'preview' ? (
+                          <div className="stack-gap-sm admin-review-detail-edit">
+                            <label className="stack-gap-xs">
+                              <span>repo 正文</span>
+                              <textarea
+                                disabled={repoEditBusy || repoBusyAction !== null}
+                                onChange={(event) => setRepoEditContentDraft(event.target.value)}
+                                rows={6}
+                                value={repoEditContentDraft}
+                              />
                             </label>
-                          ) : null}
-                          <span className={`status-tag ${repo.status}`}>
-                            {repoStatusLabelMap[repo.status]}
-                          </span>
-                          <strong>{repo.nickname}</strong>
-                          <span className="content-meta">
-                            《{repo.playTitle ?? repo.playId}》 ·{' '}
-                            {new Date(repo.createdAt).toLocaleString('zh-CN')}
-                          </span>
-                          {repo.replyToNickname ? (
-                            <span className="content-meta">回复 {repo.replyToNickname}</span>
-                          ) : null}
-                        </div>
-                        <div className="inline-actions wrap-mobile repo-action-row">
-                          {repoActionMeta.map((item, index) => (
-                            <Fragment key={item.action}>
+                            <label className="stack-gap-xs">
+                              <span>审核备注</span>
+                              <textarea
+                                disabled={repoEditBusy || repoBusyAction !== null}
+                                onChange={(event) => setRepoEditNoteDraft(event.target.value)}
+                                placeholder="可写空，会清空原备注"
+                                rows={3}
+                                value={repoEditNoteDraft}
+                              />
+                            </label>
+                            <div className="inline-actions wrap-mobile">
                               <button
-                                className={
-                                  item.action === 'reject'
-                                    ? 'button danger repo-reject-button'
-                                    : item.action === 'approve'
-                                      ? 'button primary repo-approve-button'
-                                      : `button ${item.style}`
+                                className="button primary"
+                                disabled={
+                                  repoEditBusy ||
+                                  repoBusyAction !== null ||
+                                  repoEditContentDraft.trim().length === 0
                                 }
-                                disabled={repoBusyAction !== null}
-                                onClick={() => void handleRepoReview(repo.id, item.action)}
+                                onClick={() => void handleSaveRepoEdit()}
                                 type="button"
                               >
-                                {repoBusyAction === item.action ? '处理中' : item.label}
+                                {repoEditBusy ? '保存中' : '保存修改'}
                               </button>
-                              {index === 0 ? (
+                              <button
+                                className="button ghost"
+                                disabled={repoEditBusy || repoBusyAction !== null}
+                                onClick={() => {
+                                  setRepoEditContentDraft(selectedRepo.content);
+                                  setRepoEditNoteDraft(selectedRepo.reviewNote ?? '');
+                                }}
+                                type="button"
+                              >
+                                重置
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {repoListToRender.map((repo) => {
+                    const isRepoSelected = selectedRepoId === repo.id;
+                    return (
+                      <article
+                        className={
+                          isRepoSelected
+                            ? 'review-card repo-review-card active'
+                            : 'review-card repo-review-card'
+                        }
+                        key={repo.id}
+                        onClick={() => {
+                          if (isRepoMultiSelectMode) {
+                            return;
+                          }
+                          setSelectedRepoId((current) => (current === repo.id ? '' : repo.id));
+                        }}
+                      >
+                        <div className="content-head wrap-mobile">
+                          <div className="stack-gap-xs">
+                            {isRepoMultiSelectMode ? (
+                              <label
+                                className="checkbox-chip review-card-checkbox"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <input
+                                  checked={repoDeleteSelectedIdSet.has(repo.id)}
+                                  disabled={repoDeleteBusy}
+                                  onChange={() => handleToggleRepoDeleteSelection(repo.id)}
+                                  type="checkbox"
+                                />
+                                <span>
+                                  {repoDeleteSelectedIdSet.has(repo.id) ? '已选' : '多选删除'}
+                                </span>
+                              </label>
+                            ) : null}
+                            <span className={`status-tag ${repo.status}`}>
+                              {repoStatusLabelMap[repo.status]}
+                            </span>
+                            <strong>{repo.nickname}</strong>
+                            <span className="content-meta">
+                              《{repo.playTitle ?? repo.playId}》 ·{' '}
+                              {new Date(repo.createdAt).toLocaleString('zh-CN')}
+                            </span>
+                            {repo.replyToNickname ? (
+                              <span className="content-meta">回复 {repo.replyToNickname}</span>
+                            ) : null}
+                          </div>
+                          <div className="inline-actions wrap-mobile repo-action-row">
+                            {repoActionMeta.map((item, index) => (
+                              <Fragment key={item.action}>
                                 <button
-                                  className="button warning repo-delete-single-button"
+                                  className={
+                                    item.action === 'reject'
+                                      ? 'button danger repo-reject-button'
+                                      : item.action === 'approve'
+                                        ? 'button primary repo-approve-button'
+                                        : `button ${item.style}`
+                                  }
                                   disabled={repoBusyAction !== null}
-                                  onClick={() => void handleRepoDelete(repo.id)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleRepoReview(repo.id, item.action);
+                                  }}
                                   type="button"
                                 >
-                                  {repoBusyAction === 'delete' ? '处理中' : '删除'}
+                                  {repoBusyAction === item.action ? '处理中' : item.label}
                                 </button>
-                              ) : null}
-                            </Fragment>
-                          ))}
+                                {index === 0 ? (
+                                  <button
+                                    className="button warning repo-delete-single-button"
+                                    disabled={repoBusyAction !== null}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleRepoDelete(repo.id);
+                                    }}
+                                    type="button"
+                                  >
+                                    {repoBusyAction === 'delete' ? '处理中' : '删除'}
+                                  </button>
+                                ) : null}
+                              </Fragment>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                      <p>{repo.content}</p>
-                      {repo.reviewNote ? (
-                        <p className="sub-copy">审核备注：{repo.reviewNote}</p>
-                      ) : null}
-                    </article>
-                  ))}
+                        <p>{repo.content}</p>
+                        {repo.reviewNote ? (
+                          <p className="sub-copy">审核备注：{repo.reviewNote}</p>
+                        ) : null}
+                        <div className="content-meta">
+                          {isRepoSelected ? '正在编辑这条 repo' : '单击查看详情与编辑'}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="empty-panel">

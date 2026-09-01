@@ -1463,6 +1463,21 @@ body[data-style='default'][data-mode='day'] .button.danger {
   flex-shrink: 0;
 }
 
+/* head 右侧「全选 + 展开/折叠」两个按钮：手机端也强制同一行，
+ * 通过 flex + nowrap，让内部按钮即便窄屏也不换到多行。 */
+.admin-bulk-review-head-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-bulk-review-head-actions > .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .admin-bulk-review-progress-block {
   gap: 8px;
 }
@@ -2367,6 +2382,15 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 .repo-card,
 .repo-review-card {
   gap: 10px;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.repo-review-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel) 88%);
 }
 
 .repo-card {
@@ -3274,6 +3298,57 @@ body.tag-sort-dragging {
 .admin-review-mode-line .admin-mode-lefthalf,
 .admin-review-mode-line .admin-mode-righthalf {
   flex: 0 0 auto;
+}
+
+/* ---------- 任务 5：repo 审核「详情面板」三种查看模式 ----------
+ * 与小剧场审核共用 adminViewMode ('preview' / 'edit' / 'both')。
+ * 仅预览：上下排版（单列）
+ * 仅编辑：上下排版（单列）
+ * 编辑 + 预览：左右双列(grid-template-columns: 1fr 1fr,手机端降为单列)
+ */
+.admin-review-detail-panel {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, white 12%);
+}
+
+.admin-review-detail-grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-review-detail-grid-preview,
+.admin-review-detail-grid-edit {
+  grid-template-columns: 1fr;
+}
+
+.admin-review-detail-grid-both {
+  grid-template-columns: 1fr 1fr;
+}
+
+.admin-review-detail-preview,
+.admin-review-detail-edit {
+  min-width: 0;
+}
+
+.admin-review-detail-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--card-bg, transparent);
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.admin-review-detail-close-button {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .admin-review-detail-grid-both {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-review-mode-line .admin-mode-righthalf {
@@ -6734,18 +6809,29 @@ body:not([data-style='default']) .checkbox-chip input {
 body:not([data-style='default']) .checkbox-chip input:hover {
   border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
 }
+/* checked 状态：强制深靛蓝底 + 白勾，不再依赖 --btn-bg-color。
+ * 之前用 --btn-bg-color 在 pastel(#ffb3c6 淡粉) / brutalism-night 白底 等主题上
+ * 会出现"浅底 + 白勾 = 完全看不见"，即便加了 drop-shadow 也只能勉强看到轮廓。
+ * 直接给一个稳定的深底（近黑深靛 #1a2745）就可以让白勾在所有主题下都清晰。
+ * 边框跟着变深，避免 checked 状态还继承浅色描边。 */
 body:not([data-style='default']) .checkbox-chip input:checked {
-  background-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
-  background-image: var(--btn-bg-image, none);
-  border-color: var(--btn-bg-color, var(--sp-primary, #4a90e2));
+  background-color: #1a2745;
+  background-image: none;
+  border-color: #1a2745;
 }
-/* 勾子:一律用白色 + 深色 drop-shadow 描边,保证在任何主题的按钮底色上都可见。
- * 之前用 var(--btn-color) 会在部分主题（如 pastel = 粉底 + 白色 btn-color）产生
- * "白勾在浅粉底" 几乎看不见的低对比场景。改为固定白勾 + 深色 1px 阴影后,
- * 无论主题底色是浅色（粉/黄/白）还是深色（蓝/紫/黑）都能清晰识别。 */
 body:not([data-style='default']) .checkbox-chip input:checked::after {
   border-color: #ffffff;
-  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.85)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+  filter: none;
+}
+/* 夜间模式：整体是深底，checked 也用深底容易和底色糊在一起，
+ * 改成亮青色底 + 深底色勾，仍然是白/深高对比。 */
+body[data-mode='night']:not([data-style='default']) .checkbox-chip input:checked {
+  background-color: #4dd0e1;
+  border-color: #4dd0e1;
+}
+body[data-mode='night']:not([data-style='default']) .checkbox-chip input:checked::after {
+  border-color: #0a1929;
+  filter: none;
 }
 
 /* ---------- 提示 / Toast ---------- */
@@ -7129,54 +7215,50 @@ body[data-style='default'][data-mode='night'] {
   --approve-highlight-strong: #1c8a4f;
 }
 
-/* minimal：低饱和度灰蓝主题，给一个稳重的深绿 */
+/* minimal：低饱和度灰蓝主题；删除改用铁锈红棕（不发黄）。 */
 body[data-style='minimal'][data-mode='day'] {
   --approve-highlight: #2f6f4a;
   --approve-highlight-strong: #214d33;
   --reject-highlight: #c62828;
   --reject-highlight-strong: #8e1b1b;
-  --delete-highlight: #d97706;
-  --delete-highlight-strong: #b45309;
+  --delete-highlight: #8c4a2c;
+  --delete-highlight-strong: #5e3018;
 }
 body[data-style='minimal'][data-mode='night'] {
   --approve-highlight: #4caa74;
   --approve-highlight-strong: #2f6f4a;
   --reject-highlight: #ff6b6b;
   --reject-highlight-strong: #e04848;
-  --delete-highlight: #f0b429;
-  --delete-highlight-strong: #d49a16;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #c07050;
+  --delete-highlight-strong: #8c4a2c;
 }
 
-/* neumorphism：浅色拟态，深绿主操作 */
+/* neumorphism：浅色拟态；删除改成红棕 */
 body[data-style='neumorphism'][data-mode='day'] {
   --approve-highlight: #2c8f5e;
   --approve-highlight-strong: #1c5d3c;
   --reject-highlight: #d64545;
   --reject-highlight-strong: #a83232;
-  --delete-highlight: #e8a317;
-  --delete-highlight-strong: #c4840c;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #8a4a30;
+  --delete-highlight-strong: #5e3018;
 }
 body[data-style='neumorphism'][data-mode='night'] {
   --approve-highlight: #43b07e;
   --approve-highlight-strong: #2c8f5e;
   --reject-highlight: #f07171;
   --reject-highlight-strong: #d44d4d;
-  --delete-highlight: #f0b429;
-  --delete-highlight-strong: #d49a16;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #b56b48;
+  --delete-highlight-strong: #8a4a30;
 }
 
-/* glass：青色系 */
+/* glass：青色系；删除用深青灰 / 灰紫，避开黄 */
 body[data-style='glass'][data-mode='day'] {
   --approve-highlight: #2da693;
   --approve-highlight-strong: #1a7a6c;
   --reject-highlight: #e05a7a;
   --reject-highlight-strong: #c43d62;
-  --delete-highlight: #e8a020;
-  --delete-highlight-strong: #c47e10;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #4a5a72;
+  --delete-highlight-strong: #2f3a4f;
 }
 body[data-style='glass'][data-mode='night'] {
   --approve-highlight: #45d0bd;
@@ -7184,31 +7266,29 @@ body[data-style='glass'][data-mode='night'] {
   --approve-highlight-text: #08332c;
   --reject-highlight: #ff6b9a;
   --reject-highlight-strong: #e04878;
-  --delete-highlight: #ffc44d;
-  --delete-highlight-strong: #e0a628;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #6a7a95;
+  --delete-highlight-strong: #4a5a72;
 }
 
-/* corporate：商务蓝 */
+/* corporate：商务蓝；删除用商务灰蓝 */
 body[data-style='corporate'][data-mode='day'] {
   --approve-highlight: #2e8a4a;
   --approve-highlight-strong: #1c5d31;
   --reject-highlight: #c0392b;
   --reject-highlight-strong: #922b21;
-  --delete-highlight: #d68910;
-  --delete-highlight-strong: #a66a0c;
+  --delete-highlight: #566573;
+  --delete-highlight-strong: #34495e;
 }
 body[data-style='corporate'][data-mode='night'] {
   --approve-highlight: #3fb568;
   --approve-highlight-strong: #2e8a4a;
   --reject-highlight: #e74c3c;
   --reject-highlight-strong: #c0392b;
-  --delete-highlight: #f0b429;
-  --delete-highlight-strong: #d49a16;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #7f8c9a;
+  --delete-highlight-strong: #566573;
 }
 
-/* gradient：粉橙渐变背景，给高对比的深绿 */
+/* gradient：粉橙渐变；删除已经是紫罗兰，只把 night 的黄色换成青蓝紫 */
 body[data-style='gradient'][data-mode='day'] {
   --approve-highlight: #1f8a4a;
   --approve-highlight-strong: #0f5d2e;
@@ -7222,12 +7302,11 @@ body[data-style='gradient'][data-mode='night'] {
   --approve-highlight-strong: #1f8a4a;
   --reject-highlight: #ff4d6d;
   --reject-highlight-strong: #e02d50;
-  --delete-highlight: #ffcc4d;
-  --delete-highlight-strong: #e0aa28;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #8b7cff;
+  --delete-highlight-strong: #5b4cdb;
 }
 
-/* memphis：黄黑高对比；通过已是玫红，拒绝用深紫、删除用橙 */
+/* memphis：黄黑高对比；日间原本是橙已 OK，夜间去掉黄改用亮紫 */
 body[data-style='memphis'][data-mode='day'] {
   --approve-highlight: #e21d68;
   --approve-highlight-strong: #ad154d;
@@ -7241,12 +7320,11 @@ body[data-style='memphis'][data-mode='night'] {
   --approve-highlight-strong: #e21d68;
   --reject-highlight: #7c4dff;
   --reject-highlight-strong: #651fff;
-  --delete-highlight: #ffd600;
-  --delete-highlight-strong: #f9a825;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #ff6f00;
+  --delete-highlight-strong: #e65100;
 }
 
-/* cyberpunk：通过用霓虹青绿，拒绝用品红，删除用电光橙 */
+/* cyberpunk：日间已是电光橙；夜间黄改成霓虹紫 */
 body[data-style='cyberpunk'][data-mode='day'] {
   --approve-highlight: #00b894;
   --approve-highlight-strong: #008f74;
@@ -7261,20 +7339,18 @@ body[data-style='cyberpunk'][data-mode='night'] {
   --approve-highlight-text: #041a14;
   --reject-highlight: #ff00de;
   --reject-highlight-strong: #cc00b0;
-  --delete-highlight: #ffea00;
-  --delete-highlight-strong: #f9a825;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #7b2ff7;
+  --delete-highlight-strong: #4a00e0;
 }
 
-/* swiss：通过沿用主题红，拒绝用黑、删除用金，避免三个都是红 */
+/* swiss：日间原来的金改为深灰 (通过=红/拒绝=黑/删除=灰) */
 body[data-style='swiss'][data-mode='day'] {
   --approve-highlight: #cc2a2a;
   --approve-highlight-strong: #8e1a1a;
   --reject-highlight: #111111;
   --reject-highlight-strong: #000000;
-  --delete-highlight: #f9a825;
-  --delete-highlight-strong: #c47e10;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #666666;
+  --delete-highlight-strong: #333333;
 }
 body[data-style='swiss'][data-mode='night'] {
   --approve-highlight: #ff5252;
@@ -7282,32 +7358,29 @@ body[data-style='swiss'][data-mode='night'] {
   --reject-highlight: #f5f5f5;
   --reject-highlight-strong: #d0d0d0;
   --reject-highlight-text: #111111;
-  --delete-highlight: #ffd54f;
-  --delete-highlight-strong: #f9a825;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #999999;
+  --delete-highlight-strong: #666666;
 }
 
-/* editorial：编辑风，通过用砖红，拒绝用酒红，删除用暗金 */
+/* editorial：编辑风；把偏黄的暗金换成深墨绿 / 灰绿，与砖红酒红更协调 */
 body[data-style='editorial'][data-mode='day'] {
   --approve-highlight: #ad4a2c;
   --approve-highlight-strong: #803418;
   --reject-highlight: #8b1e3f;
   --reject-highlight-strong: #5c1429;
-  --delete-highlight: #c9a227;
-  --delete-highlight-strong: #9a7a18;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #3d5a4a;
+  --delete-highlight-strong: #253a2f;
 }
 body[data-style='editorial'][data-mode='night'] {
   --approve-highlight: #d97a4a;
   --approve-highlight-strong: #ad4a2c;
   --reject-highlight: #e05a7a;
   --reject-highlight-strong: #c43d62;
-  --delete-highlight: #e8c547;
-  --delete-highlight-strong: #c4a428;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #6a8f7a;
+  --delete-highlight-strong: #3d5a4a;
 }
 
-/* illustration：插画风，洋红 */
+/* illustration：插画风；日间橙已 OK；夜间琥珀换成珊瑚紫 */
 body[data-style='illustration'][data-mode='day'] {
   --approve-highlight: #2a8d4a;
   --approve-highlight-strong: #1b5d2f;
@@ -7321,33 +7394,29 @@ body[data-style='illustration'][data-mode='night'] {
   --approve-highlight-strong: #2a8d4a;
   --reject-highlight: #ff6b6b;
   --reject-highlight-strong: #e04848;
-  --delete-highlight: #ffb74d;
-  --delete-highlight-strong: #f0a020;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #b06ab3;
+  --delete-highlight-strong: #7a4a80;
 }
 
-/* isometric：等距，靛蓝 */
+/* isometric：等距靛蓝；把金黄换成深靛蓝 */
 body[data-style='isometric'][data-mode='day'] {
   --approve-highlight: #2a8a5a;
   --approve-highlight-strong: #1a5d3a;
   --reject-highlight: #d32f2f;
   --reject-highlight-strong: #b71c1c;
-  --delete-highlight: #f9a825;
-  --delete-highlight-strong: #f57f17;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #283593;
+  --delete-highlight-strong: #1a237e;
 }
 body[data-style='isometric'][data-mode='night'] {
   --approve-highlight: #45c08a;
   --approve-highlight-strong: #2a8a5a;
   --reject-highlight: #ef5350;
   --reject-highlight-strong: #e53935;
-  --delete-highlight: #ffd54f;
-  --delete-highlight-strong: #ffca28;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #5c6bc0;
+  --delete-highlight-strong: #3949ab;
 }
 
-/* retro：复古，金棕 */
-/* retro：通过已是锈橙，拒绝用深红、删除用墨褐，避免两个暖色撞车 */
+/* retro：日间原本墨褐 OK；夜间原本奶油黄换成深棕 (夜间深底 + 深棕勾对比明显) */
 body[data-style='retro'][data-mode='day'] {
   --approve-highlight: #a85a18;
   --approve-highlight-strong: #753a08;
@@ -7361,19 +7430,18 @@ body[data-style='retro'][data-mode='night'] {
   --approve-highlight-strong: #a85a18;
   --reject-highlight: #ff5252;
   --reject-highlight-strong: #e53935;
-  --delete-highlight: #ffe082;
-  --delete-highlight-strong: #ffd54f;
-  --delete-highlight-text: #2b1f14;
+  --delete-highlight: #6b4423;
+  --delete-highlight-strong: #4a2f18;
 }
 
-/* futuristic：未来感，青蓝 */
+/* futuristic：未来感青蓝；把琥珀换成深紫蓝 */
 body[data-style='futuristic'][data-mode='day'] {
   --approve-highlight: #1c8aa8;
   --approve-highlight-strong: #0c5d75;
   --reject-highlight: #e5396d;
   --reject-highlight-strong: #c2185b;
-  --delete-highlight: #ff8f00;
-  --delete-highlight-strong: #ef6c00;
+  --delete-highlight: #5b2fc9;
+  --delete-highlight-strong: #3d1a9c;
 }
 body[data-style='futuristic'][data-mode='night'] {
   --approve-highlight: #33c5e0;
@@ -7381,20 +7449,18 @@ body[data-style='futuristic'][data-mode='night'] {
   --approve-highlight-text: #042028;
   --reject-highlight: #ff2d78;
   --reject-highlight-strong: #e01060;
-  --delete-highlight: #ffd740;
-  --delete-highlight-strong: #ffc107;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #7b2ff7;
+  --delete-highlight-strong: #5b1fd7;
 }
 
-/* pastel：粉彩，柔和豆绿 */
+/* pastel：粉彩；换成柔和珊瑚 / 淡紫 */
 body[data-style='pastel'][data-mode='day'] {
   --approve-highlight: #4a9a6a;
   --approve-highlight-strong: #2c6d45;
   --reject-highlight: #e0526c;
   --reject-highlight-strong: #c43d58;
-  --delete-highlight: #e89a3c;
-  --delete-highlight-strong: #c47e20;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #a97cb0;
+  --delete-highlight-strong: #7a558a;
 }
 body[data-style='pastel'][data-mode='night'] {
   --approve-highlight: #75c896;
@@ -7402,20 +7468,18 @@ body[data-style='pastel'][data-mode='night'] {
   --approve-highlight-text: #14301c;
   --reject-highlight: #ff7a9a;
   --reject-highlight-strong: #e05a7a;
-  --delete-highlight: #ffcc80;
-  --delete-highlight-strong: #f0b429;
-  --delete-highlight-text: #1a1a1a;
+  --delete-highlight: #c8a2c8;
+  --delete-highlight-strong: #a97cb0;
 }
 
-/* brutalism：粗野主义，黑底高对比 */
+/* brutalism：粗野；把黄色换成粗野的钢青灰 (与黑白红更冲突) */
 body[data-style='brutalism'][data-mode='day'] {
   --approve-highlight: #1a1a1a;
   --approve-highlight-strong: #000000;
   --reject-highlight: #d32f2f;
   --reject-highlight-strong: #b71c1c;
-  --delete-highlight: #ffeb3b;
-  --delete-highlight-strong: #fbc02d;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #37474f;
+  --delete-highlight-strong: #263238;
 }
 body[data-style='brutalism'][data-mode='night'] {
   --approve-highlight: #00e676;
@@ -7423,9 +7487,8 @@ body[data-style='brutalism'][data-mode='night'] {
   --approve-highlight-text: #04140a;
   --reject-highlight: #ff1744;
   --reject-highlight-strong: #d50000;
-  --delete-highlight: #ffeb3b;
-  --delete-highlight-strong: #fbc02d;
-  --delete-highlight-text: #111111;
+  --delete-highlight: #78909c;
+  --delete-highlight-strong: #546e7a;
 }
 
 /* ---------- 非默认主题：小剧场审核「通过 / 拒绝 / 删除」 ----------

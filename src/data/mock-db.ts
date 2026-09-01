@@ -764,6 +764,50 @@ export const mockDb = {
     return nextRepos.find((repo) => repo.id === repoId) ?? null;
   },
 
+  /* 任务 5：管理员编辑 repo 正文 / 审核备注。 */
+  updateRepo(repoId: string, patch: { content?: string; note?: string }) {
+    const session = this.getSession();
+    if (!session) {
+      throw new Error('管理员未登录');
+    }
+    const target = getRepos().find((repo) => repo.id === repoId);
+    if (!target) {
+      throw new Error('repo 不存在');
+    }
+    const timestamp = now();
+    const newContent = patch.content !== undefined ? patch.content.trim() : undefined;
+    const newNote = patch.note !== undefined ? patch.note.trim() : undefined;
+    if (newContent !== undefined && newContent.length === 0) {
+      throw new Error('repo 正文不能为空');
+    }
+    const nextRepos = getRepos().map((repo) =>
+      repo.id === repoId
+        ? {
+            ...repo,
+            content: newContent ?? repo.content,
+            reviewNote: newNote ?? repo.reviewNote ?? '',
+            updatedAt: timestamp,
+          }
+        : repo,
+    );
+    setRepos(nextRepos);
+    setRepoReviewLogs([
+      {
+        id: makeId('repo_review'),
+        repoId: target.id,
+        playId: target.playId,
+        action: 'edit',
+        operator: session.username,
+        note: newNote ?? target.reviewNote ?? '',
+        createdAt: timestamp,
+        playTitle: target.playTitle,
+        nickname: target.nickname,
+      },
+      ...getRepoReviewLogs(),
+    ]);
+    return nextRepos.find((repo) => repo.id === repoId) ?? null;
+  },
+
   deleteRepo(repoId: string) {
     const session = this.getSession();
     if (!session) {

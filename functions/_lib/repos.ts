@@ -58,7 +58,7 @@ const ensureRepoAuditLogsSchema = async (db: D1Database) => {
         id TEXT PRIMARY KEY,
         repo_id TEXT NOT NULL,
         play_id TEXT NOT NULL,
-        action TEXT NOT NULL CHECK (action IN ('approve', 'reject', 'delete')),
+        action TEXT NOT NULL CHECK (action IN ('approve', 'reject', 'delete', 'edit')),
         operator TEXT NOT NULL,
         note TEXT NOT NULL,
         nickname TEXT,
@@ -368,6 +368,76 @@ export const reviewRepo = async (
         timestamp,
       ),
   ]);
+
+  const row = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(repoId)
+    .first<Record<string, unknown>>();
+  return row ? normalizeRepo(row) : null;
+};
+
+/* 管理员编辑 repo 的正文 / 审核备注 (任务 5)。
+ * 只允许改 content 与 review_note 两列,不允许改作者 / 所属小剧场 / 状态。
+ * 写一条 action='edit' 的审计日志便于追踪。 */
+export const updateRepoContent = async (
+  db: D1Database,
+  repoId: string,
+  patch: { content?: string; note?: string },
+  operator: string,
+) => {
+  await ensureReposSchema(db);
+  await ensureRepoAuditLogsSchema(db);
+  const currentRepo = await db
+    .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
+    .bind(repoId)
+    .first<Record<string, unknown>>();
+  if (!currentRepo) {
+    return null;
+  }
+
+  const normalizedRepo = normalizeRepo(currentRepo);
+  const timestamp = now();
+  const newContent = patch.content !== undefined ? patch.content.trim() : null;
+  const newNote = patch.note !== undefined ? patch.note.trim() : null;
+
+  if (newContent !== null && newContent.length === 0) {
+    throw new Error('repo 正文不能为空');
+  }
+
+  const sets: string[] = ['updated_at = ?'];
+  const binds: (string | number)[] = [timestamp];
+  if (newContent !== null) {
+    sets.push('content = ?');
+    binds.push(newContent);
+  }
+  if (newNote !== null) {
+    sets.push('review_note = ?');
+    binds.push(newNote);
+  }
+  binds.push(repoId);
+
+  await db
+    .prepare(`UPDATE repos SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...binds)
+    .run();
+
+  await db
+    .prepare(
+      `INSERT INTO repo_review_logs (id, repo_id, play_id, action, operator, note, nickname, play_title, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      makeId('repo_review'),
+      normalizedRepo.id,
+      normalizedRepo.playId,
+      'edit',
+      operator,
+      newNote ?? normalizedRepo.reviewNote ?? '',
+      normalizedRepo.nickname,
+      normalizedRepo.playTitle ?? null,
+      timestamp,
+    )
+    .run();
 
   const row = await db
     .prepare(`${repoSelect} WHERE repos.id = ? LIMIT 1`)
