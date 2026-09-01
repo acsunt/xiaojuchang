@@ -598,6 +598,26 @@ export function UploadPage() {
             </button>
           </div>
 
+          {/* 从详情页「上传衍生」跳过来时,顶部加一条说明,帮用户分清两种改动:
+           *  - 在「原文」/「已有版本」里改字,提交后会被作为新一版重新投稿,与详情里的旧版本同组叠加;
+           *  - 点「衍生」追加在末尾的空版本框,提交后才是真正新增的衍生版本。
+           * 仅展示,不限制编辑;原文改动时会另外用标记徽章提示。 */}
+          {mode === 'single' && appendDerived ? (
+            <div className="callout callout-info upload-derived-explainer">
+              <strong>「上传衍生」模式</strong>
+              <ul className="upload-derived-explainer-list">
+                <li>
+                  在「原文」或下方任一「已有版本」框里改动内容,提交后会以
+                  <em>新一版</em>
+                  形式重投,与现有版本同标题同分类聚合。
+                </li>
+                <li>
+                  点「衍生」按钮在末尾追加的空版本框里写新内容,提交后才是真正的「新增衍生版本」。
+                </li>
+              </ul>
+            </div>
+          ) : null}
+
           <div className="field-grid">
             <label>
               <span>作者</span>
@@ -765,6 +785,9 @@ export function UploadPage() {
                     placeholder="把正文填在这里，我会逐字逐句地认真看"
                   />
                 </ClearableField>
+                {appendDerived && originalChanged ? (
+                  <span className="content-meta upload-derived-change-hint">原文改动待重投</span>
+                ) : null}
               </label>
 
               {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
