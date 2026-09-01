@@ -7075,3 +7075,28 @@ body[data-style='brutalism'][data-mode='night'] {
   --approve-highlight: #00e676;
   --approve-highlight-strong: #00b85f;
 }
+
+/* 详情页"小剧场正文" / 衍生版本标题 行：标题与"上传衍生"按钮紧挨同行，
+ * "字数 + 复制"放右侧另一组。 */
+.detail-content-head-with-derived {
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-content-head-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.detail-content-head-title h3 {
+  margin: 0;
+  min-width: 0;
+}
+
+.detail-content-head-title .detail-upload-derived-button {
+  margin-left: 0;
+  flex: 0 0 auto;
+}

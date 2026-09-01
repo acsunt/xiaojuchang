@@ -575,11 +575,22 @@ export function PlayDetailPage() {
                 }
                 key={item.id}
               >
-                <div className="content-head wrap-mobile">
-                  <h3>
-                    {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : 0)}
-                    {isCurrent ? '（当前查看）' : ''}
-                  </h3>
+                <div className="content-head wrap-mobile detail-content-head-with-derived">
+                  <div className="detail-content-head-title">
+                    <h3>
+                      {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : 0)}
+                      {isCurrent ? '（当前查看）' : ''}
+                    </h3>
+                    {isCurrent ? (
+                      <button
+                        className="button secondary detail-upload-derived-button"
+                        onClick={handleUploadDerived}
+                        type="button"
+                      >
+                        上传衍生
+                      </button>
+                    ) : null}
+                  </div>
                   <div className="inline-actions">
                     <span className="content-meta">约 {item.content.length} 字</span>
                     <button
@@ -591,15 +602,6 @@ export function PlayDetailPage() {
                     >
                       ⧉
                     </button>
-                    {isCurrent ? (
-                      <button
-                        className="button secondary detail-upload-derived-button"
-                        onClick={handleUploadDerived}
-                        type="button"
-                      >
-                        上传衍生
-                      </button>
-                    ) : null}
                   </div>
                 </div>
                 <p className="play-detail-copy">{item.content}</p>
@@ -609,12 +611,19 @@ export function PlayDetailPage() {
         </section>
       ) : (
         <article className="content-panel stack-gap-md">
-          <div className="content-head wrap-mobile">
-            <h3>小剧场正文</h3>
-
+          <div className="content-head wrap-mobile detail-content-head-with-derived">
+            <div className="detail-content-head-title">
+              <h3>小剧场正文</h3>
+              <button
+                className="button secondary detail-upload-derived-button"
+                onClick={handleUploadDerived}
+                type="button"
+              >
+                上传衍生
+              </button>
+            </div>
             <div className="inline-actions">
               <span className="content-meta">约 {play.content.length} 字</span>
-
               <button
                 aria-label="复制正文"
                 className="icon-button"
@@ -623,13 +632,6 @@ export function PlayDetailPage() {
                 title="复制正文"
               >
                 ⧉
-              </button>
-              <button
-                className="button secondary detail-upload-derived-button"
-                onClick={handleUploadDerived}
-                type="button"
-              >
-                上传衍生
               </button>
             </div>
           </div>
