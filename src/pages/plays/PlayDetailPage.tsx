@@ -3,9 +3,7 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import {
-  getDetailVersionSelection,
   getPlazaNavigationSnapshot,
-  setDetailVersionSelection,
   updatePlazaNavigationSnapshot,
 } from '../../services/browser-play-preferences';
 
@@ -81,6 +79,7 @@ export function PlayDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState('');
+
   const [repos, setRepos] = useState<Repo[]>([]);
 
   const [repoOrder, setRepoOrder] = useState<RepoOrder>('asc');
@@ -98,43 +97,6 @@ export function PlayDetailPage() {
   );
 
   const [repoSubmitting, setRepoSubmitting] = useState(false);
-
-  /* 同标题/分类的版本组的勾选集合（持久化在 localStorage）。
-   * - 默认全选该组里的所有版本；
-   * - 永远把当前 url 指向的版本保留在勾选里，避免分享链接打开看不到正文。 */
-  const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
-  const versionGroupKey = play ? getPlayVersionKey(play) : '';
-  useEffect(() => {
-    if (!versionGroupKey || versionPlays.length === 0) {
-      return;
-    }
-    const candidateIds = versionPlays.map((item) => item.id);
-    const stored = getDetailVersionSelection(versionGroupKey, candidateIds);
-    if (!stored.includes(id)) {
-      const merged = Array.from(new Set([id, ...stored]));
-      setSelectedVersionIds(merged);
-      setDetailVersionSelection(versionGroupKey, merged);
-    } else {
-      setSelectedVersionIds(stored);
-    }
-    // 只在版本组变化时重新读一次,避免点 checkbox 时循环
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versionGroupKey, versionPlays.map((item) => item.id).join('|')]);
-
-  const toggleVersionSelection = (versionId: string) => {
-    if (!versionGroupKey) {
-      return;
-    }
-    const next = selectedVersionIds.includes(versionId)
-      ? selectedVersionIds.filter((item) => item !== versionId)
-      : [...selectedVersionIds, versionId];
-    // 当前 url 指向的版本不能被取消（避免分享链接打开看不到内容）
-    if (versionId === id && next.length === 0) {
-      return;
-    }
-    setSelectedVersionIds(next);
-    setDetailVersionSelection(versionGroupKey, next);
-  };
 
   const visitorId = useMemo(() => getVisitorId(), []);
 
@@ -290,6 +252,18 @@ export function PlayDetailPage() {
     });
   };
 
+  const openVersionPlay = (target: Play) => {
+    updatePlazaNavigationSnapshot({ anchorPlayId: target.id });
+
+    const preservedSearch = plazaPanel === 'derived' ? '?panel=derived' : '';
+
+    navigate(`/plays/${target.id}${preservedSearch}`, {
+      state: {
+        playSnapshot: target,
+      },
+    });
+  };
+
   const handleSubmitRepo = async () => {
     const nickname = repoNickname.trim();
 
@@ -381,12 +355,6 @@ export function PlayDetailPage() {
   }, [repoComposerOpen]);
 
   const versionItems = versionPlays.length > 0 ? versionPlays : play ? [play] : [];
-  const isMultiVersion = versionItems.length > 1;
-  /* 多版本时,按勾选集合决定渲染哪些版本;
-   * 当前 url 指向的版本始终保留(即便用户手动取消勾选,这里也会兜底展示)。 */
-  const visibleVersionItems = isMultiVersion
-    ? versionItems.filter((item) => selectedVersionIds.includes(item.id) || item.id === id)
-    : versionItems;
 
   if (loading) {
     return <div className="empty-panel">正在加载详情…</div>;
@@ -435,37 +403,25 @@ export function PlayDetailPage() {
               </span>
             </div>
 
-            {isMultiVersion ? (
+            {versionItems.length > 1 ? (
               <div className="detail-version-panel">
-                <span className="content-meta">同标题/分类版本（勾选显示）</span>
-                <ul className="detail-version-list">
-                  {versionItems.map((item, index) => {
-                    const checked = selectedVersionIds.includes(item.id) || item.id === id;
-                    const isCurrent = item.id === id;
-                    return (
-                      <li className="detail-version-item" key={item.id}>
-                        <label
-                          className={
-                            checked
-                              ? 'detail-version-row-label checked'
-                              : 'detail-version-row-label'
-                          }
-                        >
-                          <input
-                            checked={checked}
-                            disabled={isCurrent}
-                            onChange={() => toggleVersionSelection(item.id)}
-                            type="checkbox"
-                          />
-                          <span className="detail-version-label-text">
-                            {getPlayVersionLabel(index)}
-                          </span>
-                          <span className="detail-version-meta">{formatDate(item.updatedAt)}</span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <span className="content-meta">同标题/分类版本</span>
+
+                <div className="inline-actions wrap-mobile detail-version-row">
+                  {versionItems.map((item, index) => (
+                    <button
+                      className={item.id === play.id ? 'tab-chip active' : 'tab-chip'}
+
+                      key={item.id}
+
+                      onClick={() => openVersionPlay(item)}
+
+                      type="button"
+                    >
+                      {getPlayVersionLabel(index)}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
 
@@ -498,66 +454,31 @@ export function PlayDetailPage() {
         </div>
       </div>
 
-      {isMultiVersion ? (
-        <section className="stack-gap-md detail-version-content-stack">
-          {visibleVersionItems.map((item, index) => {
-            const versionIndex = versionItems.findIndex((row) => row.id === item.id);
-            const isCurrent = item.id === id;
-            return (
-              <article
-                className={
-                  isCurrent
-                    ? 'content-panel stack-gap-md detail-version-block current'
-                    : 'content-panel stack-gap-md detail-version-block'
-                }
-                key={item.id}
-              >
-                <div className="content-head wrap-mobile">
-                  <h3>
-                    {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : index)}
-                    {isCurrent ? '（当前查看）' : ''}
-                  </h3>
-                  <div className="inline-actions">
-                    <span className="content-meta">约 {item.content.length} 字</span>
-                    <button
-                      aria-label="复制正文"
-                      className="icon-button"
-                      onClick={() => void handleCopy(item.content, '正文')}
-                      type="button"
-                      title="复制正文"
-                    >
-                      ⧉
-                    </button>
-                  </div>
-                </div>
-                <p className="play-detail-copy">{item.content}</p>
-              </article>
-            );
-          })}
-        </section>
-      ) : (
-        <article className="content-panel stack-gap-md">
-          <div className="content-head wrap-mobile">
-            <h3>小剧场正文</h3>
+      <article className="content-panel stack-gap-md">
+        <div className="content-head wrap-mobile">
+          <h3>小剧场正文</h3>
 
-            <div className="inline-actions">
-              <span className="content-meta">约 {play.content.length} 字</span>
+          <div className="inline-actions">
+            <span className="content-meta">约 {play.content.length} 字</span>
 
-              <button
-                aria-label="复制正文"
-                className="icon-button"
-                onClick={() => void handleCopy(play.content, '正文')}
-                type="button"
-                title="复制正文"
-              >
-                ⧉
-              </button>
-            </div>
+            <button
+              aria-label="复制正文"
+
+              className="icon-button"
+
+              onClick={() => void handleCopy(play.content, '正文')}
+
+              type="button"
+
+              title="复制正文"
+            >
+              ⧉
+            </button>
           </div>
+        </div>
 
-          <p className="play-detail-copy">{play.content}</p>
-        </article>
-      )}
+        <p className="play-detail-copy">{play.content}</p>
+      </article>
 
       <section className="form-panel stack-gap-md repo-panel">
         <div className="content-head wrap-mobile">
