@@ -183,19 +183,14 @@ export function UploadPage() {
     }));
     setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
     setOriginalSnapshot(
-      appendDerived
-        ? { summary: prefill.summary ?? '', content: prefill.content ?? '' }
-        : null,
+      appendDerived ? { summary: prefill.summary ?? '', content: prefill.content ?? '' } : null,
     );
     setDerivedSnapshots(
       appendDerived
-        ? existing.reduce<Record<string, { summary: string; content: string }>>(
-            (acc, item) => {
-              acc[item.id] = { summary: item.summary, content: item.content };
-              return acc;
-            },
-            {},
-          )
+        ? existing.reduce<Record<string, { summary: string; content: string }>>((acc, item) => {
+            acc[item.id] = { summary: item.summary, content: item.content };
+            return acc;
+          }, {})
         : {},
     );
     setEditingHistoryId('');
@@ -223,10 +218,7 @@ export function UploadPage() {
   /* 原文是否被改过 */
   const originalChanged = useMemo(() => {
     if (!appendDerived || !originalSnapshot) return false;
-    return (
-      originalSnapshot.summary !== form.summary ||
-      originalSnapshot.content !== form.content
-    );
+    return originalSnapshot.summary !== form.summary || originalSnapshot.content !== form.content;
   }, [appendDerived, originalSnapshot, form.summary, form.content]);
 
   /* 衍生版本必须每一版都有正文,才允许提交(简介可以空)。
@@ -380,9 +372,7 @@ export function UploadPage() {
       if (derivedDrafts.length > 0) {
         showFloatingToast(`已提交原文和 ${derivedDrafts.length} 个衍生版本到待审核池。`);
       } else {
-        showFloatingToast(
-          editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。',
-        );
+        showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
       }
       return;
     }
@@ -400,8 +390,7 @@ export function UploadPage() {
       const isNew = !version.locked;
       const snap = version.locked ? derivedSnapshots[version.id] : null;
       const changed =
-        Boolean(snap) &&
-        (snap!.summary !== version.summary || snap!.content !== version.content);
+        Boolean(snap) && (snap!.summary !== version.summary || snap!.content !== version.content);
       if (!isNew && !changed) continue;
 
       const draft = {
