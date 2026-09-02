@@ -24,9 +24,11 @@ type PlayDraft = {
 };
 
 /* pending_edit_* 六列于 1.6 主题新增,旧线上 D1 库可能未迁移。
- * 在运行时通过 pragma table_info 探测列是否存在,缓存到 db 实例维度,
- * 避免每次写都重跑 pragma。探测失败时保守按「不支持」处理,确保旧库
- * 审核通过等高频路径不会因 SQL 报错而触发 Pages HTML 错误页。 */
+ * 首次访问相关路径时通过 pragma_table_info 探测列是否存在,
+ * 缺列则一次性 ALTER 补齐并把结果写入 db 维度的 WeakMap 缓存,
+ * 同一函数实例后续调用直接命中缓存,不再走 pragma / ALTER。
+ * 探测或 ALTER 失败时保守按「不支持」处理,让审核通过等高频路径
+ * 走 SQL 降级分支,而非冒到 Pages runtime 返回 HTML 错误页。 */
 const PENDING_EDIT_COLUMNS = [
   'pending_edit_title',
   'pending_edit_category',
@@ -38,7 +40,7 @@ const PENDING_EDIT_COLUMNS = [
 
 const pendingEditSupportCache = new WeakMap<D1Database, boolean>();
 
-export const hasPendingEditColumns = async (db: D1Database): Promise<boolean> => {
+const ensurePendingEditColumns = async (db: D1Database): Promise<boolean> => {
   const cached = pendingEditSupportCache.get(db);
   if (cached !== undefined) {
     return cached;
@@ -48,7 +50,21 @@ export const hasPendingEditColumns = async (db: D1Database): Promise<boolean> =>
       .prepare(`SELECT name FROM pragma_table_info('plays')`)
       .all<{ name?: string }>();
     const existing = new Set(rows.results.map((row) => String(row.name ?? '')));
-    const supported = PENDING_EDIT_COLUMNS.every((column) => existing.has(column));
+    const missing = PENDING_EDIT_COLUMNS.filter((column) => !existing.has(column));
+    if (missing.length === 0) {
+      pendingEditSupportCache.set(db, true);
+      return true;
+    }
+    /* 尝试自动补列:每条 ADD COLUMN 在 SQLite/D1 上对 nullable 列安全。 */
+    await db.batch(
+      missing.map((column) => db.prepare(`ALTER TABLE plays ADD COLUMN ${column} TEXT`).bind()),
+    );
+    /* 补列后再确认一次 pragma,避免 ALTER 静默失败。 */
+    const after = await db
+      .prepare(`SELECT name FROM pragma_table_info('plays')`)
+      .all<{ name?: string }>();
+    const afterSet = new Set(after.results.map((row) => String(row.name ?? '')));
+    const supported = PENDING_EDIT_COLUMNS.every((column) => afterSet.has(column));
     pendingEditSupportCache.set(db, supported);
     return supported;
   } catch {
@@ -56,6 +72,9 @@ export const hasPendingEditColumns = async (db: D1Database): Promise<boolean> =>
     return false;
   }
 };
+
+export const hasPendingEditColumns = (db: D1Database): Promise<boolean> =>
+  ensurePendingEditColumns(db);
 
 const clearPendingEditSql = (supported: boolean) =>
   supported
@@ -444,6 +463,14 @@ export const submitPlayEdit = async (
   if (!nextTitle) throw new Error('标题不能为空');
   if (!nextAuthorName) throw new Error('署名不能为空');
   if (!nextContent) throw new Error('正文不能为空');
+  /* 旧库若缺 pending_edit_* 列,探测函数会一次性 ALTER 补齐,
+   * 同实例后续请求命中缓存直接走正常路径,无需手工迁移。 */
+  const pendingSupported = await hasPendingEditColumns(db);
+  if (!pendingSupported) {
+    throw new Error(
+      '作者修改投稿功能依赖 pending_edit_* 列,当前数据库补列失败,请联系运维检查 D1 ALTER 权限',
+    );
+  }
   await ensureTagByName(db, nextCategory);
   const timestamp = now();
   await db
@@ -497,6 +524,12 @@ export const clearPendingEdit = async (db: D1Database, playId: string) => {
 };
 
 export const getPendingEditPlays = async (db: D1Database) => {
+  /* 旧库缺列时自动 ALTER 补齐;若补列失败则直接返回空数组,
+   * 让旧库下「待处理修改」面板不报错。 */
+  const pendingSupported = await hasPendingEditColumns(db);
+  if (!pendingSupported) {
+    return [];
+  }
   const result = await db
     .prepare(
       `SELECT * FROM plays
