@@ -352,16 +352,17 @@ export function UploadPage() {
     };
 
     /* 三个模式:
-     * 1) isEditOriginal：详情页「修改」入口,只把改动后的版本作为新一版投稿,
-     *    携带 submissionType=modify,审核后台据此直接判定为「修改」;
-     *    不允许新增衍生版本。
+     * 1) isEditOriginal：详情页「修改」入口,直接调用 updatePlay 把改动写入
+     *    原 play 的 pendingEdit 字段,不创建新 play。审核通过后
+     *    applySeriesRename 会同步更新同系列下其他作品的 title/category。
      * 2) appendDerived：详情页「上传衍生」入口,只追加末尾新增的衍生版本,
      *    携带 submissionType=derived;原文与已有版本锁定为只读。
      * 3) 普通模式:先投原文(submissionType=original),再按顺序投衍生。 */
     if (isEditOriginal) {
-      const created = await playApi.uploadPlay({ ...originalDraft, submissionType: 'modify' });
-      saveSubmissionRecord(originalDraft, { latestPlayId: created.id });
-      rememberOwnedPlayId(created.id);
+      const updated = await playApi.updatePlay(editOriginalId, originalDraft);
+      /* 仍是同一 play,只更新本地记录的 latestPlayId(同 id)。 */
+      saveSubmissionRecord(originalDraft, { latestPlayId: updated.id });
+      rememberOwnedPlayId(updated.id);
 
       syncLocalHistory(authorName);
       setForm(initialForm);
@@ -369,7 +370,7 @@ export function UploadPage() {
       setOriginalSnapshot(null);
       setEditingHistoryId('');
 
-      showFloatingToast('修改已重新投稿到待审核池。');
+      showFloatingToast('修改已提交,等待审核。');
       return;
     }
 
@@ -501,21 +502,6 @@ export function UploadPage() {
     } catch {
       showFloatingToast('读取 txt 失败', 'error');
     }
-  };
-
-  const handleReuseSubmission = (record: BrowserSubmissionRecord) => {
-    setMode('single');
-    setEditingHistoryId(record.id);
-    setForm({
-      authorName: record.authorName,
-      title: record.title,
-      category: record.category ?? '',
-      summary: record.summary,
-      content: record.content,
-    });
-    /* 回填单条历史时清空衍生版本列表:历史记录只针对当前一篇,不带衍生上下文。 */
-    setDerivedVersions([]);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const addDerivedVersion = () => {
@@ -979,9 +965,7 @@ export function UploadPage() {
                 ) : null}
               </div>
             </div>
-            <p className="sub-copy">
-              仅保存在当前浏览器，可再次回填，并自动同步最新审核结果与审核备注。
-            </p>
+            <p className="sub-copy">仅保存在当前浏览器,自动同步最新审核结果与审核备注。</p>
           </div>
 
           {submissionHistory.length === 0 ? (
@@ -1056,13 +1040,6 @@ export function UploadPage() {
                       </div>
                     </div>
                     <div className="inline-actions wrap-mobile submission-action-row">
-                      <button
-                        className="button secondary"
-                        onClick={() => handleReuseSubmission(record)}
-                        type="button"
-                      >
-                        再次投稿
-                      </button>
                       <button
                         className="button ghost"
                         onClick={() => handleDeleteSubmission(record)}

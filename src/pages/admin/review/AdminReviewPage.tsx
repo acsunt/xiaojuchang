@@ -4496,6 +4496,58 @@ export function AdminReviewPage() {
                       </div>
                     </div>
 
+                    {/* 「作者提交的修改」:仅当 selectedPlay.pendingEdit 存在时出现,
+                     * 展示作者就地修改的字段变更。审核 approve 时应用 + 同系列跟随,
+                     * reject/offline 时清空。 */}
+                    {selectedPlay.pendingEdit ? (
+                      <div className="stack-gap-md review-pending-edit-panel">
+                        <div className="content-head">
+                          <h3>作者提交的修改</h3>
+                          <span className="content-meta">
+                            {`作者于 ${new Date(selectedPlay.pendingEdit.submittedAt).toLocaleString('zh-CN')} 就地发起的修改,不会创建新版本`}
+                          </span>
+                        </div>
+                        <div className="stack-gap-sm">
+                          <div className="diff-card">
+                            <strong>标题</strong>
+                            <p>
+                              <span className="content-meta">当前：</span>
+                              {selectedPlay.title}
+                              {selectedPlay.pendingEdit.title !== selectedPlay.title ? (
+                                <>
+                                  <span className="content-meta"> / 待改为：</span>
+                                  <strong>{selectedPlay.pendingEdit.title}</strong>
+                                </>
+                              ) : null}
+                            </p>
+                          </div>
+                          <div className="diff-card">
+                            <strong>分类</strong>
+                            <p>
+                              <span className="content-meta">当前：</span>
+                              {selectedPlay.category}
+                              {selectedPlay.pendingEdit.category !== selectedPlay.category ? (
+                                <>
+                                  <span className="content-meta"> / 待改为：</span>
+                                  <strong>{selectedPlay.pendingEdit.category}</strong>
+                                </>
+                              ) : null}
+                            </p>
+                          </div>
+                          <div className="diff-card">
+                            <strong>简介</strong>
+                            <p>{selectedPlay.pendingEdit.summary}</p>
+                          </div>
+                          <div className="diff-card">
+                            <strong>正文</strong>
+                            <p style={{ whiteSpace: 'pre-wrap' }}>
+                              {selectedPlay.pendingEdit.content}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {/* 「与上一版文本对比」:独立面板,只有存在 previousSubmission 才显示。
                      * 与「本次投稿类型」完全分离,不再混入「修改/新增衍生」判断。 */}
                     {previousSubmission ? (

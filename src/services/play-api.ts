@@ -359,6 +359,35 @@ export const playApi = {
     return Promise.resolve(normalizePlaySummary(mockDb.createPlay(normalizedDraft)));
   },
 
+  /* 作者「修改」投稿:把改动写入原 play 的 pending_edit_* 字段,不创建新 play。 */
+  async updatePlay(
+    playId: string,
+    draft: {
+      title: string;
+      category: string;
+      summary: string;
+      content: string;
+      authorName: string;
+    },
+  ): Promise<Play> {
+    if (apiMode === 'remote') {
+      const play = await jsonRequest<Play>(`/api/plays/${encodeURIComponent(playId)}`, {
+        method: 'PUT',
+        body: JSON.stringify(draft),
+      });
+      return normalizePlaySummary(play);
+    }
+    return Promise.resolve(normalizePlaySummary(mockDb.submitPlayEdit(playId, draft)));
+  },
+
+  async getPendingEditPlays(): Promise<Play[]> {
+    if (apiMode === 'remote') {
+      const plays = await jsonRequest<Play[]>('/api/admin/plays/pending-edits');
+      return plays.map(normalizePlaySummary);
+    }
+    return Promise.resolve(mockDb.getPendingEditPlays().map(normalizePlaySummary));
+  },
+
   async getReposByPlayId(playId: string, order: RepoOrder): Promise<Repo[]> {
     if (apiMode === 'remote') {
       return jsonRequest<Repo[]>(`/api/repos?playId=${encodeURIComponent(playId)}&order=${order}`);

@@ -15,6 +15,15 @@ export type Tag = {
 
 export type SubmissionType = 'original' | 'modify' | 'derived';
 
+export type PlayPendingEdit = {
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+  authorName: string;
+  submittedAt: string;
+};
+
 export type Play = {
   id: string;
   title: string;
@@ -28,6 +37,7 @@ export type Play = {
   reviewedAt?: string;
   reviewNote?: string;
   submissionType?: SubmissionType;
+  pendingEdit?: PlayPendingEdit | null;
 };
 
 export type ReviewLog = {

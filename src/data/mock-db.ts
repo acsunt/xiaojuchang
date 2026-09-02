@@ -701,12 +701,23 @@ export const mockDb = {
     const mappedStatus: PlayStatus =
       action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'offline';
     const timestamp = now();
-    const nextTitle = String(edit?.title ?? currentPlay.title).trim();
-    const nextAuthorName = String(edit?.authorName ?? currentPlay.authorName).trim();
+    /* 「修改」投稿审核:author 用 applyPendingEdit 路径(无 edit 入参,但有 pendingEdit);
+     * 其它情况用 admin 自己 inline 编辑的 edit 字段。 */
+    const inlineEdit = edit;
+    const pendingEdit = !inlineEdit && currentPlay.pendingEdit ? currentPlay.pendingEdit : null;
+    const nextTitle = String(inlineEdit?.title ?? pendingEdit?.title ?? currentPlay.title).trim();
+    const nextAuthorName = String(
+      inlineEdit?.authorName ?? pendingEdit?.authorName ?? currentPlay.authorName,
+    ).trim();
     const nextCategory =
-      String(edit?.category ?? currentPlay.category).trim() || currentPlay.category;
-    const nextSummary = normalizeImportedSummary(String(edit?.summary ?? currentPlay.summary));
-    const nextContent = String(edit?.content ?? currentPlay.content).trim();
+      String(inlineEdit?.category ?? pendingEdit?.category ?? currentPlay.category).trim() ||
+      currentPlay.category;
+    const nextSummary = normalizeImportedSummary(
+      String(inlineEdit?.summary ?? pendingEdit?.summary ?? currentPlay.summary),
+    );
+    const nextContent = String(
+      inlineEdit?.content ?? pendingEdit?.content ?? currentPlay.content,
+    ).trim();
 
     if (!nextTitle) {
       throw new Error('标题不能为空');
@@ -733,6 +744,8 @@ export const mockDb = {
       reviewNote: note || '无备注',
       reviewedAt: timestamp,
       updatedAt: timestamp,
+      /* 审核通过时清除 pendingEdit(修改已完成),审核拒绝/下线时也清除,避免残留。 */
+      pendingEdit: undefined,
     };
     let nextPlays: Play[] = getPlays().map((play) => (play.id === playId ? updatedRow : play));
     nextPlays = applySeriesRename(
@@ -758,6 +771,80 @@ export const mockDb = {
     };
     setReviewLogs([reviewLog, ...getReviewLogs()]);
     return nextPlays.find((play) => play.id === playId) ?? null;
+  },
+
+  /* 作者「修改」投稿:把改动写入原 play 的 pendingEdit 字段,不创建新 play。
+   * 状态保持不变(approved / pending 都能改),审核员 reviewPlay 时若发现 pendingEdit
+   * 会在 approve 流程中应用并清空。 */
+  submitPlayEdit(
+    playId: string,
+    draft: {
+      title: string;
+      category: string;
+      summary: string;
+      content: string;
+      authorName: string;
+    },
+  ): Play {
+    const currentPlay = this.getAdminPlayById(playId);
+    if (!currentPlay) {
+      throw new Error('内容不存在');
+    }
+    const nextTitle = draft.title.trim();
+    const nextAuthorName = draft.authorName.trim();
+    const nextCategory = draft.category.trim() || currentPlay.category;
+    const nextSummary = normalizeImportedSummary(draft.summary);
+    const nextContent = draft.content.trim();
+    if (!nextTitle) throw new Error('标题不能为空');
+    if (!nextAuthorName) throw new Error('署名不能为空');
+    if (!nextContent) throw new Error('正文不能为空');
+    ensureTagName(nextCategory);
+    const timestamp = now();
+    const pendingEdit = {
+      title: nextTitle,
+      authorName: nextAuthorName,
+      category: nextCategory,
+      summary: nextSummary,
+      content: nextContent,
+      submittedAt: timestamp,
+    };
+    const nextPlays: Play[] = getPlays().map((play) =>
+      play.id === playId
+        ? {
+            ...play,
+            pendingEdit,
+            updatedAt: timestamp,
+          }
+        : play,
+    );
+    setPlays(nextPlays);
+    return nextPlays.find((play) => play.id === playId)!;
+  },
+
+  clearPendingEdit(playId: string): Play | null {
+    const currentPlay = this.getAdminPlayById(playId);
+    if (!currentPlay) {
+      throw new Error('内容不存在');
+    }
+    if (!currentPlay.pendingEdit) {
+      return currentPlay;
+    }
+    const timestamp = now();
+    const nextPlays: Play[] = getPlays().map((play) =>
+      play.id === playId ? { ...play, pendingEdit: undefined, updatedAt: timestamp } : play,
+    );
+    setPlays(nextPlays);
+    return nextPlays.find((play) => play.id === playId) ?? null;
+  },
+
+  getPendingEditPlays(): Play[] {
+    return getPlays()
+      .filter((play) => Boolean(play.pendingEdit))
+      .sort((left, right) => {
+        const leftAt = left.pendingEdit?.submittedAt ?? left.updatedAt;
+        const rightAt = right.pendingEdit?.submittedAt ?? right.updatedAt;
+        return rightAt.localeCompare(leftAt);
+      });
   },
 
   getAdminRepos(status?: RepoStatus) {

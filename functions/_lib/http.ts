@@ -4,6 +4,15 @@ export type ReviewAction = 'approve' | 'reject' | 'offline';
 export const validPlayStatuses: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
 export const validReviewActions: ReviewAction[] = ['approve', 'reject', 'offline'];
 
+export type PlayPendingEditRecord = {
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+  authorName: string;
+  submittedAt: string;
+};
+
 export type PlayRecord = {
   id: string;
   title: string;
@@ -16,6 +25,7 @@ export type PlayRecord = {
   updatedAt: string;
   reviewedAt: string | null;
   reviewNote: string | null;
+  pendingEdit: PlayPendingEditRecord | null;
 };
 
 export type TagRecord = {
@@ -120,19 +130,34 @@ export const now = () => new Date().toISOString();
 export const makeId = (prefix: string) =>
   `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
 
-export const normalizePlay = (row: Record<string, unknown>): PlayRecord => ({
-  id: String(row.id),
-  title: String(row.title),
-  authorName: String(row.author_name),
-  category: String(row.category),
-  summary: String(row.summary),
-  content: String(row.content),
-  status: String(row.status) as PlayStatus,
-  createdAt: String(row.created_at),
-  updatedAt: String(row.updated_at),
-  reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
-  reviewNote: row.review_note ? String(row.review_note) : null,
-});
+export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
+  const pendingEditTitle = row.pending_edit_title ? String(row.pending_edit_title) : null;
+  const hasPendingEdit = Boolean(pendingEditTitle && row.pending_edit_submitted_at);
+  const pendingEdit = hasPendingEdit
+    ? {
+        title: pendingEditTitle as string,
+        category: String(row.pending_edit_category ?? row.category),
+        summary: String(row.pending_edit_summary ?? ''),
+        content: String(row.pending_edit_content ?? ''),
+        authorName: String(row.pending_edit_author_name ?? row.author_name),
+        submittedAt: String(row.pending_edit_submitted_at),
+      }
+    : null;
+  return {
+    id: String(row.id),
+    title: String(row.title),
+    authorName: String(row.author_name),
+    category: String(row.category),
+    summary: String(row.summary),
+    content: String(row.content),
+    status: String(row.status) as PlayStatus,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
+    reviewNote: row.review_note ? String(row.review_note) : null,
+    pendingEdit,
+  };
+};
 
 export const normalizeTag = (row: Record<string, unknown>): TagRecord => ({
   id: String(row.id),
