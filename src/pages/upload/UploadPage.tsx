@@ -148,9 +148,12 @@ export function UploadPage() {
     null,
   );
   const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
-  /* 「修改」模式下的初始快照：原文的 summary/content。
-   * 提交时拿 form 与之对比,有改动才允许提交。 */
+  /* 「修改」模式下的初始快照：原文的 title / category / summary / content。
+   * 提交时拿 form 与之对比,任意字段改动都允许提交,
+   * 标题或分类的改动会通过审核后同步到同系列下所有版本。 */
   const [originalSnapshot, setOriginalSnapshot] = useState<{
+    title: string;
+    category: string;
     summary: string;
     content: string;
   } | null>(null);
@@ -188,7 +191,14 @@ export function UploadPage() {
       setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
     }
     setOriginalSnapshot(
-      isEditOriginal ? { summary: prefill.summary ?? '', content: prefill.content ?? '' } : null,
+      isEditOriginal
+        ? {
+            title: prefill.title ?? '',
+            category: prefill.category ?? '',
+            summary: prefill.summary ?? '',
+            content: prefill.content ?? '',
+          }
+        : null,
     );
     setEditingHistoryId('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -201,11 +211,17 @@ export function UploadPage() {
     [derivedVersions],
   );
 
-  /* 「修改原文」模式下,原文与快照对比,用于启用提交按钮与文案。 */
+  /* 「修改」模式下,与快照对比,用于启用提交按钮与文案。
+   * 任意字段(title / category / summary / content)改动都算修改。 */
   const originalChanged = useMemo(() => {
     if (!isEditOriginal || !originalSnapshot) return false;
-    return originalSnapshot.summary !== form.summary || originalSnapshot.content !== form.content;
-  }, [isEditOriginal, originalSnapshot, form.summary, form.content]);
+    if (originalSnapshot.summary !== form.summary) return true;
+    if (originalSnapshot.content !== form.content) return true;
+    return (
+      originalSnapshot.title !== form.title.trim() ||
+      originalSnapshot.category !== form.category.trim()
+    );
+  }, [isEditOriginal, originalSnapshot, form.summary, form.content, form.title, form.category]);
 
   /* appendDerived 模式下,只校验末尾新增的衍生是否都填了内容;
    * 「修改原文」模式不涉及衍生版本。 */
@@ -220,10 +236,12 @@ export function UploadPage() {
   /* appendDerived 模式下,必须至少有一个末尾新增的衍生版本才会允许提交。 */
   const appendHasSomethingToSubmit = !isEditOriginal && newDerivedVersions.length > 0;
 
-  /* 「修改」/「上传衍生」入口下,作者/标题/分类不允许编辑;
-   * 「上传衍生」还要锁定原文与已有衍生版本(只能追加)。 */
+  /* 「修改」/「上传衍生」入口下,作者不允许编辑(作者不属于同系列聚合键);
+   * 「上传衍生」还要锁定原文与已有衍生版本,标题/分类保持只读;
+   * 「修改」开放标题/分类编辑,审核通过后同系列下所有作品会一起重写到新键。 */
   const isLocked = isEditOriginal || appendDerived;
-  const lockAuthorAndMeta = isLocked;
+  const lockAuthor = isLocked;
+  const lockTitleAndCategory = appendDerived;
   const lockOriginalContent = appendDerived;
 
   const singleDisabled = useMemo(
@@ -597,7 +615,8 @@ export function UploadPage() {
             <div className="callout callout-info upload-mode-banner">
               <strong>「修改」模式</strong>
               <span>
-                正在修改版本,作者 / 标题 / 分类已锁定,仅可编辑正文与简介,不能新增衍生版本。
+                作者已锁定,标题 / 分类 / 简介 /
+                正文可改,审核通过后该作品所属系列下的所有版本会跟着更新。
               </span>
             </div>
           ) : null}
@@ -614,12 +633,12 @@ export function UploadPage() {
               <span>作者</span>
               <ClearableField
                 onClear={() => setForm((current) => ({ ...current, authorName: '' }))}
-                visible={Boolean(form.authorName) && !lockAuthorAndMeta}
+                visible={Boolean(form.authorName) && !lockAuthor}
               >
                 <input
                   list="author-history"
                   value={form.authorName}
-                  readOnly={lockAuthorAndMeta}
+                  readOnly={lockAuthor}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, authorName: event.target.value }))
                   }
@@ -632,7 +651,7 @@ export function UploadPage() {
                 ))}
               </datalist>
             </label>
-            {authorHistory.length > 0 && !lockAuthorAndMeta ? (
+            {authorHistory.length > 0 && !lockAuthor ? (
               <div className="stack-gap-sm">
                 <div className="inline-actions wrap-mobile author-history-inline">
                   <span className="content-meta">历史作者 {authorHistory.length} 个</span>
@@ -665,7 +684,7 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>分类</span>
-                  {tags.length > 0 && !lockAuthorAndMeta ? (
+                  {tags.length > 0 && !lockTitleAndCategory ? (
                     <button
                       className="text-button field-inline-action"
                       onClick={() => setCategoryTagsOpen((current) => !current)}
@@ -677,12 +696,12 @@ export function UploadPage() {
                 </div>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, category: '' }))}
-                  visible={Boolean(form.category) && !lockAuthorAndMeta}
+                  visible={Boolean(form.category) && !lockTitleAndCategory}
                 >
                   <input
                     list="category-tags"
                     value={form.category}
-                    readOnly={lockAuthorAndMeta}
+                    readOnly={lockTitleAndCategory}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, category: event.target.value }))
                     }
@@ -690,7 +709,7 @@ export function UploadPage() {
                   />
                 </ClearableField>
               </label>
-              {tags.length > 0 && !lockAuthorAndMeta ? (
+              {tags.length > 0 && !lockTitleAndCategory ? (
                 <>
                   <datalist id="category-tags">
                     {tags.map((tag) => (
@@ -725,7 +744,7 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>标题</span>
-                  {!lockAuthorAndMeta ? (
+                  {!lockTitleAndCategory ? (
                     <button
                       className="text-button field-inline-action"
                       onClick={handleDetectTitle}
@@ -737,11 +756,11 @@ export function UploadPage() {
                 </div>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, title: '' }))}
-                  visible={Boolean(form.title) && !lockAuthorAndMeta}
+                  visible={Boolean(form.title) && !lockTitleAndCategory}
                 >
                   <input
                     value={form.title}
-                    readOnly={lockAuthorAndMeta}
+                    readOnly={lockTitleAndCategory}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, title: event.target.value }))
                     }

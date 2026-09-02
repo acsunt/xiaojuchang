@@ -141,6 +141,36 @@ const setPlays = (plays: Play[]) => {
   writeStore(PLAY_STORE_KEY, plays);
   emitPlaysUpdated();
 };
+/* 「修改」标题 / 分类时,按 (authorName + title + category) 旧键把同系列下所有作品
+ * (不同状态) 一起重写到新键,使 buildPlayVersionGroups / 列表 / 详情同步跟随。
+ * 返回变更后的全表。 */
+const applySeriesRename = (
+  plays: Play[],
+  oldKey: { authorName: string; title: string; category: string },
+  next: { title: string; category: string },
+  timestamp: string,
+): Play[] => {
+  const titleChanged = oldKey.title !== next.title;
+  const categoryChanged = oldKey.category !== next.category;
+  if (!titleChanged && !categoryChanged) {
+    return plays;
+  }
+  return plays.map((play) => {
+    if (
+      play.authorName === oldKey.authorName &&
+      play.title === oldKey.title &&
+      play.category === oldKey.category
+    ) {
+      return {
+        ...play,
+        title: next.title,
+        category: next.category,
+        updatedAt: timestamp,
+      };
+    }
+    return play;
+  });
+};
 const getReviewLogs = () => readStore<ReviewLog[]>(REVIEW_LOG_STORE_KEY, seedReviewLogs);
 const setReviewLogs = (logs: ReviewLog[]) => writeStore(REVIEW_LOG_STORE_KEY, logs);
 const getRepoReviewLogs = () =>
@@ -621,18 +651,25 @@ export const mockDb = {
     ensureTagName(nextCategory);
 
     const timestamp = now();
-    const nextPlays: Play[] = getPlays().map((play) =>
-      play.id === playId
-        ? {
-            ...play,
-            title: nextTitle,
-            authorName: nextAuthorName,
-            category: nextCategory,
-            summary: nextSummary,
-            content: nextContent,
-            updatedAt: timestamp,
-          }
-        : play,
+    const updatedRow: Play = {
+      ...currentPlay,
+      title: nextTitle,
+      authorName: nextAuthorName,
+      category: nextCategory,
+      summary: nextSummary,
+      content: nextContent,
+      updatedAt: timestamp,
+    };
+    let nextPlays: Play[] = getPlays().map((play) => (play.id === playId ? updatedRow : play));
+    nextPlays = applySeriesRename(
+      nextPlays,
+      {
+        authorName: currentPlay.authorName,
+        title: currentPlay.title,
+        category: currentPlay.category,
+      },
+      { title: nextTitle, category: nextCategory },
+      timestamp,
     );
 
     setPlays(nextPlays);
@@ -685,21 +722,28 @@ export const mockDb = {
 
     ensureTagName(nextCategory);
 
-    const nextPlays: Play[] = getPlays().map((play) =>
-      play.id === playId
-        ? {
-            ...play,
-            title: nextTitle,
-            authorName: nextAuthorName,
-            category: nextCategory,
-            summary: nextSummary,
-            content: nextContent,
-            status: mappedStatus,
-            reviewNote: note || '无备注',
-            reviewedAt: timestamp,
-            updatedAt: timestamp,
-          }
-        : play,
+    const updatedRow: Play = {
+      ...currentPlay,
+      title: nextTitle,
+      authorName: nextAuthorName,
+      category: nextCategory,
+      summary: nextSummary,
+      content: nextContent,
+      status: mappedStatus,
+      reviewNote: note || '无备注',
+      reviewedAt: timestamp,
+      updatedAt: timestamp,
+    };
+    let nextPlays: Play[] = getPlays().map((play) => (play.id === playId ? updatedRow : play));
+    nextPlays = applySeriesRename(
+      nextPlays,
+      {
+        authorName: currentPlay.authorName,
+        title: currentPlay.title,
+        category: currentPlay.category,
+      },
+      { title: nextTitle, category: nextCategory },
+      timestamp,
     );
 
     setPlays(nextPlays);

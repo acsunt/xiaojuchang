@@ -4470,28 +4470,39 @@ export function AdminReviewPage() {
                         </span>
                       ) : null}
                     </div>
+                    {/* 「本次投稿类型」:独立面板,根据作者上传的 submissionType 直接判定,
+                     * 与上下版 diff 互不干扰。无 previousSubmission 时也照常显示。 */}
+                    <div className="stack-gap-md review-submission-type-panel">
+                      <div className="content-head">
+                        <div>
+                          <h3>本次投稿类型</h3>
+                          <span className="content-meta">
+                            按作者上传时携带的类型字段判定,不依赖内容改动比例
+                          </span>
+                        </div>
+                        {submissionTypeBadge ? (
+                          <span
+                            className={
+                              submissionTypeBadge.tone === 'derived'
+                                ? 'status-tag derived'
+                                : submissionTypeBadge.tone === 'approved'
+                                  ? 'status-tag approved'
+                                  : 'status-tag pending'
+                            }
+                          >
+                            {submissionTypeBadge.label}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* 「与上一版文本对比」:独立面板,只有存在 previousSubmission 才显示。
+                     * 与「本次投稿类型」完全分离,不再混入「修改/新增衍生」判断。 */}
                     {previousSubmission ? (
                       <div className="stack-gap-md diff-panel">
                         <div className="content-head">
-                          <div>
-                            <h3>本次投稿差异</h3>
-                            <span className="content-meta">
-                              对比上一版同标题同作者内容,本次为「修改」或「新增衍生」
-                            </span>
-                          </div>
-                          {submissionTypeBadge ? (
-                            <span
-                              className={
-                                submissionTypeBadge.tone === 'derived'
-                                  ? 'status-tag derived'
-                                  : submissionTypeBadge.tone === 'approved'
-                                    ? 'status-tag approved'
-                                    : 'status-tag pending'
-                              }
-                            >
-                              {submissionTypeBadge.label}
-                            </span>
-                          ) : null}
+                          <h3>与上一版文本对比</h3>
+                          <span className="content-meta">仅供参考,不用于类型判定</span>
                         </div>
                         <div className="inline-actions wrap-mobile diff-chip-row">
                           {submissionDiffItems.map((item) => (
