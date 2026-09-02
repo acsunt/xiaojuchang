@@ -1346,33 +1346,24 @@ export function AdminReviewPage() {
     ];
   }, [previousSubmission, selectedPlay]);
 
-  /* 根据 selectedPlay 与上一版的内容差异比例判断本次属于"修改"还是"新增衍生"：
-   *  - 内容改动比例较低（≤30%）视为对原版本的修改;
-   *  - 内容改动比例较高（>30%）视为新增的衍生版本。
-   * 仅在存在 previousSubmission 时计算。 */
-  const submissionClassification = useMemo<
-    | { kind: 'modify'; ratio: number; label: string }
-    | { kind: 'derived'; ratio: number; label: string }
+  /* 直接读取 selectedPlay.submissionType,审核员据此判断本次为「修改」或「新增衍生」。
+   * 不再依赖内容改动比例,避免被「局部小幅重投但实为衍生」的情况误判。 */
+  const submissionTypeBadge = useMemo<
+    | { kind: 'original'; label: string; tone: 'pending' | 'approved' | 'derived' }
+    | { kind: 'modify'; label: string; tone: 'pending' | 'approved' | 'derived' }
+    | { kind: 'derived'; label: string; tone: 'pending' | 'approved' | 'derived' }
     | null
   >(() => {
-    if (!selectedPlay || !previousSubmission) {
-      return null;
+    if (!selectedPlay) return null;
+    const kind = selectedPlay.submissionType ?? 'original';
+    if (kind === 'modify') {
+      return { kind, label: '修改', tone: 'approved' };
     }
-    const before = previousSubmission.content ?? '';
-    const after = selectedPlay.content ?? '';
-    if (before === after) {
-      return { kind: 'modify', ratio: 0, label: '修改' };
+    if (kind === 'derived') {
+      return { kind, label: '新增衍生', tone: 'derived' };
     }
-    const segments = buildUnitDiff(before, after);
-    const changedLength = segments
-      .filter((segment) => segment.kind !== 'same')
-      .reduce((total, segment) => total + segment.text.length, 0);
-    const baseLength = Math.max(before.length, after.length, 1);
-    const ratio = Math.min(1, changedLength / baseLength);
-    return ratio <= 0.3
-      ? { kind: 'modify', ratio, label: '修改' }
-      : { kind: 'derived', ratio, label: '新增衍生' };
-  }, [previousSubmission, selectedPlay]);
+    return { kind, label: '首次投稿', tone: 'pending' };
+  }, [selectedPlay]);
 
   const metrics = useMemo(() => {
     const total = hasLoadedAllPlays ? allPlays.length : playMetricsSource.length;
@@ -4485,19 +4476,20 @@ export function AdminReviewPage() {
                           <div>
                             <h3>本次投稿差异</h3>
                             <span className="content-meta">
-                              对比上一版同标题同作者内容,帮助判断本次为「修改」或「新增衍生」
+                              对比上一版同标题同作者内容,本次为「修改」或「新增衍生」
                             </span>
                           </div>
-                          {submissionClassification ? (
+                          {submissionTypeBadge ? (
                             <span
                               className={
-                                submissionClassification.kind === 'modify'
-                                  ? 'status-tag approved'
-                                  : 'status-tag pending'
+                                submissionTypeBadge.tone === 'derived'
+                                  ? 'status-tag derived'
+                                  : submissionTypeBadge.tone === 'approved'
+                                    ? 'status-tag approved'
+                                    : 'status-tag pending'
                               }
-                              title={`与上一版内容改动比例约 ${(submissionClassification.ratio * 100).toFixed(0)}%`}
                             >
-                              {submissionClassification.label}
+                              {submissionTypeBadge.label}
                             </span>
                           ) : null}
                         </div>

@@ -1700,6 +1700,11 @@ body[data-style='default'][data-mode='day'] .button.danger {
   color: #ffffff;
 }
 
+.status-tag.derived {
+  background: #c9a3f4;
+  color: #ffffff;
+}
+
 .status-tag.rejected,
 .status-tag.offline {
   background: #f09696;
@@ -5309,9 +5314,10 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
     flex-wrap: nowrap;
   }
 
-  /* 「上传衍生」按钮：手机端宽度收到文字宽度，避免继承 .button {width:100%}
+  /* 「上传衍生」/「修改」按钮：手机端宽度收到文字宽度，避免继承 .button {width:100%}
    * 占据整行；同时让文字不换行。 */
-  .detail-upload-derived-button {
+  .detail-upload-derived-button,
+  .detail-edit-version-button {
     width: fit-content;
     flex: 0 0 auto;
     white-space: nowrap;
@@ -7665,7 +7671,8 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   min-width: 0;
 }
 
-.detail-content-head-title .detail-upload-derived-button {
+.detail-content-head-title .detail-upload-derived-button,
+.detail-content-head-title .detail-edit-version-button {
   margin-left: 0;
   flex: 0 0 auto;
 }

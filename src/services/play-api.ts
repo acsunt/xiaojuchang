@@ -171,11 +171,13 @@ const normalizePlayDraft = (draft: PlayDraft): PlayDraft => ({
   ...draft,
   category: draft.category?.trim() || DEFAULT_CATEGORY,
   summary: normalizeImportedSummary(draft.summary),
+  submissionType: draft.submissionType ?? 'original',
 });
 
 const normalizePlaySummary = (play: Play): Play => ({
   ...play,
   summary: normalizeImportedSummary(play.summary),
+  submissionType: play.submissionType ?? 'original',
 });
 
 const emitPublicPlaysUpdated = () => {

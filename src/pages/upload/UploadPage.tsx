@@ -220,6 +220,12 @@ export function UploadPage() {
   /* appendDerived 模式下,必须至少有一个末尾新增的衍生版本才会允许提交。 */
   const appendHasSomethingToSubmit = !isEditOriginal && newDerivedVersions.length > 0;
 
+  /* 「修改」/「上传衍生」入口下,作者/标题/分类不允许编辑;
+   * 「上传衍生」还要锁定原文与已有衍生版本(只能追加)。 */
+  const isLocked = isEditOriginal || appendDerived;
+  const lockAuthorAndMeta = isLocked;
+  const lockOriginalContent = appendDerived;
+
   const singleDisabled = useMemo(
     () =>
       submitting ||
@@ -328,13 +334,14 @@ export function UploadPage() {
     };
 
     /* 三个模式:
-     * 1) isEditOriginal：详情页「修改原文」入口,只把改动后的原文作为新一版投稿,
-     *    不带任何衍生。
+     * 1) isEditOriginal：详情页「修改」入口,只把改动后的版本作为新一版投稿,
+     *    携带 submissionType=modify,审核后台据此直接判定为「修改」;
+     *    不允许新增衍生版本。
      * 2) appendDerived：详情页「上传衍生」入口,只追加末尾新增的衍生版本,
-     *    原文和已有版本不允许改字(改字请走「修改原文」/后续编辑入口)。
-     * 3) 普通模式:先投原文,再按顺序投衍生。 */
+     *    携带 submissionType=derived;原文与已有版本锁定为只读。
+     * 3) 普通模式:先投原文(submissionType=original),再按顺序投衍生。 */
     if (isEditOriginal) {
-      const created = await playApi.uploadPlay(originalDraft);
+      const created = await playApi.uploadPlay({ ...originalDraft, submissionType: 'modify' });
       saveSubmissionRecord(originalDraft, { latestPlayId: created.id });
       rememberOwnedPlayId(created.id);
 
@@ -344,12 +351,15 @@ export function UploadPage() {
       setOriginalSnapshot(null);
       setEditingHistoryId('');
 
-      showFloatingToast('原文已重新投稿到待审核池。');
+      showFloatingToast('修改已重新投稿到待审核池。');
       return;
     }
 
     if (!appendDerived) {
-      const createdOriginal = await playApi.uploadPlay(originalDraft);
+      const createdOriginal = await playApi.uploadPlay({
+        ...originalDraft,
+        submissionType: 'original',
+      });
       saveSubmissionRecord(originalDraft, {
         historyId: editingHistoryId || undefined,
         latestPlayId: createdOriginal.id,
@@ -364,7 +374,7 @@ export function UploadPage() {
         content: version.content.trim(),
       }));
       for (const draft of derivedDrafts) {
-        const created = await playApi.uploadPlay(draft);
+        const created = await playApi.uploadPlay({ ...draft, submissionType: 'derived' });
         saveSubmissionRecord(draft, { latestPlayId: created.id });
         rememberOwnedPlayId(created.id);
       }
@@ -391,7 +401,7 @@ export function UploadPage() {
         summary: version.summary.trim(),
         content: version.content.trim(),
       };
-      const created = await playApi.uploadPlay(draft);
+      const created = await playApi.uploadPlay({ ...draft, submissionType: 'derived' });
       saveSubmissionRecord(draft, { latestPlayId: created.id });
       rememberOwnedPlayId(created.id);
     }
@@ -562,33 +572,54 @@ export function UploadPage() {
     <section className="stack-gap-lg">
       <div className="upload-grid">
         <form className="form-panel stack-gap-lg" onSubmit={handleSubmit}>
-          <div className="tab-list">
-            <button
-              className={mode === 'single' ? 'tab-chip active' : 'tab-chip'}
-              onClick={() => setMode('single')}
-              type="button"
-            >
-              单篇上传
-            </button>
-            <button
-              className={mode === 'batch' ? 'tab-chip active' : 'tab-chip'}
-              onClick={() => setMode('batch')}
-              type="button"
-            >
-              批量上传
-            </button>
-          </div>
+          {/* 「修改」/「上传衍生」入口下隐藏「单篇 / 批量」切换,
+           * 强制只能走 single,不能混进批量流程。 */}
+          {isEditOriginal || appendDerived ? null : (
+            <div className="tab-list">
+              <button
+                className={mode === 'single' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setMode('single')}
+                type="button"
+              >
+                单篇上传
+              </button>
+              <button
+                className={mode === 'batch' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setMode('batch')}
+                type="button"
+              >
+                批量上传
+              </button>
+            </div>
+          )}
+
+          {isEditOriginal ? (
+            <div className="callout callout-info upload-mode-banner">
+              <strong>「修改」模式</strong>
+              <span>
+                正在修改版本,作者 / 标题 / 分类已锁定,仅可编辑正文与简介,不能新增衍生版本。
+              </span>
+            </div>
+          ) : null}
+
+          {appendDerived ? (
+            <div className="callout callout-info upload-mode-banner">
+              <strong>「上传衍生」模式</strong>
+              <span>原文与已有衍生版本已锁定,仅能在末尾追加新的衍生版本</span>
+            </div>
+          ) : null}
 
           <div className="field-grid">
             <label>
               <span>作者</span>
               <ClearableField
                 onClear={() => setForm((current) => ({ ...current, authorName: '' }))}
-                visible={Boolean(form.authorName)}
+                visible={Boolean(form.authorName) && !lockAuthorAndMeta}
               >
                 <input
                   list="author-history"
                   value={form.authorName}
+                  readOnly={lockAuthorAndMeta}
                   onChange={(event) =>
                     setForm((current) => ({ ...current, authorName: event.target.value }))
                   }
@@ -601,7 +632,7 @@ export function UploadPage() {
                 ))}
               </datalist>
             </label>
-            {authorHistory.length > 0 ? (
+            {authorHistory.length > 0 && !lockAuthorAndMeta ? (
               <div className="stack-gap-sm">
                 <div className="inline-actions wrap-mobile author-history-inline">
                   <span className="content-meta">历史作者 {authorHistory.length} 个</span>
@@ -634,7 +665,7 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>分类</span>
-                  {tags.length > 0 ? (
+                  {tags.length > 0 && !lockAuthorAndMeta ? (
                     <button
                       className="text-button field-inline-action"
                       onClick={() => setCategoryTagsOpen((current) => !current)}
@@ -646,11 +677,12 @@ export function UploadPage() {
                 </div>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, category: '' }))}
-                  visible={Boolean(form.category)}
+                  visible={Boolean(form.category) && !lockAuthorAndMeta}
                 >
                   <input
                     list="category-tags"
                     value={form.category}
+                    readOnly={lockAuthorAndMeta}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, category: event.target.value }))
                     }
@@ -658,7 +690,7 @@ export function UploadPage() {
                   />
                 </ClearableField>
               </label>
-              {tags.length > 0 ? (
+              {tags.length > 0 && !lockAuthorAndMeta ? (
                 <>
                   <datalist id="category-tags">
                     {tags.map((tag) => (
@@ -693,20 +725,23 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>标题</span>
-                  <button
-                    className="text-button field-inline-action"
-                    onClick={handleDetectTitle}
-                    type="button"
-                  >
-                    识别标题
-                  </button>
+                  {!lockAuthorAndMeta ? (
+                    <button
+                      className="text-button field-inline-action"
+                      onClick={handleDetectTitle}
+                      type="button"
+                    >
+                      识别标题
+                    </button>
+                  ) : null}
                 </div>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, title: '' }))}
-                  visible={Boolean(form.title)}
+                  visible={Boolean(form.title) && !lockAuthorAndMeta}
                 >
                   <input
                     value={form.title}
+                    readOnly={lockAuthorAndMeta}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, title: event.target.value }))
                     }
@@ -735,11 +770,12 @@ export function UploadPage() {
                 <span>内容</span>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, content: '' }))}
-                  visible={Boolean(form.content)}
+                  visible={Boolean(form.content) && !lockOriginalContent}
                 >
                   <textarea
                     rows={12}
                     value={form.content}
+                    readOnly={lockOriginalContent}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, content: event.target.value }))
                     }
@@ -750,11 +786,13 @@ export function UploadPage() {
 
               {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
                * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。
-               * 「上传衍生」模式下,原文与已有版本都不允许改字(改字请走详情页「修改原文」)。 */}
+               * 「上传衍生」模式下,原文与已有版本都不允许改字;
+               * 「修改」模式不展示衍生块,不出现「衍生」按钮。 */}
               {derivedVersions.map((version, index) => {
                 const headLabel = version.locked
                   ? `已有版本 ${index + 1}`
                   : `衍生版本 ${index + 1}${appendDerived ? '（新增）' : ''}`;
+                const versionReadOnly = version.locked;
                 return (
                   <div className="upload-derived-block stack-gap-sm" key={version.id}>
                     <div className="upload-derived-head">
@@ -773,10 +811,11 @@ export function UploadPage() {
                       <span>简介（可空）</span>
                       <ClearableField
                         onClear={() => updateDerivedVersion(version.id, { summary: '' })}
-                        visible={Boolean(version.summary)}
+                        visible={Boolean(version.summary) && !versionReadOnly}
                       >
                         <input
                           value={version.summary}
+                          readOnly={versionReadOnly}
                           onChange={(event) =>
                             updateDerivedVersion(version.id, { summary: event.target.value })
                           }
@@ -788,11 +827,12 @@ export function UploadPage() {
                       <span>内容</span>
                       <ClearableField
                         onClear={() => updateDerivedVersion(version.id, { content: '' })}
-                        visible={Boolean(version.content)}
+                        visible={Boolean(version.content) && !versionReadOnly}
                       >
                         <textarea
                           rows={10}
                           value={version.content}
+                          readOnly={versionReadOnly}
                           onChange={(event) =>
                             updateDerivedVersion(version.id, { content: event.target.value })
                           }
@@ -805,16 +845,20 @@ export function UploadPage() {
               })}
 
               {/* 单篇模式的底部按钮区:衍生按钮 + 上传小剧场按钮
-               * 位置始终在最后一个版本框下方(动态追加时自动往下推)。 */}
+               * 位置始终在最后一个版本框下方(动态追加时自动往下推)。
+               * 「修改」入口下隐藏「衍生」按钮,只允许提交修改;
+               * 「上传衍生」入口下保留「衍生」按钮,用于追加更多空版本。 */}
               <div className="inline-actions wrap-mobile upload-single-action-row">
-                <button
-                  className="button secondary"
-                  onClick={addDerivedVersion}
-                  type="button"
-                  disabled={submitting}
-                >
-                  衍生
-                </button>
+                {isEditOriginal ? null : (
+                  <button
+                    className="button secondary"
+                    onClick={addDerivedVersion}
+                    type="button"
+                    disabled={submitting}
+                  >
+                    衍生
+                  </button>
+                )}
                 <button
                   className="button primary upload-submit-button"
                   disabled={singleDisabled}

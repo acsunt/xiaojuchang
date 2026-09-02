@@ -13,6 +13,8 @@ export type Tag = {
   updatedAt: string;
 };
 
+export type SubmissionType = 'original' | 'modify' | 'derived';
+
 export type Play = {
   id: string;
   title: string;
@@ -25,6 +27,7 @@ export type Play = {
   updatedAt: string;
   reviewedAt?: string;
   reviewNote?: string;
+  submissionType?: SubmissionType;
 };
 
 export type ReviewLog = {
@@ -122,6 +125,7 @@ export type PlayDraft = {
   category?: Category;
   summary: string;
   content: string;
+  submissionType?: SubmissionType;
 };
 
 export type TagDraft = {
