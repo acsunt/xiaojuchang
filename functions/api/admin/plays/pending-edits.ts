@@ -1,4 +1,4 @@
-import { getAdminSessionFromRequest, getPendingEditPlays } from '../../../_lib/db';
+import { getAdminSessionFromRequest, getPendingModifyPlays } from '../../../_lib/db';
 import { error, json } from '../../../_lib/http';
 
 export const onRequestGet: PagesFunction = async ({ env, request }) => {
@@ -6,6 +6,6 @@ export const onRequestGet: PagesFunction = async ({ env, request }) => {
   if (!session) {
     return error('管理员未登录', 401);
   }
-  const plays = await getPendingEditPlays(env.DB);
+  const plays = await getPendingModifyPlays(env.DB);
   return json(plays);
 };
