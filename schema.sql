@@ -18,13 +18,6 @@ CREATE TABLE IF NOT EXISTS plays (
   pending_edit_submitted_at TEXT
 );
 
-ALTER TABLE plays ADD COLUMN pending_edit_title TEXT;
-ALTER TABLE plays ADD COLUMN pending_edit_category TEXT;
-ALTER TABLE plays ADD COLUMN pending_edit_summary TEXT;
-ALTER TABLE plays ADD COLUMN pending_edit_content TEXT;
-ALTER TABLE plays ADD COLUMN pending_edit_author_name TEXT;
-ALTER TABLE plays ADD COLUMN pending_edit_submitted_at TEXT;
-
 CREATE INDEX IF NOT EXISTS idx_plays_status_updated_at ON plays(status, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS tags (

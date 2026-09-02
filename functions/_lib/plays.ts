@@ -23,6 +23,47 @@ type PlayDraft = {
   content: string;
 };
 
+/* pending_edit_* 六列于 1.6 主题新增,旧线上 D1 库可能未迁移。
+ * 在运行时通过 pragma table_info 探测列是否存在,缓存到 db 实例维度,
+ * 避免每次写都重跑 pragma。探测失败时保守按「不支持」处理,确保旧库
+ * 审核通过等高频路径不会因 SQL 报错而触发 Pages HTML 错误页。 */
+const PENDING_EDIT_COLUMNS = [
+  'pending_edit_title',
+  'pending_edit_category',
+  'pending_edit_summary',
+  'pending_edit_content',
+  'pending_edit_author_name',
+  'pending_edit_submitted_at',
+] as const;
+
+const pendingEditSupportCache = new WeakMap<D1Database, boolean>();
+
+export const hasPendingEditColumns = async (db: D1Database): Promise<boolean> => {
+  const cached = pendingEditSupportCache.get(db);
+  if (cached !== undefined) {
+    return cached;
+  }
+  try {
+    const rows = await db
+      .prepare(`SELECT name FROM pragma_table_info('plays')`)
+      .all<{ name?: string }>();
+    const existing = new Set(rows.results.map((row) => String(row.name ?? '')));
+    const supported = PENDING_EDIT_COLUMNS.every((column) => existing.has(column));
+    pendingEditSupportCache.set(db, supported);
+    return supported;
+  } catch {
+    pendingEditSupportCache.set(db, false);
+    return false;
+  }
+};
+
+const clearPendingEditSql = (supported: boolean) =>
+  supported
+    ? `pending_edit_title = NULL, pending_edit_category = NULL,
+         pending_edit_summary = NULL, pending_edit_content = NULL,
+         pending_edit_author_name = NULL, pending_edit_submitted_at = NULL`
+    : '';
+
 type ReviewPlayDraft = {
   title?: string;
   authorName?: string;
@@ -336,18 +377,32 @@ export const updateAdminPlay = async (
 
   const timestamp = now();
   /* 同系列跟随:把同 (author_name + title + category) 旧键下所有作品的 title/category
-   * 一起改写,updatedAt 同步刷新。审核通过或后台直接编辑都共用此逻辑。 */
-  await db
-    .prepare(
-      `UPDATE plays
-       SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?,
-           pending_edit_title = NULL, pending_edit_category = NULL,
-           pending_edit_summary = NULL, pending_edit_content = NULL,
-           pending_edit_author_name = NULL, pending_edit_submitted_at = NULL
-       WHERE id = ?`,
-    )
-    .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
-    .run();
+   * 一起改写,updatedAt 同步刷新。审核通过或后台直接编辑都共用此逻辑。
+   * 旧库缺 pending_edit_* 列时,跳过清空子句但仍推进主更新。 */
+  const pendingSupported = await hasPendingEditColumns(db);
+  const clearClause = clearPendingEditSql(pendingSupported);
+  /* 拼接:固定首段 title/author/category/summary/content/updated_at + id 七参数,
+   * 加 clearClause(空串或带逗号的六列清空),最后 WHERE id = ? 也走同一参数位。 */
+  if (pendingSupported) {
+    await db
+      .prepare(
+        `UPDATE plays
+         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?,
+             ${clearClause}
+         WHERE id = ?`,
+      )
+      .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
+      .run();
+  } else {
+    await db
+      .prepare(
+        `UPDATE plays
+         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
+      .run();
+  }
 
   if (currentPlay.title !== nextTitle || currentPlay.category !== nextCategory) {
     await db
@@ -419,6 +474,11 @@ export const clearPendingEdit = async (db: D1Database, playId: string) => {
     return null;
   }
   if (!currentPlay.pendingEdit) {
+    return currentPlay;
+  }
+  /* 旧库缺 pending_edit_* 列时无 pendingEdit 概念,直接返回原数据。 */
+  const pendingSupported = await hasPendingEditColumns(db);
+  if (!pendingSupported) {
     return currentPlay;
   }
   const timestamp = now();
@@ -546,18 +606,25 @@ export const reviewPlay = async (
   await ensureTagByName(db, nextCategory);
 
   /* 一次性更新当前 play + 同系列下其他作品(title/category 跟随),
-   * 并清空 pendingEdit(任何 action 都会清)。 */
-  const stmts = [
-    db
-      .prepare(
-        `UPDATE plays
+   * 并清空 pendingEdit(任何 action 都会清)。
+   * 旧库若尚未迁移 pending_edit_* 列,跳过清空子句以保证审核通过仍能生效。 */
+  const pendingSupported = await hasPendingEditColumns(db);
+  const reviewUpdateSql = pendingSupported
+    ? `UPDATE plays
          SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
              status = ?, review_note = ?, reviewed_at = ?, updated_at = ?,
              pending_edit_title = NULL, pending_edit_category = NULL,
              pending_edit_summary = NULL, pending_edit_content = NULL,
              pending_edit_author_name = NULL, pending_edit_submitted_at = NULL
-         WHERE id = ?`,
-      )
+         WHERE id = ?`
+    : `UPDATE plays
+         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
+             status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
+         WHERE id = ?`;
+
+  const stmts = [
+    db
+      .prepare(reviewUpdateSql)
       .bind(
         nextTitle,
         nextAuthorName,

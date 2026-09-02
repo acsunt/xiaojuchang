@@ -49,7 +49,16 @@ export const onRequestPost: PagesFunction = async ({ params, request, env }) => 
       hasTitle || hasAuthorName || hasCategory || hasSummary || hasContent
         ? { title, authorName, category, summary, content }
         : undefined,
+  }).catch((reason: unknown) => {
+    /* 把 D1 SQL 异常(列不存在/唯一约束等)统一转成 JSON 错误,
+     * 避免 Pages runtime 默认的 HTML 错误页让前端误判为「接口返回了异常页面」。 */
+    const message = reason instanceof Error ? reason.message : '审核失败';
+    return { __error: message } as const;
   });
+
+  if (updatedPlay && '__error' in updatedPlay) {
+    return error(updatedPlay.__error, 500);
+  }
 
   if (!updatedPlay) {
     return error('内容不存在', 404);
