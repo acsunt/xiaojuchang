@@ -701,23 +701,98 @@ export const mockDb = {
     const mappedStatus: PlayStatus =
       action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'offline';
     const timestamp = now();
-    /* 「修改」投稿审核:author 用 applyPendingEdit 路径(无 edit 入参,但有 pendingEdit);
-     * 其它情况用 admin 自己 inline 编辑的 edit 字段。 */
+
+    /* 「修改」投稿独立分支:approve 合入原 play + 删本条;reject/offline 仅改状态。 */
+    if (currentPlay.submissionType === 'modify') {
+      if (action === 'approve') {
+        if (!currentPlay.parentPlayId) {
+          throw new Error('修改草稿缺少 parent_play_id,无法合入');
+        }
+        const parentPlay = this.getAdminPlayById(currentPlay.parentPlayId);
+        if (!parentPlay) {
+          throw new Error('原内容不存在,无法合入修改');
+        }
+        const nextTitle = currentPlay.title.trim();
+        const nextAuthorName = currentPlay.authorName.trim();
+        const nextCategory = currentPlay.category.trim() || parentPlay.category;
+        const nextSummary = normalizeImportedSummary(currentPlay.summary);
+        const nextContent = currentPlay.content.trim();
+        if (!nextTitle) throw new Error('标题不能为空');
+        if (!nextAuthorName) throw new Error('署名不能为空');
+        if (!nextContent) throw new Error('正文不能为空');
+        ensureTagName(nextCategory);
+        let nextPlays: Play[] = getPlays().map((play) => {
+          if (play.id === currentPlay.parentPlayId) {
+            return {
+              ...play,
+              title: nextTitle,
+              authorName: nextAuthorName,
+              category: nextCategory,
+              summary: nextSummary,
+              content: nextContent,
+              updatedAt: timestamp,
+            };
+          }
+          return play;
+        });
+        nextPlays = applySeriesRename(
+          nextPlays,
+          {
+            authorName: parentPlay.authorName,
+            title: parentPlay.title,
+            category: parentPlay.category,
+          },
+          { title: nextTitle, category: nextCategory },
+          timestamp,
+        );
+        /* 删除 modification 自身。 */
+        nextPlays = nextPlays.filter((play) => play.id !== playId);
+        setPlays(nextPlays);
+        const reviewLog: ReviewLog = {
+          id: makeId('review'),
+          playId: currentPlay.parentPlayId,
+          action: 'approve',
+          operator: session.username,
+          note: `[修改] ${note || '无备注'}`,
+          createdAt: timestamp,
+          playTitle: nextTitle,
+        };
+        setReviewLogs([reviewLog, ...getReviewLogs()]);
+        return nextPlays.find((play) => play.id === currentPlay.parentPlayId) ?? null;
+      }
+      /* reject / offline:仅修改本条 status。 */
+      const updatedRow: Play = {
+        ...currentPlay,
+        status: mappedStatus,
+        reviewNote: note || '无备注',
+        reviewedAt: timestamp,
+        updatedAt: timestamp,
+      };
+      const nextPlays: Play[] = getPlays().map((play) => (play.id === playId ? updatedRow : play));
+      setPlays(nextPlays);
+      const reviewLog: ReviewLog = {
+        id: makeId('review'),
+        playId,
+        action,
+        operator: session.username,
+        note: note || '无备注',
+        createdAt: timestamp,
+        playTitle: updatedRow.title,
+      };
+      setReviewLogs([reviewLog, ...getReviewLogs()]);
+      return nextPlays.find((play) => play.id === playId) ?? null;
+    }
+
+    /* 普通投稿 / 衍生:inline edit 覆盖,否则保持原字段。 */
     const inlineEdit = edit;
-    const pendingEdit = !inlineEdit && currentPlay.pendingEdit ? currentPlay.pendingEdit : null;
-    const nextTitle = String(inlineEdit?.title ?? pendingEdit?.title ?? currentPlay.title).trim();
-    const nextAuthorName = String(
-      inlineEdit?.authorName ?? pendingEdit?.authorName ?? currentPlay.authorName,
-    ).trim();
+    const nextTitle = String(inlineEdit?.title ?? currentPlay.title).trim();
+    const nextAuthorName = String(inlineEdit?.authorName ?? currentPlay.authorName).trim();
     const nextCategory =
-      String(inlineEdit?.category ?? pendingEdit?.category ?? currentPlay.category).trim() ||
-      currentPlay.category;
+      String(inlineEdit?.category ?? currentPlay.category).trim() || currentPlay.category;
     const nextSummary = normalizeImportedSummary(
-      String(inlineEdit?.summary ?? pendingEdit?.summary ?? currentPlay.summary),
+      String(inlineEdit?.summary ?? currentPlay.summary),
     );
-    const nextContent = String(
-      inlineEdit?.content ?? pendingEdit?.content ?? currentPlay.content,
-    ).trim();
+    const nextContent = String(inlineEdit?.content ?? currentPlay.content).trim();
 
     if (!nextTitle) {
       throw new Error('标题不能为空');
@@ -744,8 +819,6 @@ export const mockDb = {
       reviewNote: note || '无备注',
       reviewedAt: timestamp,
       updatedAt: timestamp,
-      /* 审核通过时清除 pendingEdit(修改已完成),审核拒绝/下线时也清除,避免残留。 */
-      pendingEdit: undefined,
     };
     let nextPlays: Play[] = getPlays().map((play) => (play.id === playId ? updatedRow : play));
     nextPlays = applySeriesRename(
@@ -773,11 +846,10 @@ export const mockDb = {
     return nextPlays.find((play) => play.id === playId) ?? null;
   },
 
-  /* 作者「修改」投稿:把改动写入原 play 的 pendingEdit 字段,不创建新 play。
-   * 状态保持不变(approved / pending 都能改),审核员 reviewPlay 时若发现 pendingEdit
-   * 会在 approve 流程中应用并清空。 */
+  /* 作者「修改」投稿:创建一条独立的 pending 待审核 play,
+   * submissionType='modify', parentPlayId 指向被改的原 play。 */
   submitPlayEdit(
-    playId: string,
+    parentPlayId: string,
     draft: {
       title: string;
       category: string;
@@ -786,7 +858,7 @@ export const mockDb = {
       authorName: string;
     },
   ): Play {
-    const currentPlay = this.getAdminPlayById(playId);
+    const currentPlay = this.getAdminPlayById(parentPlayId);
     if (!currentPlay) {
       throw new Error('内容不存在');
     }
@@ -800,51 +872,29 @@ export const mockDb = {
     if (!nextContent) throw new Error('正文不能为空');
     ensureTagName(nextCategory);
     const timestamp = now();
-    const pendingEdit = {
+    const id = makeId('play');
+    const newPlay: Play = {
+      id,
       title: nextTitle,
       authorName: nextAuthorName,
       category: nextCategory,
       summary: nextSummary,
       content: nextContent,
-      submittedAt: timestamp,
+      status: 'pending',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      submissionType: 'modify',
+      parentPlayId,
     };
-    const nextPlays: Play[] = getPlays().map((play) =>
-      play.id === playId
-        ? {
-            ...play,
-            pendingEdit,
-            updatedAt: timestamp,
-          }
-        : play,
-    );
+    const nextPlays: Play[] = [...getPlays(), newPlay];
     setPlays(nextPlays);
-    return nextPlays.find((play) => play.id === playId)!;
+    return newPlay;
   },
 
-  clearPendingEdit(playId: string): Play | null {
-    const currentPlay = this.getAdminPlayById(playId);
-    if (!currentPlay) {
-      throw new Error('内容不存在');
-    }
-    if (!currentPlay.pendingEdit) {
-      return currentPlay;
-    }
-    const timestamp = now();
-    const nextPlays: Play[] = getPlays().map((play) =>
-      play.id === playId ? { ...play, pendingEdit: undefined, updatedAt: timestamp } : play,
-    );
-    setPlays(nextPlays);
-    return nextPlays.find((play) => play.id === playId) ?? null;
-  },
-
-  getPendingEditPlays(): Play[] {
+  getPendingModifyPlays(): Play[] {
     return getPlays()
-      .filter((play) => Boolean(play.pendingEdit))
-      .sort((left, right) => {
-        const leftAt = left.pendingEdit?.submittedAt ?? left.updatedAt;
-        const rightAt = right.pendingEdit?.submittedAt ?? right.updatedAt;
-        return rightAt.localeCompare(leftAt);
-      });
+      .filter((play) => play.submissionType === 'modify' && play.status === 'pending')
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   },
 
   getAdminRepos(status?: RepoStatus) {

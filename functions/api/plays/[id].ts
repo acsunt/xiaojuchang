@@ -20,8 +20,9 @@ const normalizeImportedSummary = (value: string) => {
   return normalized === '导入数据' ? '' : normalized;
 };
 
-/* 作者「修改」投稿:把改动写入原 play 的 pending_edit_* 字段,不创建新 play。
- * 审核员通过后会应用并把同系列下所有作品的 title/category 一起更新。 */
+/* 作者「修改」投稿:创建一条 submission_type='modify' 的待审核 play,
+ * 用 parent_play_id 指向被改的原 play。审核通过由 reviewPlay 把字段合入
+ * 原 play 并删除本条,审核拒绝/下线仅改 status,原 play 不动。 */
 export const onRequestPut: PagesFunction = async ({ env, params, request }) => {
   const id = String(params.id ?? '').trim();
   if (!id) {

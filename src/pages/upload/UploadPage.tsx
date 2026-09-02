@@ -352,17 +352,18 @@ export function UploadPage() {
     };
 
     /* 三个模式:
-     * 1) isEditOriginal：详情页「修改」入口,直接调用 updatePlay 把改动写入
-     *    原 play 的 pendingEdit 字段,不创建新 play。审核通过后
-     *    applySeriesRename 会同步更新同系列下其他作品的 title/category。
+     * 1) isEditOriginal：详情页「修改」入口,调用 submitPlayEdit 创建一条
+     *    submission_type='modify' 的待审核 play,parent_play_id 指向原 play。
+     *    审核通过由 reviewPlay 合入原 play,拒绝/下线则原 play 不动。
      * 2) appendDerived：详情页「上传衍生」入口,只追加末尾新增的衍生版本,
      *    携带 submissionType=derived;原文与已有版本锁定为只读。
      * 3) 普通模式:先投原文(submissionType=original),再按顺序投衍生。 */
     if (isEditOriginal) {
-      const updated = await playApi.updatePlay(editOriginalId, originalDraft);
-      /* 仍是同一 play,只更新本地记录的 latestPlayId(同 id)。 */
-      saveSubmissionRecord(originalDraft, { latestPlayId: updated.id });
-      rememberOwnedPlayId(updated.id);
+      await playApi.submitPlayEdit(editOriginalId, originalDraft);
+      /* 保存 submission 记录时,latestPlayId 记成原 play 的 id,
+       * 这样下次再点「修改」还能继续针对同一原 play。 */
+      saveSubmissionRecord(originalDraft, { latestPlayId: editOriginalId });
+      rememberOwnedPlayId(editOriginalId);
 
       syncLocalHistory(authorName);
       setForm(initialForm);

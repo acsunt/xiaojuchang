@@ -23,25 +23,18 @@ type PlayDraft = {
   content: string;
 };
 
-/* pending_edit_* 六列于 1.6 主题新增,旧线上 D1 库可能未迁移。
- * 首次访问相关路径时通过 pragma_table_info 探测列是否存在,
- * 缺列则一次性 ALTER 补齐并把结果写入 db 维度的 WeakMap 缓存,
- * 同一函数实例后续调用直接命中缓存,不再走 pragma / ALTER。
- * 探测或 ALTER 失败时保守按「不支持」处理,让审核通过等高频路径
- * 走 SQL 降级分支,而非冒到 Pages runtime 返回 HTML 错误页。 */
-const PENDING_EDIT_COLUMNS = [
-  'pending_edit_title',
-  'pending_edit_category',
-  'pending_edit_summary',
-  'pending_edit_content',
-  'pending_edit_author_name',
-  'pending_edit_submitted_at',
-] as const;
+/* submission_type / parent_play_id 两列于 1.6 主题新增,旧线上 D1 库可能未迁移。
+ * 首次访问相关路径时通过 pragma_table_info 探测列是否存在,缺列则一次性
+ * ALTER 补齐并把结果写入 db 维度的 WeakMap 缓存,同一函数实例后续调用
+ * 直接命中缓存,不再走 pragma / ALTER。
+ * 探测或 ALTER 失败时保守按「不支持」处理,旧库仍可走普通投稿 / 审核流程,
+ * 只是「修改」会失败并给运维提示。 */
+const MODIFY_COLUMNS = ['submission_type', 'parent_play_id'] as const;
 
-const pendingEditSupportCache = new WeakMap<D1Database, boolean>();
+const modifySupportCache = new WeakMap<D1Database, boolean>();
 
-const ensurePendingEditColumns = async (db: D1Database): Promise<boolean> => {
-  const cached = pendingEditSupportCache.get(db);
+export const ensureModifyColumns = async (db: D1Database): Promise<boolean> => {
+  const cached = modifySupportCache.get(db);
   if (cached !== undefined) {
     return cached;
   }
@@ -50,38 +43,40 @@ const ensurePendingEditColumns = async (db: D1Database): Promise<boolean> => {
       .prepare(`SELECT name FROM pragma_table_info('plays')`)
       .all<{ name?: string }>();
     const existing = new Set(rows.results.map((row) => String(row.name ?? '')));
-    const missing = PENDING_EDIT_COLUMNS.filter((column) => !existing.has(column));
+    const missing = MODIFY_COLUMNS.filter((column) => !existing.has(column));
     if (missing.length === 0) {
-      pendingEditSupportCache.set(db, true);
+      modifySupportCache.set(db, true);
       return true;
     }
-    /* 尝试自动补列:每条 ADD COLUMN 在 SQLite/D1 上对 nullable 列安全。 */
-    await db.batch(
-      missing.map((column) => db.prepare(`ALTER TABLE plays ADD COLUMN ${column} TEXT`).bind()),
-    );
-    /* 补列后再确认一次 pragma,避免 ALTER 静默失败。 */
+    /* 尝试自动补列:ADD COLUMN 对 nullable 列安全。
+     * submission_type 是 NOT NULL DEFAULT 'original',在 SQLite/D1 上 ALTER
+     * 加 DEFAULT 也允许,但要注意顺序——若表中已有数据,SQLite 会以默认值
+     * 回填,所以新加 NOT NULL 列必须给 DEFAULT。 */
+    const stmts = missing.map((column) => {
+      if (column === 'submission_type') {
+        return db
+          .prepare(`ALTER TABLE plays ADD COLUMN submission_type TEXT NOT NULL DEFAULT 'original'`)
+          .bind();
+      }
+      return db
+        .prepare(
+          `ALTER TABLE plays ADD COLUMN parent_play_id TEXT REFERENCES plays(id) ON DELETE CASCADE`,
+        )
+        .bind();
+    });
+    await db.batch(stmts);
     const after = await db
       .prepare(`SELECT name FROM pragma_table_info('plays')`)
       .all<{ name?: string }>();
     const afterSet = new Set(after.results.map((row) => String(row.name ?? '')));
-    const supported = PENDING_EDIT_COLUMNS.every((column) => afterSet.has(column));
-    pendingEditSupportCache.set(db, supported);
+    const supported = MODIFY_COLUMNS.every((column) => afterSet.has(column));
+    modifySupportCache.set(db, supported);
     return supported;
   } catch {
-    pendingEditSupportCache.set(db, false);
+    modifySupportCache.set(db, false);
     return false;
   }
 };
-
-export const hasPendingEditColumns = (db: D1Database): Promise<boolean> =>
-  ensurePendingEditColumns(db);
-
-const clearPendingEditSql = (supported: boolean) =>
-  supported
-    ? `pending_edit_title = NULL, pending_edit_category = NULL,
-         pending_edit_summary = NULL, pending_edit_content = NULL,
-         pending_edit_author_name = NULL, pending_edit_submitted_at = NULL`
-    : '';
 
 type ReviewPlayDraft = {
   title?: string;
@@ -251,8 +246,9 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
   await db
     .prepare(
       `INSERT INTO plays (
-        id, title, author_name, category, summary, content, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        id, title, author_name, category, summary, content, status, created_at, updated_at,
+        submission_type
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'original')`,
     )
     .bind(
       id,
@@ -372,6 +368,11 @@ export const updateAdminPlay = async (
   if (!currentPlay) {
     return null;
   }
+  /* modification (submission_type='modify') 不允许后台直接编辑,
+   * 必须先 approve / reject 处理,避免改动被覆盖到错误对象。 */
+  if (currentPlay.submissionType === 'modify') {
+    throw new Error('修改草稿请先通过审核或拒绝,不要直接编辑');
+  }
 
   const nextTitle = String(draft.title ?? currentPlay.title).trim();
   const nextAuthorName = String(draft.authorName ?? currentPlay.authorName).trim();
@@ -396,32 +397,15 @@ export const updateAdminPlay = async (
 
   const timestamp = now();
   /* 同系列跟随:把同 (author_name + title + category) 旧键下所有作品的 title/category
-   * 一起改写,updatedAt 同步刷新。审核通过或后台直接编辑都共用此逻辑。
-   * 旧库缺 pending_edit_* 列时,跳过清空子句但仍推进主更新。 */
-  const pendingSupported = await hasPendingEditColumns(db);
-  const clearClause = clearPendingEditSql(pendingSupported);
-  /* 拼接:固定首段 title/author/category/summary/content/updated_at + id 七参数,
-   * 加 clearClause(空串或带逗号的六列清空),最后 WHERE id = ? 也走同一参数位。 */
-  if (pendingSupported) {
-    await db
-      .prepare(
-        `UPDATE plays
-         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?,
-             ${clearClause}
-         WHERE id = ?`,
-      )
-      .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
-      .run();
-  } else {
-    await db
-      .prepare(
-        `UPDATE plays
-         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?
-         WHERE id = ?`,
-      )
-      .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
-      .run();
-  }
+   * 一起改写,updatedAt 同步刷新。审核通过或后台直接编辑都共用此逻辑。 */
+  await db
+    .prepare(
+      `UPDATE plays
+       SET title = ?, author_name = ?, category = ?, summary = ?, content = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(nextTitle, nextAuthorName, nextCategory, nextSummary, nextContent, timestamp, playId)
+    .run();
 
   if (currentPlay.title !== nextTitle || currentPlay.category !== nextCategory) {
     await db
@@ -445,13 +429,22 @@ export const updateAdminPlay = async (
   return ensurePlay(db, playId);
 };
 
-/* 作者「修改」投稿:把改动写入原 play 的 pending_edit_* 列,不创建新 play。 */
+/* 作者「修改」投稿:不再就地写 pending_edit_*,而是创建一条独立的
+ * pending 待审核 play,带 submission_type='modify' 和 parent_play_id。
+ * 审核通过时由 reviewPlay 把字段合入原 play 并删除这条 modification,
+ * 拒绝 / 下线时仅修改本条 status。 */
 export const submitPlayEdit = async (
   db: D1Database,
-  playId: string,
+  parentPlayId: string,
   draft: { title: string; category: string; summary: string; content: string; authorName: string },
 ) => {
-  const currentPlay = await getAdminPlayById(db, playId);
+  const modifySupported = await ensureModifyColumns(db);
+  if (!modifySupported) {
+    throw new Error(
+      '作者修改投稿功能依赖 submission_type / parent_play_id 列,当前数据库补列失败,请联系运维检查 D1 ALTER 权限',
+    );
+  }
+  const currentPlay = await getAdminPlayById(db, parentPlayId);
   if (!currentPlay) {
     throw new Error('内容不存在');
   }
@@ -463,78 +456,49 @@ export const submitPlayEdit = async (
   if (!nextTitle) throw new Error('标题不能为空');
   if (!nextAuthorName) throw new Error('署名不能为空');
   if (!nextContent) throw new Error('正文不能为空');
-  /* 旧库若缺 pending_edit_* 列,探测函数会一次性 ALTER 补齐,
-   * 同实例后续请求命中缓存直接走正常路径,无需手工迁移。 */
-  const pendingSupported = await hasPendingEditColumns(db);
-  if (!pendingSupported) {
-    throw new Error(
-      '作者修改投稿功能依赖 pending_edit_* 列,当前数据库补列失败,请联系运维检查 D1 ALTER 权限',
-    );
+  if (nextCategory) {
+    await ensureTagByName(db, nextCategory);
   }
-  await ensureTagByName(db, nextCategory);
+
+  const id = makeId('play');
   const timestamp = now();
+
   await db
     .prepare(
-      `UPDATE plays
-       SET pending_edit_title = ?, pending_edit_category = ?, pending_edit_summary = ?,
-           pending_edit_content = ?, pending_edit_author_name = ?, pending_edit_submitted_at = ?,
-           updated_at = ?
-       WHERE id = ?`,
+      `INSERT INTO plays (
+        id, title, author_name, category, summary, content, status, created_at, updated_at,
+        submission_type, parent_play_id
+      ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'modify', ?)`,
     )
     .bind(
+      id,
       nextTitle,
+      nextAuthorName,
       nextCategory,
       nextSummary,
       nextContent,
-      nextAuthorName,
       timestamp,
       timestamp,
-      playId,
+      parentPlayId,
     )
     .run();
-  return ensurePlay(db, playId);
+
+  return ensurePlay(db, id);
 };
 
-export const clearPendingEdit = async (db: D1Database, playId: string) => {
-  const currentPlay = await getAdminPlayById(db, playId);
-  if (!currentPlay) {
-    return null;
-  }
-  if (!currentPlay.pendingEdit) {
-    return currentPlay;
-  }
-  /* 旧库缺 pending_edit_* 列时无 pendingEdit 概念,直接返回原数据。 */
-  const pendingSupported = await hasPendingEditColumns(db);
-  if (!pendingSupported) {
-    return currentPlay;
-  }
-  const timestamp = now();
-  await db
-    .prepare(
-      `UPDATE plays
-       SET pending_edit_title = NULL, pending_edit_category = NULL,
-           pending_edit_summary = NULL, pending_edit_content = NULL,
-           pending_edit_author_name = NULL, pending_edit_submitted_at = NULL,
-           updated_at = ?
-       WHERE id = ?`,
-    )
-    .bind(timestamp, playId)
-    .run();
-  return ensurePlay(db, playId);
-};
-
-export const getPendingEditPlays = async (db: D1Database) => {
-  /* 旧库缺列时自动 ALTER 补齐;若补列失败则直接返回空数组,
-   * 让旧库下「待处理修改」面板不报错。 */
-  const pendingSupported = await hasPendingEditColumns(db);
-  if (!pendingSupported) {
+/* 列出所有「修改草稿」(submission_type='modify' 且 status='pending'),
+ * 按 submittedAt 倒序。旧库缺列时 ensureModifyColumns 会尝试自动 ALTER,
+ * 补列失败返回空数组。 */
+export const getPendingModifyPlays = async (db: D1Database) => {
+  const supported = await ensureModifyColumns(db);
+  if (!supported) {
     return [];
   }
   const result = await db
     .prepare(
       `SELECT * FROM plays
-       WHERE pending_edit_submitted_at IS NOT NULL
-       ORDER BY pending_edit_submitted_at DESC`,
+       WHERE submission_type = 'modify' AND status = 'pending'
+       ORDER BY updated_at DESC`,
     )
     .all<Record<string, unknown>>();
   return result.results.map(normalizePlay);
@@ -607,22 +571,110 @@ export const reviewPlay = async (
     input.action === 'approve' ? 'approved' : input.action === 'reject' ? 'rejected' : 'offline';
   const timestamp = now();
   const reviewNote = input.note || '无备注';
-  /* 「修改」投稿:author 走 pendingEdit 路径(无 inline edit 时);
-   * admin inline edit 优先。 */
-  const pendingEdit = !input.edit && currentPlay.pendingEdit ? currentPlay.pendingEdit : null;
-  const nextTitle = String(input.edit?.title ?? pendingEdit?.title ?? currentPlay.title).trim();
-  const nextAuthorName = String(
-    input.edit?.authorName ?? pendingEdit?.authorName ?? currentPlay.authorName,
-  ).trim();
+
+  /* 「修改」投稿独立分支:approve 把 modification 字段合入原 play 并删除本条,
+   * reject / offline 仅修改本条 status。inline edit 不允许走 modify 路径
+   * (admin 看到 diff 直接通过即可,不需要再手动覆盖一次)。 */
+  if (currentPlay.submissionType === 'modify') {
+    if (input.action === 'approve') {
+      if (!currentPlay.parentPlayId) {
+        throw new Error('修改草稿缺少 parent_play_id,无法合入');
+      }
+      const parentPlay = await getAdminPlayById(db, currentPlay.parentPlayId);
+      if (!parentPlay) {
+        throw new Error('原内容不存在,无法合入修改');
+      }
+      const nextTitle = currentPlay.title.trim();
+      const nextAuthorName = currentPlay.authorName.trim();
+      const nextCategory = currentPlay.category.trim() || parentPlay.category;
+      const nextSummary = normalizeImportedSummary(currentPlay.summary);
+      const nextContent = currentPlay.content.trim();
+      if (!nextTitle) throw new Error('标题不能为空');
+      if (!nextAuthorName) throw new Error('署名不能为空');
+      if (!nextContent) throw new Error('正文不能为空');
+      await ensureTagByName(db, nextCategory);
+
+      const stmts = [
+        /* 原 play 字段被合入 + 同系列跟随。 */
+        db
+          .prepare(
+            `UPDATE plays
+             SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
+                 updated_at = ?
+             WHERE id = ?`,
+          )
+          .bind(
+            nextTitle,
+            nextAuthorName,
+            nextCategory,
+            nextSummary,
+            nextContent,
+            timestamp,
+            currentPlay.parentPlayId,
+          ),
+        /* 写审核日志(挂在原 play 上,方便回看是谁改的)。 */
+        db
+          .prepare(
+            `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            makeId('review'),
+            currentPlay.parentPlayId,
+            'approve',
+            input.operator,
+            `[修改] ${reviewNote}`,
+            timestamp,
+          ),
+        /* 同系列下其他作品 title/category 跟随。 */
+        db
+          .prepare(
+            `UPDATE plays
+             SET title = ?, category = ?, updated_at = ?
+             WHERE author_name = ? AND title = ? AND category = ? AND id <> ? AND id <> ?`,
+          )
+          .bind(
+            nextTitle,
+            nextCategory,
+            timestamp,
+            parentPlay.authorName,
+            parentPlay.title,
+            parentPlay.category,
+            currentPlay.parentPlayId,
+            input.playId,
+          ),
+        /* modification 自身删除(连同 review_logs 外键级联)。 */
+        db.prepare(`DELETE FROM plays WHERE id = ?`).bind(input.playId),
+      ];
+      await db.batch(stmts);
+      return ensurePlay(db, currentPlay.parentPlayId);
+    }
+    /* reject / offline:仅修改本条 modification status,原 play 不动。 */
+    await db
+      .prepare(
+        `UPDATE plays
+         SET status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(mappedStatus, reviewNote, timestamp, timestamp, input.playId)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(makeId('review'), input.playId, input.action, input.operator, reviewNote, timestamp)
+      .run();
+    return ensurePlay(db, input.playId);
+  }
+
+  /* 普通投稿 / 衍生:保持原行为,inline edit 优先。 */
+  const nextTitle = String(input.edit?.title ?? currentPlay.title).trim();
+  const nextAuthorName = String(input.edit?.authorName ?? currentPlay.authorName).trim();
   const nextCategory =
-    String(input.edit?.category ?? pendingEdit?.category ?? currentPlay.category).trim() ||
-    currentPlay.category;
-  const nextSummary = normalizeImportedSummary(
-    String(input.edit?.summary ?? pendingEdit?.summary ?? currentPlay.summary),
-  );
-  const nextContent = String(
-    input.edit?.content ?? pendingEdit?.content ?? currentPlay.content,
-  ).trim();
+    String(input.edit?.category ?? currentPlay.category).trim() || currentPlay.category;
+  const nextSummary = normalizeImportedSummary(String(input.edit?.summary ?? currentPlay.summary));
+  const nextContent = String(input.edit?.content ?? currentPlay.content).trim();
 
   if (!nextTitle) {
     throw new Error('标题不能为空');
@@ -638,26 +690,14 @@ export const reviewPlay = async (
 
   await ensureTagByName(db, nextCategory);
 
-  /* 一次性更新当前 play + 同系列下其他作品(title/category 跟随),
-   * 并清空 pendingEdit(任何 action 都会清)。
-   * 旧库若尚未迁移 pending_edit_* 列,跳过清空子句以保证审核通过仍能生效。 */
-  const pendingSupported = await hasPendingEditColumns(db);
-  const reviewUpdateSql = pendingSupported
-    ? `UPDATE plays
-         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
-             status = ?, review_note = ?, reviewed_at = ?, updated_at = ?,
-             pending_edit_title = NULL, pending_edit_category = NULL,
-             pending_edit_summary = NULL, pending_edit_content = NULL,
-             pending_edit_author_name = NULL, pending_edit_submitted_at = NULL
-         WHERE id = ?`
-    : `UPDATE plays
-         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
-             status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
-         WHERE id = ?`;
-
   const stmts = [
     db
-      .prepare(reviewUpdateSql)
+      .prepare(
+        `UPDATE plays
+         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
+             status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
+         WHERE id = ?`,
+      )
       .bind(
         nextTitle,
         nextAuthorName,

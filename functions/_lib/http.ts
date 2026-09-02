@@ -1,16 +1,19 @@
 export type PlayStatus = 'pending' | 'approved' | 'rejected' | 'offline';
 export type ReviewAction = 'approve' | 'reject' | 'offline';
+export type SubmissionType = 'original' | 'modify' | 'derived';
+
+export const DEFAULT_CATEGORY = '未分类';
+export const PLAY_MODIFY_DRAFT_PARENT_PLACEHOLDER = '__pending_parent__';
 
 export const validPlayStatuses: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
 export const validReviewActions: ReviewAction[] = ['approve', 'reject', 'offline'];
+export const validSubmissionTypes: SubmissionType[] = ['original', 'modify', 'derived'];
 
-export type PlayPendingEditRecord = {
-  title: string;
-  category: string;
-  summary: string;
-  content: string;
-  authorName: string;
-  submittedAt: string;
+export const parseSubmissionType = (value: unknown): SubmissionType => {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return validSubmissionTypes.includes(normalized as SubmissionType)
+    ? (normalized as SubmissionType)
+    : 'original';
 };
 
 export type PlayRecord = {
@@ -25,7 +28,8 @@ export type PlayRecord = {
   updatedAt: string;
   reviewedAt: string | null;
   reviewNote: string | null;
-  pendingEdit: PlayPendingEditRecord | null;
+  submissionType: SubmissionType;
+  parentPlayId: string | null;
 };
 
 export type TagRecord = {
@@ -131,18 +135,6 @@ export const makeId = (prefix: string) =>
   `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
 
 export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
-  const pendingEditTitle = row.pending_edit_title ? String(row.pending_edit_title) : null;
-  const hasPendingEdit = Boolean(pendingEditTitle && row.pending_edit_submitted_at);
-  const pendingEdit = hasPendingEdit
-    ? {
-        title: pendingEditTitle as string,
-        category: String(row.pending_edit_category ?? row.category),
-        summary: String(row.pending_edit_summary ?? ''),
-        content: String(row.pending_edit_content ?? ''),
-        authorName: String(row.pending_edit_author_name ?? row.author_name),
-        submittedAt: String(row.pending_edit_submitted_at),
-      }
-    : null;
   return {
     id: String(row.id),
     title: String(row.title),
@@ -155,7 +147,8 @@ export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
     updatedAt: String(row.updated_at),
     reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
     reviewNote: row.review_note ? String(row.review_note) : null,
-    pendingEdit,
+    submissionType: parseSubmissionType(row.submission_type),
+    parentPlayId: row.parent_play_id ? String(row.parent_play_id) : null,
   };
 };
 

@@ -15,15 +15,6 @@ export type Tag = {
 
 export type SubmissionType = 'original' | 'modify' | 'derived';
 
-export type PlayPendingEdit = {
-  title: string;
-  category: string;
-  summary: string;
-  content: string;
-  authorName: string;
-  submittedAt: string;
-};
-
 export type Play = {
   id: string;
   title: string;
@@ -37,7 +28,9 @@ export type Play = {
   reviewedAt?: string;
   reviewNote?: string;
   submissionType?: SubmissionType;
-  pendingEdit?: PlayPendingEdit | null;
+  /* 「修改」投稿指向被改的原 play;详情面板用它做 diff 与合入目标。
+   * 仅 submissionType='modify' 时存在,公共列表 (status='approved') 不会出现此值。 */
+  parentPlayId?: string | null;
 };
 
 export type ReviewLog = {

@@ -1,4 +1,4 @@
-import {
+﻿import {
   Fragment,
   useCallback,
   useEffect,
@@ -87,11 +87,32 @@ const repoActionMeta: Array<{ action: RepoReviewAction; label: string; style: st
 const backupStatusOrder: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
 const BACKUP_RESTORE_CONFIRM_PHRASE = '确认恢复';
 
-const actionMeta: Array<{ action: ReviewAction; label: string; style: string }> = [
-  { action: 'approve', label: '通过', style: 'primary' },
-  { action: 'reject', label: '拒绝', style: 'danger' },
-  { action: 'offline', label: '下线', style: 'secondary' },
+const actionMeta: Array<{
+  action: ReviewAction;
+  label: string;
+  tone: 'primary' | 'danger' | 'secondary';
+}> = [
+  { action: 'approve', label: '通过', tone: 'primary' },
+  { action: 'reject', label: '拒绝', tone: 'danger' },
+  { action: 'offline', label: '下线', tone: 'secondary' },
 ];
+
+type SubmissionTypeBadge = {
+  kind: 'original' | 'modify' | 'derived';
+  label: string;
+  tone: 'pending' | 'approved' | 'derived';
+};
+
+const computeSubmissionTypeBadge = (play: Play): SubmissionTypeBadge => {
+  const kind = play.submissionType ?? 'original';
+  if (kind === 'modify') {
+    return { kind, label: '修改', tone: 'approved' };
+  }
+  if (kind === 'derived') {
+    return { kind, label: '新增衍生', tone: 'derived' };
+  }
+  return { kind, label: '首次投稿', tone: 'pending' };
+};
 
 const SUCCESS_TOAST_DURATION_MS = 1800;
 const BULK_REVIEW_BATCH_SIZE = 5;
@@ -1236,6 +1257,16 @@ export function AdminReviewPage() {
     [filteredPlays, selectedPlayId],
   );
 
+  /* 「修改」投稿( submissionType='modify' )展示 diff 需要找到原 play。
+   * allPlays 是全量(含所有 status),所以原 play(通常 status='approved')
+   * 也能命中,无需额外请求。 */
+  const parentPlay = useMemo(() => {
+    if (!selectedPlay || selectedPlay.submissionType !== 'modify' || !selectedPlay.parentPlayId) {
+      return null;
+    }
+    return allPlays.find((play) => play.id === selectedPlay.parentPlayId) ?? null;
+  }, [allPlays, selectedPlay]);
+
   /* 任务 5：repo 详情视图当前选中的 repo，与列表 filteredRepos 对齐。 */
   const selectedRepo = useMemo(
     () => filteredRepos.find((repo) => repo.id === selectedRepoId) ?? null,
@@ -1355,14 +1386,7 @@ export function AdminReviewPage() {
     | null
   >(() => {
     if (!selectedPlay) return null;
-    const kind = selectedPlay.submissionType ?? 'original';
-    if (kind === 'modify') {
-      return { kind, label: '修改', tone: 'approved' };
-    }
-    if (kind === 'derived') {
-      return { kind, label: '新增衍生', tone: 'derived' };
-    }
-    return { kind, label: '首次投稿', tone: 'pending' };
+    return computeSubmissionTypeBadge(selectedPlay);
   }, [selectedPlay]);
 
   const metrics = useMemo(() => {
@@ -2184,16 +2208,36 @@ export function AdminReviewPage() {
     setError('');
     setSuccessMessage('');
     try {
-      const updatedPlay = await playApi.reviewPlay(currentPlayId, action, nextNote.trim(), {
-        title: nextTitle.trim(),
-        authorName: nextAuthorName.trim(),
-        category: nextCategory.trim() || DEFAULT_CATEGORY,
-        summary: nextSummary.trim(),
-        content: nextContent,
-      });
+      /* modify 类型的「审核修改」不允许 admin 自己 inline 覆盖字段,
+       * 服务端会忽略 edit。这里把 edit 设为 undefined 让 reviewPlay 走 modify 分支。 */
+      const editPayload =
+        play.submissionType === 'modify'
+          ? undefined
+          : {
+              title: nextTitle.trim(),
+              authorName: nextAuthorName.trim(),
+              category: nextCategory.trim() || DEFAULT_CATEGORY,
+              summary: nextSummary.trim(),
+              content: nextContent,
+            };
+      const updatedPlay = await playApi.reviewPlay(
+        currentPlayId,
+        action,
+        nextNote.trim(),
+        editPayload,
+      );
       syncPlayStateLocally(updatedPlay);
       setReviewNote('');
-      if (selectedPlayId === currentPlayId) {
+      /* modify approve 返回的是被合入的原 play(不是 modification 记录),
+       * 这里把详情面板定位到原 play 上,这样用户看到的就是已合并后的内容。 */
+      if (action === 'approve' && play.submissionType === 'modify' && updatedPlay) {
+        setSelectedPlayId(updatedPlay.id);
+        setReviewTitle(updatedPlay.title);
+        setReviewAuthorName(updatedPlay.authorName);
+        setReviewCategory(updatedPlay.category);
+        setReviewSummary(updatedPlay.summary);
+        setReviewContent(updatedPlay.content);
+      } else if (selectedPlayId === currentPlayId) {
         setReviewTitle(updatedPlay?.title ?? nextTitle);
         setReviewAuthorName(updatedPlay?.authorName ?? nextAuthorName);
         setReviewCategory(updatedPlay?.category ?? nextCategory);
@@ -2201,10 +2245,16 @@ export function AdminReviewPage() {
         setReviewContent(updatedPlay?.content ?? nextContent);
       }
       setProcessingMessage('');
-      setSuccessMessage(formatReviewResultMessage(actionResultLabelMap[action], 1));
+      setSuccessMessage(
+        action === 'approve' && play.submissionType === 'modify'
+          ? '已通过修改,内容已合入原作品'
+          : formatReviewResultMessage(actionResultLabelMap[action], 1),
+      );
       const shouldAutoJumpNextPending = play.status === 'pending';
       await refreshAdminAfterReviewMutation(
-        shouldAutoJumpNextPending ? nextPendingPlayId : undefined,
+        shouldAutoJumpNextPending && !(action === 'approve' && play.submissionType === 'modify')
+          ? nextPendingPlayId
+          : updatedPlay?.id,
       );
       await loadTags();
     } catch (reason) {
@@ -3593,6 +3643,23 @@ export function AdminReviewPage() {
                             <span className={`status-tag ${play.status}`}>
                               {statusLabelMap[play.status]}
                             </span>
+                            {(() => {
+                              const badge = computeSubmissionTypeBadge(play);
+                              if (badge.kind === 'original') {
+                                return null;
+                              }
+                              const className =
+                                badge.tone === 'derived'
+                                  ? 'status-tag derived'
+                                  : badge.tone === 'approved'
+                                    ? 'status-tag approved'
+                                    : 'status-tag pending';
+                              return (
+                                <span className={className} title={badge.label}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
                             <div className="compact-meta-row compact-meta-row-small compact-meta-row-end">
                               <span className="compact-meta-item">
                                 ◈ {play.category || DEFAULT_CATEGORY}
@@ -4496,15 +4563,16 @@ export function AdminReviewPage() {
                       </div>
                     </div>
 
-                    {/* 「作者提交的修改」:仅当 selectedPlay.pendingEdit 存在时出现,
-                     * 展示作者就地修改的字段变更。审核 approve 时应用 + 同系列跟随,
-                     * reject/offline 时清空。 */}
-                    {selectedPlay.pendingEdit ? (
+                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现,
+                     * 以 parentPlay 的字段作为「当前」,以 selectedPlay(就是 modification 记录)
+                     * 的字段作为「待改为」。审核 approve 把 selectedPlay 的字段合入 parentPlay
+                     * 并删除本条,reject/offline 仅改本条 status,parentPlay 不动。 */}
+                    {selectedPlay.submissionType === 'modify' && selectedPlay.parentPlayId ? (
                       <div className="stack-gap-md review-pending-edit-panel">
                         <div className="content-head">
                           <h3>作者提交的修改</h3>
                           <span className="content-meta">
-                            {`作者于 ${new Date(selectedPlay.pendingEdit.submittedAt).toLocaleString('zh-CN')} 就地发起的修改,不会创建新版本`}
+                            {`作者于 ${new Date(selectedPlay.createdAt).toLocaleString('zh-CN')} 提交的修改草稿,审核通过后会覆盖到原作品`}
                           </span>
                         </div>
                         <div className="stack-gap-sm">
@@ -4512,38 +4580,46 @@ export function AdminReviewPage() {
                             <strong>标题</strong>
                             <p>
                               <span className="content-meta">当前：</span>
-                              {selectedPlay.title}
-                              {selectedPlay.pendingEdit.title !== selectedPlay.title ? (
-                                <>
-                                  <span className="content-meta"> / 待改为：</span>
-                                  <strong>{selectedPlay.pendingEdit.title}</strong>
-                                </>
-                              ) : null}
+                              {parentPlay?.title ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.title}</strong>
                             </p>
                           </div>
                           <div className="diff-card">
                             <strong>分类</strong>
                             <p>
                               <span className="content-meta">当前：</span>
-                              {selectedPlay.category}
-                              {selectedPlay.pendingEdit.category !== selectedPlay.category ? (
-                                <>
-                                  <span className="content-meta"> / 待改为：</span>
-                                  <strong>{selectedPlay.pendingEdit.category}</strong>
-                                </>
-                              ) : null}
+                              {parentPlay?.category ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.category}</strong>
+                            </p>
+                          </div>
+                          <div className="diff-card">
+                            <strong>署名</strong>
+                            <p>
+                              <span className="content-meta">当前：</span>
+                              {parentPlay?.authorName ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.authorName}</strong>
                             </p>
                           </div>
                           <div className="diff-card">
                             <strong>简介</strong>
-                            <p>{selectedPlay.pendingEdit.summary}</p>
+                            <p>{selectedPlay.summary}</p>
                           </div>
                           <div className="diff-card">
                             <strong>正文</strong>
-                            <p style={{ whiteSpace: 'pre-wrap' }}>
-                              {selectedPlay.pendingEdit.content}
-                            </p>
+                            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedPlay.content}</p>
                           </div>
+                          {parentPlay ? (
+                            <p className="content-meta">
+                              {`原内容 id: ${parentPlay.id} · 当前状态 ${parentPlay.status}`}
+                            </p>
+                          ) : (
+                            <p className="content-meta warning">
+                              未找到原内容(id {selectedPlay.parentPlayId}),审核通过时无法合入
+                            </p>
+                          )}
                         </div>
                       </div>
                     ) : null}
@@ -4650,7 +4726,7 @@ export function AdminReviewPage() {
                           {actionMeta.map((item) => (
                             <button
                               key={item.action}
-                              className={`button ${item.style} review-primary-action-button`}
+                              className={`button ${item.tone} review-primary-action-button`}
                               disabled={reviewMutationBusy}
                               onClick={() => void handleReview(item.action)}
                               type="button"
@@ -4824,7 +4900,7 @@ export function AdminReviewPage() {
                           {actionMeta.map((item) => (
                             <button
                               key={item.action}
-                              className={`button ${item.style} review-primary-action-button`}
+                              className={`button ${item.tone} review-primary-action-button`}
                               disabled={reviewMutationBusy}
                               onClick={() => void handleReview(item.action)}
                               type="button"

@@ -360,8 +360,11 @@ export const playApi = {
   },
 
   /* 作者「修改」投稿:把改动写入原 play 的 pending_edit_* 字段,不创建新 play。 */
-  async updatePlay(
-    playId: string,
+  /* 作者「修改」投稿:创建一条独立的 pending modification play
+   * (submissionType='modify', parentPlayId=被改的原 play)。
+   * 审核通过时 reviewPlay 会合入原 play 并删除本条;拒绝/下线仅改 status。 */
+  async submitPlayEdit(
+    parentPlayId: string,
     draft: {
       title: string;
       category: string;
@@ -371,21 +374,22 @@ export const playApi = {
     },
   ): Promise<Play> {
     if (apiMode === 'remote') {
-      const play = await jsonRequest<Play>(`/api/plays/${encodeURIComponent(playId)}`, {
+      const play = await jsonRequest<Play>(`/api/plays/${encodeURIComponent(parentPlayId)}`, {
         method: 'PUT',
         body: JSON.stringify(draft),
       });
       return normalizePlaySummary(play);
     }
-    return Promise.resolve(normalizePlaySummary(mockDb.submitPlayEdit(playId, draft)));
+    return Promise.resolve(normalizePlaySummary(mockDb.submitPlayEdit(parentPlayId, draft)));
   },
 
-  async getPendingEditPlays(): Promise<Play[]> {
+  /* 列出所有「待处理修改」(submissionType='modify' 且 status='pending')。 */
+  async getPendingModifyPlays(): Promise<Play[]> {
     if (apiMode === 'remote') {
       const plays = await jsonRequest<Play[]>('/api/admin/plays/pending-edits');
       return plays.map(normalizePlaySummary);
     }
-    return Promise.resolve(mockDb.getPendingEditPlays().map(normalizePlaySummary));
+    return Promise.resolve(mockDb.getPendingModifyPlays().map(normalizePlaySummary));
   },
 
   async getReposByPlayId(playId: string, order: RepoOrder): Promise<Repo[]> {
