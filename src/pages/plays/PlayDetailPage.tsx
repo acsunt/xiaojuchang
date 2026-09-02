@@ -464,6 +464,8 @@ export function PlayDetailPage() {
     return <div className="empty-panel error">{error || '内容不存在'}</div>;
   }
 
+  const headerSummary = versionItems[0]?.summary ?? play.summary;
+
   return (
     <section className="stack-gap-lg">
       <div className="detail-panel detail-hero-grid">
@@ -490,7 +492,7 @@ export function PlayDetailPage() {
             </button>
           </div>
 
-          {play.summary ? <p className="sub-copy">{play.summary}</p> : null}
+          {headerSummary ? <p className="sub-copy">{headerSummary}</p> : null}
 
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
@@ -641,6 +643,8 @@ export function PlayDetailPage() {
                     </button>
                   </div>
                 </div>
+                {/* 版本自己的简介放在该版本正文上方,与详情页头部「原文摘要」区分开。 */}
+                {item.summary ? <p className="sub-copy">{item.summary}</p> : null}
                 <p className="play-detail-copy">{item.content}</p>
               </article>
             );
