@@ -389,7 +389,7 @@ export const playApi = {
       const plays = await jsonRequest<Play[]>('/api/admin/plays/pending-edits');
       return plays.map(normalizePlaySummary);
     }
-    return Promise.resolve(mockDb.getPendingEditPlays().map(normalizePlaySummary));
+    return Promise.resolve(mockDb.getPendingModifyPlays().map(normalizePlaySummary));
   },
 
   async getReposByPlayId(playId: string, order: RepoOrder): Promise<Repo[]> {

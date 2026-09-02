@@ -1257,8 +1257,15 @@ export function AdminReviewPage() {
     [filteredPlays, selectedPlayId],
   );
 
-  /* 「作者提交的修改」面板:diff 由 selectedPlay.pendingEdit 与 selectedPlay
-   * 自身字段对比得出,无需查询 parent play。 */
+  /* 「修改」投稿( submissionType='modify' )展示 diff 需要找到原 play。
+   * allPlays 是全量(含所有 status),所以原 play(通常 status='approved')
+   * 也能命中,无需额外请求。 */
+  const parentPlay = useMemo(() => {
+    if (!selectedPlay || selectedPlay.submissionType !== 'modify' || !selectedPlay.parentPlayId) {
+      return null;
+    }
+    return allPlays.find((play) => play.id === selectedPlay.parentPlayId) ?? null;
+  }, [allPlays, selectedPlay]);
 
   /* 任务 5：repo 详情视图当前选中的 repo，与列表 filteredRepos 对齐。 */
   const selectedRepo = useMemo(
@@ -4536,6 +4543,9 @@ export function AdminReviewPage() {
                       <div className="content-head">
                         <div>
                           <h3>本次投稿类型</h3>
+                          <span className="content-meta">
+                            按作者上传时携带的类型字段判定,不依赖内容改动比例
+                          </span>
                         </div>
                         {submissionTypeBadge ? (
                           <span
@@ -4553,16 +4563,16 @@ export function AdminReviewPage() {
                       </div>
                     </div>
 
-                    {/* 「作者提交的修改」:仅当 selectedPlay.pendingEdit 存在时出现,
-                     * 以 selectedPlay(原 play) 的字段作为「当前」,以 pendingEdit
-                     * 作为「待改为」。审核 approve 时合入 + 同系列跟随,
-                     * reject/offline 时清空。 */}
-                    {selectedPlay.pendingEdit ? (
+                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现,
+                     * 以 parentPlay 的字段作为「当前」,以 selectedPlay(就是 modification 记录)
+                     * 的字段作为「待改为」。审核 approve 把 selectedPlay 的字段合入 parentPlay
+                     * 并删除本条,reject/offline 仅改本条 status,parentPlay 不动。 */}
+                    {selectedPlay.submissionType === 'modify' && selectedPlay.parentPlayId ? (
                       <div className="stack-gap-md review-pending-edit-panel">
                         <div className="content-head">
                           <h3>作者提交的修改</h3>
                           <span className="content-meta">
-                            {`作者于 ${new Date(selectedPlay.pendingEdit.submittedAt).toLocaleString('zh-CN')} 就地发起的修改,不会创建新版本`}
+                            {`作者于 ${new Date(selectedPlay.createdAt).toLocaleString('zh-CN')} 提交的修改草稿,审核通过后会覆盖到原作品`}
                           </span>
                         </div>
                         <div className="stack-gap-sm">
@@ -4570,51 +4580,46 @@ export function AdminReviewPage() {
                             <strong>标题</strong>
                             <p>
                               <span className="content-meta">当前：</span>
-                              {selectedPlay.title}
-                              {selectedPlay.pendingEdit.title !== selectedPlay.title ? (
-                                <>
-                                  <span className="content-meta"> / 待改为：</span>
-                                  <strong>{selectedPlay.pendingEdit.title}</strong>
-                                </>
-                              ) : null}
+                              {parentPlay?.title ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.title}</strong>
                             </p>
                           </div>
                           <div className="diff-card">
                             <strong>分类</strong>
                             <p>
                               <span className="content-meta">当前：</span>
-                              {selectedPlay.category}
-                              {selectedPlay.pendingEdit.category !== selectedPlay.category ? (
-                                <>
-                                  <span className="content-meta"> / 待改为：</span>
-                                  <strong>{selectedPlay.pendingEdit.category}</strong>
-                                </>
-                              ) : null}
+                              {parentPlay?.category ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.category}</strong>
                             </p>
                           </div>
                           <div className="diff-card">
                             <strong>署名</strong>
                             <p>
                               <span className="content-meta">当前：</span>
-                              {selectedPlay.authorName}
-                              {selectedPlay.pendingEdit.authorName !== selectedPlay.authorName ? (
-                                <>
-                                  <span className="content-meta"> / 待改为：</span>
-                                  <strong>{selectedPlay.pendingEdit.authorName}</strong>
-                                </>
-                              ) : null}
+                              {parentPlay?.authorName ?? '（原内容已删除）'}
+                              <span className="content-meta"> / 待改为：</span>
+                              <strong>{selectedPlay.authorName}</strong>
                             </p>
                           </div>
                           <div className="diff-card">
                             <strong>简介</strong>
-                            <p>{selectedPlay.pendingEdit.summary}</p>
+                            <p>{selectedPlay.summary}</p>
                           </div>
                           <div className="diff-card">
                             <strong>正文</strong>
-                            <p style={{ whiteSpace: 'pre-wrap' }}>
-                              {selectedPlay.pendingEdit.content}
-                            </p>
+                            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedPlay.content}</p>
                           </div>
+                          {parentPlay ? (
+                            <p className="content-meta">
+                              {`原内容 id: ${parentPlay.id} · 当前状态 ${parentPlay.status}`}
+                            </p>
+                          ) : (
+                            <p className="content-meta warning">
+                              未找到原内容(id {selectedPlay.parentPlayId}),审核通过时无法合入
+                            </p>
+                          )}
                         </div>
                       </div>
                     ) : null}
@@ -4625,6 +4630,7 @@ export function AdminReviewPage() {
                       <div className="stack-gap-md diff-panel">
                         <div className="content-head">
                           <h3>与上一版文本对比</h3>
+                          <span className="content-meta">仅供参考,不用于类型判定</span>
                         </div>
                         <div className="inline-actions wrap-mobile diff-chip-row">
                           {submissionDiffItems.map((item) => (

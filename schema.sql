@@ -11,16 +11,11 @@ CREATE TABLE IF NOT EXISTS plays (
   reviewed_at TEXT,
   review_note TEXT,
   submission_type TEXT NOT NULL DEFAULT 'original' CHECK (submission_type IN ('original', 'modify', 'derived')),
-  pending_edit_title TEXT,
-  pending_edit_category TEXT,
-  pending_edit_summary TEXT,
-  pending_edit_content TEXT,
-  pending_edit_author_name TEXT,
-  pending_edit_submitted_at TEXT
+  parent_play_id TEXT REFERENCES plays(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_plays_status_updated_at ON plays(status, updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_plays_pending_edit_submitted_at ON plays(pending_edit_submitted_at);
+CREATE INDEX IF NOT EXISTS idx_plays_parent_play_id ON plays(parent_play_id);
 
 CREATE TABLE IF NOT EXISTS tags (
   id TEXT PRIMARY KEY,

@@ -16,15 +16,6 @@ export const parseSubmissionType = (value: unknown): SubmissionType => {
     : 'original';
 };
 
-export type PlayPendingEditRecord = {
-  title: string;
-  category: string;
-  summary: string;
-  content: string;
-  authorName: string;
-  submittedAt: string;
-};
-
 export type PlayRecord = {
   id: string;
   title: string;
@@ -38,7 +29,7 @@ export type PlayRecord = {
   reviewedAt: string | null;
   reviewNote: string | null;
   submissionType: SubmissionType;
-  pendingEdit: PlayPendingEditRecord | null;
+  parentPlayId: string | null;
 };
 
 export type TagRecord = {
@@ -144,18 +135,6 @@ export const makeId = (prefix: string) =>
   `${prefix}_${crypto.randomUUID().replace(/-/g, '').slice(0, 24)}`;
 
 export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
-  const pendingEditTitle = row.pending_edit_title ? String(row.pending_edit_title) : null;
-  const hasPendingEdit = Boolean(pendingEditTitle && row.pending_edit_submitted_at);
-  const pendingEdit = hasPendingEdit
-    ? {
-        title: pendingEditTitle as string,
-        category: String(row.pending_edit_category ?? row.category),
-        summary: String(row.pending_edit_summary ?? ''),
-        content: String(row.pending_edit_content ?? ''),
-        authorName: String(row.pending_edit_author_name ?? row.author_name),
-        submittedAt: String(row.pending_edit_submitted_at),
-      }
-    : null;
   return {
     id: String(row.id),
     title: String(row.title),
@@ -169,7 +148,7 @@ export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
     reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
     reviewNote: row.review_note ? String(row.review_note) : null,
     submissionType: parseSubmissionType(row.submission_type),
-    pendingEdit,
+    parentPlayId: row.parent_play_id ? String(row.parent_play_id) : null,
   };
 };
 
