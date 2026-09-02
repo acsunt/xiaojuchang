@@ -268,18 +268,29 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
 };
 
 export const listAdminPlays = async (db: D1Database, status?: PlayStatus) => {
-  const statement = status
-    ? db
-        .prepare(
+  /* status='pending' 时同时返回带「待处理修改」(pending_edit_submitted_at 非空)
+   * 的 play——它们既可能是新投稿,也可能是对已通过作品的作者修改,
+   * 都进待审核列表让 admin 处理。 */
+  const pendingEditSupported = status === 'pending' ? await ensurePendingEditColumns(db) : true;
+  const statement =
+    status === 'pending' && pendingEditSupported
+      ? db.prepare(
           `SELECT * FROM plays
-         WHERE status = ?
-         ORDER BY updated_at DESC`,
-        )
-        .bind(status)
-    : db.prepare(
-        `SELECT * FROM plays
-         ORDER BY updated_at DESC`,
-      );
+           WHERE status = ? OR pending_edit_submitted_at IS NOT NULL
+           ORDER BY updated_at DESC`,
+        ).bind(status)
+      : status
+        ? db
+            .prepare(
+              `SELECT * FROM plays
+             WHERE status = ?
+             ORDER BY updated_at DESC`,
+            )
+            .bind(status)
+        : db.prepare(
+            `SELECT * FROM plays
+             ORDER BY updated_at DESC`,
+          );
 
   const result = await statement.all<Record<string, unknown>>();
   return result.results.map(normalizePlay);

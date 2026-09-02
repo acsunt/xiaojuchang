@@ -760,10 +760,11 @@ export function UploadPage() {
                 <span>简介（可空）</span>
                 <ClearableField
                   onClear={() => setForm((current) => ({ ...current, summary: '' }))}
-                  visible={Boolean(form.summary)}
+                  visible={Boolean(form.summary) && !lockOriginalContent}
                 >
                   <input
                     value={form.summary}
+                    readOnly={lockOriginalContent}
                     onChange={(event) =>
                       setForm((current) => ({ ...current, summary: event.target.value }))
                     }

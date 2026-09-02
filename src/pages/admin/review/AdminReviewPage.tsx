@@ -1596,8 +1596,12 @@ export function AdminReviewPage() {
       );
       setPlays((current) => {
         const exists = current.some((play) => play.id === updatedPlay.id);
+        /* 「待审核」面板下也要保留带 pendingEdit 的已通过作品,
+         * 它们走就地修改语义需要 admin 二次确认。 */
         const shouldStayInCurrentList =
-          selectedStatus === undefined || updatedPlay.status === selectedStatus;
+          selectedStatus === undefined ||
+          updatedPlay.status === selectedStatus ||
+          (selectedStatus === 'pending' && Boolean(updatedPlay.pendingEdit));
 
         if (!exists) {
           return current;
@@ -3653,6 +3657,18 @@ export function AdminReviewPage() {
                                 </span>
                               );
                             })()}
+                            {play.pendingEdit ? (
+                              <span
+                                className="status-tag pending"
+                                title={`作者于 ${new Date(
+                                  play.pendingEdit.submittedAt,
+                                ).toLocaleString(
+                                  'zh-CN',
+                                )} 提交了待处理修改,审核通过后才会替换为修改后内容`}
+                              >
+                                待处理修改
+                              </span>
+                            ) : null}
                             <div className="compact-meta-row compact-meta-row-small compact-meta-row-end">
                               <span className="compact-meta-item">
                                 ◈ {play.category || DEFAULT_CATEGORY}
