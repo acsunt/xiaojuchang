@@ -463,9 +463,7 @@ export const mockDb = {
     if (status === 'pending') {
       /* 同时返回带 pendingEdit 的 play(作者修改过的已通过作品),
        * 让它们也出现在「待审核」面板中供审核员处理。 */
-      return plays.filter(
-        (play) => play.status === 'pending' || Boolean(play.pendingEdit),
-      );
+      return plays.filter((play) => play.status === 'pending' || Boolean(play.pendingEdit));
     }
     return plays.filter((play) => play.status === status);
   },

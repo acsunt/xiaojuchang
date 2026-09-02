@@ -274,11 +274,13 @@ export const listAdminPlays = async (db: D1Database, status?: PlayStatus) => {
   const pendingEditSupported = status === 'pending' ? await ensurePendingEditColumns(db) : true;
   const statement =
     status === 'pending' && pendingEditSupported
-      ? db.prepare(
-          `SELECT * FROM plays
+      ? db
+          .prepare(
+            `SELECT * FROM plays
            WHERE status = ? OR pending_edit_submitted_at IS NOT NULL
            ORDER BY updated_at DESC`,
-        ).bind(status)
+          )
+          .bind(status)
       : status
         ? db
             .prepare(
