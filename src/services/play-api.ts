@@ -757,7 +757,7 @@ export const playApi = {
   ): Promise<Continuation | null> {
     if (apiMode === 'remote') {
       const item = await jsonRequest<Continuation | null>(
-        `/api/admin/continuations/${encodeURIComponent(continuationId)}`,
+        `/api/continuations/${encodeURIComponent(continuationId)}`,
         {
           method: 'POST',
           body: JSON.stringify({ action, note }),

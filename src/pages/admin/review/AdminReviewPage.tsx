@@ -98,15 +98,6 @@ const repoActionMeta: Array<{ action: RepoReviewAction; label: string; style: st
   { action: 'approve', label: '通过', style: 'primary' },
 ];
 
-const continuationActionMeta: Array<{
-  action: ContinuationReviewAction;
-  label: string;
-  style: string;
-}> = [
-  { action: 'reject', label: '拒绝', style: 'danger' },
-  { action: 'approve', label: '通过', style: 'primary' },
-];
-
 const backupStatusOrder: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
 const BACKUP_RESTORE_CONFIRM_PHRASE = '确认恢复';
 
@@ -612,7 +603,7 @@ export function AdminReviewPage() {
   const [continuationKeyword, setContinuationKeyword] = useState('');
   const [continuationReviewNote, setContinuationReviewNote] = useState('');
   const [continuationBusyAction, setContinuationBusyAction] = useState<
-    ContinuationReviewAction | 'delete' | null
+    ContinuationReviewAction | 'update' | 'delete' | null
   >(null);
   const [selectedContinuationId, setSelectedContinuationId] = useState('');
   const [continuationEditDraft, setContinuationEditDraft] = useState<{
@@ -2839,7 +2830,7 @@ export function AdminReviewPage() {
 
   const handleUpdateContinuation = async () => {
     if (!adminSelectedContinuation) return;
-    setContinuationBusyAction('delete');
+    setContinuationBusyAction('update');
     setError('');
     setSuccessMessage('');
     try {
@@ -2861,6 +2852,62 @@ export function AdminReviewPage() {
       setSuccessMessage('续写已更新。');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '续写更新失败');
+    } finally {
+      setContinuationBusyAction(null);
+    }
+  };
+
+  /* 续写批量通过:与 repo 的 handleBulkApproveRepos 对齐,一次提交一组待审核续写 id。
+   * 不传 id 时按当前列表所有待审核续写处理,与 repo 行为一致。 */
+  const handleBulkApproveContinuations = async (ids?: string[], label?: string) => {
+    const normalizedIds = ids
+      ? Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)))
+      : pendingVisibleContinuations.map((item) => item.id);
+    if (normalizedIds.length === 0) {
+      setError(
+        continuationKeyword.trim() ? '当前搜索结果里没有可通过的续写' : '当前没有可通过的续写',
+      );
+      return;
+    }
+    const targetLabel = label ?? '当前待审核续写';
+    if (!window.confirm(`确认一键通过${targetLabel}吗？共 ${normalizedIds.length} 条。`)) {
+      return;
+    }
+    setContinuationBusyAction('approve');
+    setError('');
+    setSuccessMessage('');
+    try {
+      for (const id of normalizedIds) {
+        await playApi.reviewContinuation(id, 'approve', continuationReviewNote);
+      }
+      /* 本地乐观更新:先把状态改成 approved,失败再回滚。 */
+      setAllContinuations((current) =>
+        current.map((item) =>
+          normalizedIds.includes(item.id)
+            ? {
+                ...item,
+                status: 'approved' as const,
+                reviewNote: continuationReviewNote.trim() || item.reviewNote,
+              }
+            : item,
+        ),
+      );
+      setContinuations((current) =>
+        current.map((item) =>
+          normalizedIds.includes(item.id)
+            ? {
+                ...item,
+                status: 'approved' as const,
+                reviewNote: continuationReviewNote.trim() || item.reviewNote,
+              }
+            : item,
+        ),
+      );
+      await Promise.all([loadContinuations(selectedContinuationStatus), loadAllContinuations()]);
+      setContinuationReviewNote('');
+      setSuccessMessage(`已通过 ${normalizedIds.length} 条续写。`);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '续写批量通过失败');
     } finally {
       setContinuationBusyAction(null);
     }
@@ -4589,6 +4636,22 @@ export function AdminReviewPage() {
                       条。 作者留空时后台统一显示「匿名」,详情页不展示署名。
                     </p>
                   </div>
+                  <div className="inline-actions wrap-mobile admin-bulk-review-head-actions">
+                    <button
+                      className="button primary admin-approve-all-button"
+                      disabled={
+                        continuationBusyAction !== null || pendingVisibleContinuations.length === 0
+                      }
+                      onClick={() =>
+                        void handleBulkApproveContinuations(undefined, '当前列表待审核续写')
+                      }
+                      type="button"
+                    >
+                      {continuationBusyAction === 'approve'
+                        ? '处理中'
+                        : `通过当前待审核（${pendingVisibleContinuations.length}）`}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="inline-actions wrap-mobile admin-bulk-review-actions">
@@ -4691,113 +4754,235 @@ export function AdminReviewPage() {
                     </span>
                   </div>
 
-                  <label>
-                    <span>简介（必填）</span>
-                    <ClearableField
-                      onClear={() =>
-                        setContinuationEditDraft((current) => ({ ...current, summary: '' }))
-                      }
-                      visible={Boolean(continuationEditDraft.summary)}
-                    >
-                      <input
-                        value={continuationEditDraft.summary}
-                        onChange={(event) =>
-                          setContinuationEditDraft((current) => ({
-                            ...current,
-                            summary: event.target.value,
-                          }))
-                        }
-                        placeholder="这条续写写什么？"
-                      />
-                    </ClearableField>
-                  </label>
-
-                  <label>
-                    <span>作者（可空，空字符串在详情页不展示）</span>
-                    <ClearableField
-                      onClear={() =>
-                        setContinuationEditDraft((current) => ({ ...current, nickname: '' }))
-                      }
-                      visible={Boolean(continuationEditDraft.nickname)}
-                    >
-                      <input
-                        value={continuationEditDraft.nickname}
-                        onChange={(event) =>
-                          setContinuationEditDraft((current) => ({
-                            ...current,
-                            nickname: event.target.value,
-                          }))
-                        }
-                        placeholder="留空表示匿名续写"
-                      />
-                    </ClearableField>
-                  </label>
-
-                  <label>
-                    <span>正文（必填）</span>
-                    <textarea
-                      rows={10}
-                      value={continuationEditDraft.content}
-                      onChange={(event) =>
-                        setContinuationEditDraft((current) => ({
-                          ...current,
-                          content: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-
-                  <label>
-                    <span>审核备注</span>
-                    <ClearableField
-                      onClear={() =>
-                        setContinuationEditDraft((current) => ({ ...current, note: '' }))
-                      }
-                      visible={Boolean(continuationEditDraft.note)}
-                    >
-                      <input
-                        value={continuationEditDraft.note}
-                        onChange={(event) =>
-                          setContinuationEditDraft((current) => ({
-                            ...current,
-                            note: event.target.value,
-                          }))
-                        }
-                      />
-                    </ClearableField>
-                  </label>
-
-                  <div className="inline-actions wrap-mobile admin-repo-action-row">
-                    {continuationActionMeta.map((meta) => (
+                  {/* 复刻 repo 审核的「查看模式」三件套 + 双栏（仅预览 / 仅编辑 / 编辑+预览）,
+                   * 让管理员先在左侧看原文,右侧编辑,避免来回滚动。 */}
+                  <div className="admin-review-mode-line">
+                    <div className="inline-actions wrap-mobile admin-review-view-mode-row admin-mode-lefthalf">
+                      <span className="content-meta">查看模式</span>
                       <button
-                        className={meta.style === 'danger' ? 'button danger' : 'button primary'}
-                        disabled={continuationBusyAction !== null}
-                        key={meta.action}
-                        onClick={() =>
-                          void handleReviewContinuation(adminSelectedContinuation.id, meta.action)
-                        }
+                        className={adminViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setAdminViewMode('preview')}
                         type="button"
                       >
-                        {continuationBusyAction === meta.action ? '处理中' : meta.label}
+                        仅预览
                       </button>
-                    ))}
-                    <button
-                      className="button secondary"
-                      disabled={continuationBusyAction !== null}
-                      onClick={() => void handleUpdateContinuation()}
-                      type="button"
-                    >
-                      保存修改
-                    </button>
-                    <button
-                      className="button ghost"
-                      disabled={continuationBusyAction !== null}
-                      onClick={() => void handleDeleteContinuation(adminSelectedContinuation.id)}
-                      type="button"
-                    >
-                      删除
-                    </button>
+                      <button
+                        className={adminViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setAdminViewMode('edit')}
+                        type="button"
+                      >
+                        仅编辑
+                      </button>
+                      <button
+                        className={adminViewMode === 'both' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setAdminViewMode('both')}
+                        type="button"
+                      >
+                        编辑 + 预览
+                      </button>
+                    </div>
+                    {/* 右半空壳：与小剧场 / repo 审核的 admin-mode-righthalf 容器结构对齐。 */}
+                    <div className="inline-actions admin-adjacent-row admin-mode-righthalf" />
                   </div>
+
+                  <div
+                    className={
+                      adminViewMode === 'preview'
+                        ? 'admin-review-detail-grid admin-review-detail-grid-preview'
+                        : adminViewMode === 'edit'
+                          ? 'admin-review-detail-grid admin-review-detail-grid-edit'
+                          : 'admin-review-detail-grid admin-review-detail-grid-both'
+                    }
+                  >
+                    {adminViewMode !== 'edit' ? (
+                      <div className="detail-panel stack-gap-md admin-review-detail-preview">
+                        <div className="card-topline">
+                          <span className={`status-tag ${adminSelectedContinuation.status}`}>
+                            {continuationStatusLabelMap[adminSelectedContinuation.status]}
+                          </span>
+                          <span>
+                            《
+                            {adminSelectedContinuation.playTitle ??
+                              adminSelectedContinuation.playId}
+                            》
+                          </span>
+                        </div>
+                        <div className="preview-section-header">
+                          <strong>{adminSelectedContinuation.nickname?.trim() || '匿名'}</strong>
+                          <span className="content-meta">
+                            {new Date(adminSelectedContinuation.createdAt).toLocaleString('zh-CN')}
+                          </span>
+                        </div>
+                        <div className="inline-detail-block stack-gap-md preview-content-block">
+                          <div className="preview-section-header">
+                            <span className="content-meta">
+                              简介：{adminSelectedContinuation.summary}
+                            </span>
+                          </div>
+                          <p className="admin-review-detail-content">
+                            {adminSelectedContinuation.content}
+                          </p>
+                        </div>
+                        {adminSelectedContinuation.reviewNote ? (
+                          <p className="sub-copy">
+                            审核备注：{adminSelectedContinuation.reviewNote}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {adminViewMode !== 'preview' ? (
+                      <div className="detail-panel stack-gap-md admin-review-detail-edit">
+                        <div className="preview-section-header">
+                          <strong>编辑续写</strong>
+                          <span className="content-meta">
+                            原 {adminSelectedContinuation.content.length} 字
+                          </span>
+                        </div>
+                        <label className="stack-gap-xs">
+                          <span>简介（必填）</span>
+                          <ClearableField
+                            onClear={() =>
+                              setContinuationEditDraft((current) => ({ ...current, summary: '' }))
+                            }
+                            visible={Boolean(continuationEditDraft.summary)}
+                          >
+                            <input
+                              disabled={continuationBusyAction !== null}
+                              onChange={(event) =>
+                                setContinuationEditDraft((current) => ({
+                                  ...current,
+                                  summary: event.target.value,
+                                }))
+                              }
+                              placeholder="这条续写写什么？"
+                              value={continuationEditDraft.summary}
+                            />
+                          </ClearableField>
+                        </label>
+                        <label className="stack-gap-xs">
+                          <span>作者（可空，空字符串在详情页不展示）</span>
+                          <ClearableField
+                            onClear={() =>
+                              setContinuationEditDraft((current) => ({ ...current, nickname: '' }))
+                            }
+                            visible={Boolean(continuationEditDraft.nickname)}
+                          >
+                            <input
+                              disabled={continuationBusyAction !== null}
+                              onChange={(event) =>
+                                setContinuationEditDraft((current) => ({
+                                  ...current,
+                                  nickname: event.target.value,
+                                }))
+                              }
+                              placeholder="留空表示匿名续写"
+                              value={continuationEditDraft.nickname}
+                            />
+                          </ClearableField>
+                        </label>
+                        <label className="stack-gap-xs">
+                          <span>正文（必填）</span>
+                          <textarea
+                            disabled={continuationBusyAction !== null}
+                            onChange={(event) =>
+                              setContinuationEditDraft((current) => ({
+                                ...current,
+                                content: event.target.value,
+                              }))
+                            }
+                            rows={10}
+                            value={continuationEditDraft.content}
+                          />
+                        </label>
+                        <label className="stack-gap-xs">
+                          <span>审核备注</span>
+                          <ClearableField
+                            onClear={() =>
+                              setContinuationEditDraft((current) => ({ ...current, note: '' }))
+                            }
+                            visible={Boolean(continuationEditDraft.note)}
+                          >
+                            <input
+                              disabled={continuationBusyAction !== null}
+                              onChange={(event) =>
+                                setContinuationEditDraft((current) => ({
+                                  ...current,
+                                  note: event.target.value,
+                                }))
+                              }
+                              value={continuationEditDraft.note}
+                            />
+                          </ClearableField>
+                        </label>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* 4 按钮同行:删除 / 拒绝 / 保存 / 通过,与 repo 审核的 action-row 顺序一致。
+                   * 保存按钮在草稿无变化时 disabled,与 repo 行为对齐,避免误点。 */}
+                  {(() => {
+                    const draftSummary = continuationEditDraft.summary;
+                    const draftNickname = continuationEditDraft.nickname;
+                    const draftContent = continuationEditDraft.content;
+                    const draftNote = continuationEditDraft.note;
+                    const originalSummary = adminSelectedContinuation.summary;
+                    const originalNickname = adminSelectedContinuation.nickname ?? '';
+                    const originalContent = adminSelectedContinuation.content;
+                    const originalNote = adminSelectedContinuation.reviewNote ?? '';
+                    const draftUnchanged =
+                      draftSummary === originalSummary &&
+                      draftNickname === originalNickname &&
+                      draftContent === originalContent &&
+                      draftNote === originalNote;
+                    return (
+                      <div className="inline-actions wrap-mobile continuation-action-row admin-review-detail-action-row">
+                        <button
+                          className="button warning continuation-delete-single-button"
+                          disabled={continuationBusyAction !== null}
+                          onClick={() =>
+                            void handleDeleteContinuation(adminSelectedContinuation.id)
+                          }
+                          type="button"
+                        >
+                          {continuationBusyAction === 'delete' ? '处理中' : '删除'}
+                        </button>
+                        <button
+                          className="button danger continuation-reject-button"
+                          disabled={continuationBusyAction !== null}
+                          onClick={() =>
+                            void handleReviewContinuation(adminSelectedContinuation.id, 'reject')
+                          }
+                          type="button"
+                        >
+                          {continuationBusyAction === 'reject' ? '处理中' : '拒绝'}
+                        </button>
+                        <button
+                          className="button primary admin-review-detail-save-button continuation-save-button"
+                          disabled={
+                            continuationBusyAction !== null ||
+                            draftContent.trim().length === 0 ||
+                            draftSummary.trim().length === 0 ||
+                            draftUnchanged
+                          }
+                          onClick={() => void handleUpdateContinuation()}
+                          type="button"
+                        >
+                          {continuationBusyAction === 'update' ? '保存中' : '保存'}
+                        </button>
+                        <button
+                          className="button primary continuation-approve-button"
+                          disabled={continuationBusyAction !== null}
+                          onClick={() =>
+                            void handleReviewContinuation(adminSelectedContinuation.id, 'approve')
+                          }
+                          type="button"
+                        >
+                          {continuationBusyAction === 'approve' ? '处理中' : '通过'}
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   <label>
                     <span>本次审核备注（通过/拒绝时使用，可独立于上方）</span>

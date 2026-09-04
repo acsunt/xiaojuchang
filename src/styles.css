@@ -5327,6 +5327,31 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   .detail-version-flat-toggle {
     width: fit-content;
   }
+
+  /* 详情页续写编辑器：手机端把「取消 / 提交续写」强制同一行，
+   * 避免默认 flex-wrap 让两个按钮纵向堆叠。 */
+  .continuation-composer-actions {
+    flex-wrap: nowrap;
+  }
+
+  /* 详情页续写编辑器：让两个按钮在窄屏也只占文字宽度，不撑满整行。 */
+  .continuation-composer-actions > .button {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* 审核后台续写详情：手机端把 4 个动作按钮（删除/拒绝/保存/通过）强制同一行，
+   * 与 repo 审核 action-row 一致,避免窄屏按钮纵向堆叠导致操作变慢。 */
+  .continuation-action-row {
+    flex-wrap: nowrap;
+  }
+
+  .continuation-action-row > .button {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+  }
 }
 
 /* === 礼花特效 === */

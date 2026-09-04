@@ -795,6 +795,182 @@ export function PlayDetailPage() {
         </article>
       )}
 
+      {/* 续写区:与 repo 区平级,挂在小剧场正文下、repo 区之下。
+       * 续写是扁平结构(没有回复链),只展示已通过条目,
+       * 用户通过「展开续写」按钮展开 composer,
+       * 编辑现有续写点击卡片右侧的「修改」按钮原地覆盖提交。 */}
+      <section className="form-panel stack-gap-md continuation-panel">
+        <div className="content-head wrap-mobile">
+          <div>
+            <h3>续写</h3>
+            <p className="sub-copy">
+              续写是直接挂在原文下的独立长文,作者(可选) / 简介(必填) / 正文(必填) 三个字段,
+              提交后进入独立审核池;原作者修改会原地覆盖并重新审核。
+            </p>
+          </div>
+
+          <div className="continuation-toolbar-row">
+            <div className="continuation-sort-group">
+              <button
+                className={continuationOrder === 'asc' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setContinuationOrder('asc')}
+                type="button"
+              >
+                正序
+              </button>
+              <button
+                className={continuationOrder === 'desc' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setContinuationOrder('desc')}
+                type="button"
+              >
+                倒序
+              </button>
+            </div>
+            <button
+              className={
+                continuationComposerOpen
+                  ? 'button secondary continuation-composer-toggle'
+                  : 'button primary continuation-composer-toggle'
+              }
+              onClick={() =>
+                continuationComposerOpen ? closeContinuationComposer() : openContinuationComposer()
+              }
+              type="button"
+            >
+              {continuationComposerOpen ? '收起续写' : '展开续写'}
+            </button>
+          </div>
+        </div>
+
+        {continuationComposerOpen ? (
+          <div className="continuation-form-grid">
+            <label>
+              <span>作者（可空，留空即匿名，详情页不展示署名）</span>
+              <ClearableField
+                onClear={() => setContinuationNickname('')}
+                visible={Boolean(continuationNickname)}
+              >
+                <input
+                  list="repo-nickname-history"
+                  value={continuationNickname}
+                  onChange={(event) => setContinuationNickname(event.target.value)}
+                  placeholder="留空 = 匿名续写"
+                />
+              </ClearableField>
+            </label>
+
+            {continuationNicknameHistory.length > 0 ? (
+              <div className="stack-gap-sm">
+                <div className="inline-actions wrap-mobile author-history-inline">
+                  <span className="content-meta">
+                    历史昵称 {continuationNicknameHistory.length} 个
+                  </span>
+                  <button
+                    className="button ghost"
+                    onClick={handleClearContinuationNicknameHistory}
+                    type="button"
+                  >
+                    清空昵称历史
+                  </button>
+                </div>
+                <div className="tag-cloud compact-tag-cloud repo-history-row">
+                  {continuationNicknameHistory.map((nickname) => {
+                    const active = continuationNickname === nickname;
+                    return (
+                      <button
+                        className={active ? 'tag-chip active' : 'tag-chip'}
+                        key={nickname}
+                        onClick={() => setContinuationNickname(nickname)}
+                        type="button"
+                      >
+                        {nickname}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <label>
+              <span>简介（必填，用于说明这条续写写什么）</span>
+              <ClearableField
+                onClear={() => setContinuationSummary('')}
+                visible={Boolean(continuationSummary)}
+              >
+                <input
+                  value={continuationSummary}
+                  onChange={(event) => setContinuationSummary(event.target.value)}
+                  placeholder="给续写起个一句话导语"
+                />
+              </ClearableField>
+            </label>
+
+            <label>
+              <span>正文（必填）</span>
+              <textarea
+                rows={8}
+                value={continuationContent}
+                onChange={(event) => setContinuationContent(event.target.value)}
+                placeholder="把续写的正文填在这里"
+              />
+            </label>
+
+            <div className="inline-actions wrap-mobile continuation-composer-actions">
+              <button className="button ghost" onClick={closeContinuationComposer} type="button">
+                取消
+              </button>
+              <button
+                className="button primary"
+                disabled={continuationSubmitting}
+                onClick={() => void handleSubmitContinuation()}
+                type="button"
+              >
+                {continuationSubmitting
+                  ? '提交中'
+                  : continuationEditingId
+                    ? '提交修改'
+                    : '提交续写'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="continuation-list stack-gap-sm">
+          {continuations.length > 0 ? (
+            continuations.map((item) => {
+              const showAuthor = item.nickname && item.nickname.trim().length > 0;
+              return (
+                <article className="continuation-card" key={item.id}>
+                  <div className="continuation-card-head">
+                    <div className="stack-gap-xs">
+                      <div className="card-topline wrap-mobile">
+                        <strong>{item.summary}</strong>
+                      </div>
+                      {showAuthor ? (
+                        <span className="content-meta">作者：{item.nickname}</span>
+                      ) : (
+                        <span className="content-meta">匿名续写</span>
+                      )}
+                      <span className="content-meta">{formatDate(item.createdAt)}</span>
+                    </div>
+                    <button
+                      className="button secondary continuation-edit-button"
+                      onClick={() => handleEditContinuation(item)}
+                      type="button"
+                    >
+                      修改
+                    </button>
+                  </div>
+                  <p className="play-detail-copy continuation-content">{item.content}</p>
+                </article>
+              );
+            })
+          ) : (
+            <div className="empty-panel">还没有通过审核的续写。</div>
+          )}
+        </div>
+      </section>
+
       <section className="form-panel stack-gap-md repo-panel">
         <div className="content-head wrap-mobile">
           <div>
@@ -978,178 +1154,6 @@ export function PlayDetailPage() {
             ))
           ) : (
             <div className="empty-panel">还没有通过审核的 repo。</div>
-          )}
-        </div>
-      </section>
-
-      {/* 续写区:与 repo 区平级,挂在小剧场正文下、repo 区之上。
-       * 续写是扁平结构(没有回复链),只展示已通过条目,
-       * 用户通过「续写」按钮展开 composer,
-       * 编辑现有续写点击卡片右侧的「修改」按钮原地覆盖提交。 */}
-      <section className="form-panel stack-gap-md continuation-panel">
-        <div className="content-head wrap-mobile">
-          <div>
-            <h3>续写</h3>
-            <p className="sub-copy">
-              续写是直接挂在原文下的独立长文,作者(可选) / 简介(必填) / 正文(必填) 三个字段,
-              提交后进入独立审核池;原作者修改会原地覆盖并重新审核。
-            </p>
-          </div>
-
-          <div className="continuation-toolbar-row">
-            <div className="continuation-sort-group">
-              <button
-                className={continuationOrder === 'asc' ? 'tab-chip active' : 'tab-chip'}
-                onClick={() => setContinuationOrder('asc')}
-                type="button"
-              >
-                正序
-              </button>
-              <button
-                className={continuationOrder === 'desc' ? 'tab-chip active' : 'tab-chip'}
-                onClick={() => setContinuationOrder('desc')}
-                type="button"
-              >
-                倒序
-              </button>
-            </div>
-            <button
-              className={continuationComposerOpen ? 'button secondary' : 'button primary'}
-              onClick={() =>
-                continuationComposerOpen ? closeContinuationComposer() : openContinuationComposer()
-              }
-              type="button"
-            >
-              {continuationComposerOpen ? '收起续写' : '续写'}
-            </button>
-          </div>
-        </div>
-
-        {continuationComposerOpen ? (
-          <div className="continuation-form-grid">
-            <label>
-              <span>作者（可空，留空即匿名，详情页不展示署名）</span>
-              <ClearableField
-                onClear={() => setContinuationNickname('')}
-                visible={Boolean(continuationNickname)}
-              >
-                <input
-                  list="repo-nickname-history"
-                  value={continuationNickname}
-                  onChange={(event) => setContinuationNickname(event.target.value)}
-                  placeholder="留空 = 匿名续写"
-                />
-              </ClearableField>
-            </label>
-
-            {continuationNicknameHistory.length > 0 ? (
-              <div className="stack-gap-sm">
-                <div className="inline-actions wrap-mobile author-history-inline">
-                  <span className="content-meta">
-                    历史昵称 {continuationNicknameHistory.length} 个
-                  </span>
-                  <button
-                    className="button ghost"
-                    onClick={handleClearContinuationNicknameHistory}
-                    type="button"
-                  >
-                    清空昵称历史
-                  </button>
-                </div>
-                <div className="tag-cloud compact-tag-cloud repo-history-row">
-                  {continuationNicknameHistory.map((nickname) => {
-                    const active = continuationNickname === nickname;
-                    return (
-                      <button
-                        className={active ? 'tag-chip active' : 'tag-chip'}
-                        key={nickname}
-                        onClick={() => setContinuationNickname(nickname)}
-                        type="button"
-                      >
-                        {nickname}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            <label>
-              <span>简介（必填，用于说明这条续写写什么）</span>
-              <ClearableField
-                onClear={() => setContinuationSummary('')}
-                visible={Boolean(continuationSummary)}
-              >
-                <input
-                  value={continuationSummary}
-                  onChange={(event) => setContinuationSummary(event.target.value)}
-                  placeholder="给续写起个一句话导语"
-                />
-              </ClearableField>
-            </label>
-
-            <label>
-              <span>正文（必填）</span>
-              <textarea
-                rows={8}
-                value={continuationContent}
-                onChange={(event) => setContinuationContent(event.target.value)}
-                placeholder="把续写的正文填在这里"
-              />
-            </label>
-
-            <div className="inline-actions wrap-mobile continuation-composer-actions">
-              <button className="button ghost" onClick={closeContinuationComposer} type="button">
-                取消
-              </button>
-              <button
-                className="button primary"
-                disabled={continuationSubmitting}
-                onClick={() => void handleSubmitContinuation()}
-                type="button"
-              >
-                {continuationSubmitting
-                  ? '提交中'
-                  : continuationEditingId
-                    ? '提交修改'
-                    : '提交续写'}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="continuation-list stack-gap-sm">
-          {continuations.length > 0 ? (
-            continuations.map((item) => {
-              const showAuthor = item.nickname && item.nickname.trim().length > 0;
-              return (
-                <article className="continuation-card" key={item.id}>
-                  <div className="continuation-card-head">
-                    <div className="stack-gap-xs">
-                      <div className="card-topline wrap-mobile">
-                        <strong>{item.summary}</strong>
-                      </div>
-                      {showAuthor ? (
-                        <span className="content-meta">作者：{item.nickname}</span>
-                      ) : (
-                        <span className="content-meta">匿名续写</span>
-                      )}
-                      <span className="content-meta">{formatDate(item.createdAt)}</span>
-                    </div>
-                    <button
-                      className="button secondary continuation-edit-button"
-                      onClick={() => handleEditContinuation(item)}
-                      type="button"
-                    >
-                      修改
-                    </button>
-                  </div>
-                  <p className="play-detail-copy continuation-content">{item.content}</p>
-                </article>
-              );
-            })
-          ) : (
-            <div className="empty-panel">还没有通过审核的续写。</div>
           )}
         </div>
       </section>
