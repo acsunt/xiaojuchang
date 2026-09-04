@@ -61,6 +61,11 @@ import {
   type ReviewAction,
   type ReviewLog,
   type Tag,
+  type Continuation,
+  type ContinuationAuditLog,
+  type ContinuationReviewAction,
+  type ContinuationStatus,
+  continuationStatusLabelMap,
 } from '../../../types/play';
 import { showFloatingToast } from '../../../components/floating-toast-store';
 
@@ -79,7 +84,25 @@ const repoStatusTabs: Array<{ label: string; value?: RepoStatus }> = [
   { label: '已拒绝', value: 'rejected' },
 ];
 
+/* 续写状态 tab,与 repoStatusTabs 平级;没有「已下线」状态,
+ * 因为续写只在 pending/approved/rejected 之间流转。 */
+const continuationStatusTabs: Array<{ label: string; value?: ContinuationStatus }> = [
+  { label: '全部', value: undefined },
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已拒绝', value: 'rejected' },
+];
+
 const repoActionMeta: Array<{ action: RepoReviewAction; label: string; style: string }> = [
+  { action: 'reject', label: '拒绝', style: 'danger' },
+  { action: 'approve', label: '通过', style: 'primary' },
+];
+
+const continuationActionMeta: Array<{
+  action: ContinuationReviewAction;
+  label: string;
+  style: string;
+}> = [
   { action: 'reject', label: '拒绝', style: 'danger' },
   { action: 'approve', label: '通过', style: 'primary' },
 ];
@@ -366,8 +389,16 @@ const repoAuditActionLabelMap: Record<RepoAuditAction, string> = {
 };
 
 type AdminPanel =
-  'review' | 'repo' | 'auditLogs' | 'delete' | 'backup' | 'tags' | 'duplicates' | 'moveCategory';
-type AuditLogCategory = 'plays' | 'repos';
+  | 'review'
+  | 'repo'
+  | 'continuations'
+  | 'auditLogs'
+  | 'delete'
+  | 'backup'
+  | 'tags'
+  | 'duplicates'
+  | 'moveCategory';
+type AuditLogCategory = 'plays' | 'repos' | 'continuations';
 
 type SubmissionDiffItem = {
   label: string;
@@ -407,6 +438,7 @@ type DuplicateScanProgressState = DuplicateScanProgress & {
 const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '审核', value: 'review' },
   { label: 'repo', value: 'repo' },
+  { label: '续写', value: 'continuations' },
   { label: '审核记录', value: 'auditLogs' },
   { label: '删除', value: 'delete' },
   { label: '移动分类', value: 'moveCategory' },
@@ -418,6 +450,7 @@ const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
 const auditLogTabs: Array<{ label: string; value: AuditLogCategory }> = [
   { label: '小剧场', value: 'plays' },
   { label: 'repo', value: 'repos' },
+  { label: '续写', value: 'continuations' },
 ];
 
 const formatAuditLogTime = (value: string) => new Date(value).toLocaleString('zh-CN');
@@ -561,6 +594,34 @@ export function AdminReviewPage() {
   const [isRepoMultiSelectMode, setIsRepoMultiSelectMode] = useState(false);
   /* repo 审核的"按作者一键通过"下拉：与小剧场 bulkAuthorName 一一对应。 */
   const [repoBulkAuthorName, setRepoBulkAuthorName] = useState('');
+  /* 续写审核面板状态（与 repo panel 平级，独立审核池）。
+   *
+   * - continuations / allContinuations：当前筛选视图 / 全部状态
+   * - selectedContinuationStatus：默认 'pending'，与 repo 对齐
+   * - selectedContinuationId：点击卡片进入详情时选中
+   * - continuationReviewNote / continuationBusyAction / continuationEditDraft：
+   *   详情编辑草稿与通过/拒绝按钮的 busy 状态
+   * - isContinuationMobileExpanded：手机端列表展开状态，与 isMobileRepoExpanded 对齐
+   */
+  const [continuations, setContinuations] = useState<Continuation[]>([]);
+  const [allContinuations, setAllContinuations] = useState<Continuation[]>([]);
+  const [hasLoadedAllContinuations, setHasLoadedAllContinuations] = useState(false);
+  const [selectedContinuationStatus, setSelectedContinuationStatus] = useState<
+    ContinuationStatus | undefined
+  >('pending');
+  const [continuationKeyword, setContinuationKeyword] = useState('');
+  const [continuationReviewNote, setContinuationReviewNote] = useState('');
+  const [continuationBusyAction, setContinuationBusyAction] = useState<
+    ContinuationReviewAction | 'delete' | null
+  >(null);
+  const [selectedContinuationId, setSelectedContinuationId] = useState('');
+  const [continuationEditDraft, setContinuationEditDraft] = useState<{
+    summary: string;
+    content: string;
+    nickname: string;
+    note: string;
+  }>({ summary: '', content: '', nickname: '', note: '' });
+  const [isContinuationMobileExpanded, setIsContinuationMobileExpanded] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
   const [selectedPlayId, setSelectedPlayId] = useState('');
@@ -578,6 +639,9 @@ export function AdminReviewPage() {
   const [reviewLogs, setReviewLogs] = useState<ReviewLog[]>([]);
   const [allPlayReviewLogs, setAllPlayReviewLogs] = useState<ReviewLog[]>([]);
   const [allRepoAuditLogs, setAllRepoAuditLogs] = useState<RepoAuditLog[]>([]);
+  const [allContinuationAuditLogs, setAllContinuationAuditLogs] = useState<ContinuationAuditLog[]>(
+    [],
+  );
   const [selectedAuditLogCategory, setSelectedAuditLogCategory] =
     useState<AuditLogCategory>('plays');
   const [isMobileAuditLogsExpanded, setIsMobileAuditLogsExpanded] = useState(false);
@@ -765,6 +829,8 @@ export function AdminReviewPage() {
   const playTotalsLoadRequestRef = useRef(0);
   const repoListLoadRequestRef = useRef(0);
   const repoTotalsLoadRequestRef = useRef(0);
+  const continuationListLoadRequestRef = useRef(0);
+  const continuationTotalsLoadRequestRef = useRef(0);
 
   const load = async (status = selectedStatus, options?: { silent?: boolean }) => {
     const requestId = ++playListLoadRequestRef.current;
@@ -857,6 +923,44 @@ export function AdminReviewPage() {
     }
   };
 
+  const loadContinuations = async (status = selectedContinuationStatus) => {
+    const requestId = ++continuationListLoadRequestRef.current;
+    try {
+      const items = await playApi.getAdminContinuations(status);
+      if (requestId !== continuationListLoadRequestRef.current) {
+        return;
+      }
+
+      setContinuations(items);
+    } catch (reason) {
+      if (requestId !== continuationListLoadRequestRef.current) {
+        return;
+      }
+
+      setError(reason instanceof Error ? reason.message : '续写审核数据加载失败');
+      setContinuations([]);
+    }
+  };
+
+  const loadAllContinuations = async () => {
+    const requestId = ++continuationTotalsLoadRequestRef.current;
+    try {
+      const items = await playApi.getAdminContinuations();
+      if (requestId !== continuationTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllContinuations(items);
+      setHasLoadedAllContinuations(true);
+    } catch {
+      if (requestId !== continuationTotalsLoadRequestRef.current) {
+        return;
+      }
+
+      setAllContinuations([]);
+    }
+  };
+
   const loadTags = async () => {
     try {
       const items = await playApi.getAdminTags();
@@ -882,16 +986,19 @@ export function AdminReviewPage() {
   const loadAllAuditLogs = async () => {
     setAuditLogsLoading(true);
     try {
-      const [playLogs, repoLogs] = await Promise.all([
+      const [playLogs, repoLogs, continuationLogs] = await Promise.all([
         playApi.getAllPlayReviewLogs(),
         playApi.getAllRepoAuditLogs(),
+        playApi.getAllContinuationAuditLogs().catch(() => [] as ContinuationAuditLog[]),
       ]);
       setAllPlayReviewLogs(playLogs);
       setAllRepoAuditLogs(repoLogs);
+      setAllContinuationAuditLogs(continuationLogs);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '审核记录加载失败');
       setAllPlayReviewLogs([]);
       setAllRepoAuditLogs([]);
+      setAllContinuationAuditLogs([]);
     } finally {
       setAuditLogsLoading(false);
     }
@@ -929,13 +1036,15 @@ export function AdminReviewPage() {
 
     void load();
     void loadRepos();
+    void loadContinuations();
     void loadAllPlays();
     void loadAllRepos();
+    void loadAllContinuations();
     void loadTags();
-    // load/loadRepos/loadAllPlays/loadAllRepos/loadTags 是普通函数（每次渲染重新创建，非 useCallback），
-    // 故意不放进依赖数组，只在 session/selectedStatus/selectedRepoStatus 变化时触发，避免死循环。
+    // load/loadRepos/loadContinuations/loadAllPlays/loadAllRepos/loadAllContinuations/loadTags 是普通函数（每次渲染重新创建，非 useCallback），
+    // 故意不放进依赖数组，只在 session/selectedStatus/selectedRepoStatus/selectedContinuationStatus 变化时触发，避免死循环。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, selectedStatus, selectedRepoStatus]);
+  }, [session, selectedStatus, selectedRepoStatus, selectedContinuationStatus]);
 
   useEffect(() => {
     if (!session || activePanel !== 'auditLogs') {
@@ -955,6 +1064,8 @@ export function AdminReviewPage() {
       void loadAllPlays();
       void loadRepos(selectedRepoStatus);
       void loadAllRepos();
+      void loadContinuations(selectedContinuationStatus);
+      void loadAllContinuations();
       if (selectedPlayId) {
         void loadReviewLogs(selectedPlayId);
       }
@@ -972,6 +1083,8 @@ export function AdminReviewPage() {
       void loadAllPlays();
       void loadRepos(selectedRepoStatus);
       void loadAllRepos();
+      void loadContinuations(selectedContinuationStatus);
+      void loadAllContinuations();
       void loadTags();
       if (selectedPlayId) {
         void loadReviewLogs(selectedPlayId);
@@ -1002,10 +1115,17 @@ export function AdminReviewPage() {
       window.removeEventListener('pageshow', handleVisibilityRefresh);
       document.removeEventListener('visibilitychange', handleVisibilityRefresh);
     };
-    // load/loadRepos/loadTags 等是普通函数（每次渲染重新创建，非 useCallback），
+    // load/loadRepos/loadContinuations/loadTags 等是普通函数（每次渲染重新创建，非 useCallback），
     // 故意不放进依赖数组，只在下列状态变化时重新绑定事件监听，避免死循环。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, selectedStatus, selectedRepoStatus, selectedPlayId, activePanel]);
+  }, [
+    session,
+    selectedStatus,
+    selectedRepoStatus,
+    selectedContinuationStatus,
+    selectedPlayId,
+    activePanel,
+  ]);
 
   useEffect(() => {
     bulkTaskRef.current = bulkTask;
@@ -1037,6 +1157,15 @@ export function AdminReviewPage() {
           ? repos.length
           : 0,
     [allRepos, hasLoadedAllRepos, repos.length, selectedRepoStatus],
+  );
+  const pendingContinuationCount = useMemo(
+    () =>
+      hasLoadedAllContinuations
+        ? allContinuations.filter((item) => item.status === 'pending').length
+        : selectedContinuationStatus === 'pending'
+          ? continuations.length
+          : 0,
+    [allContinuations, hasLoadedAllContinuations, continuations.length, selectedContinuationStatus],
   );
   const filteredPlays = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -1087,6 +1216,52 @@ export function AdminReviewPage() {
       : repoMetricsSource.length;
   }, [filteredRepos.length, hasLoadedAllRepos, repoKeyword, repoMetricsSource, selectedRepoStatus]);
 
+  /* 续写筛选:与 repo 类似,根据 selectedContinuationStatus 与 keyword 过滤;
+   * 关键词检索范围:作者(playAuthorName)/昵称/简介/正文。 */
+  const filteredContinuations = useMemo(() => {
+    const normalizedKeyword = continuationKeyword.trim().toLowerCase();
+    if (!normalizedKeyword) {
+      return continuations;
+    }
+    return continuations.filter((item) => {
+      const haystack = [
+        item.nickname,
+        item.playTitle ?? '',
+        item.playAuthorName ?? '',
+        item.summary,
+        item.content,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(normalizedKeyword);
+    });
+  }, [continuations, continuationKeyword]);
+  const currentContinuationListCount = useMemo(() => {
+    if (!hasLoadedAllContinuations) {
+      return filteredContinuations.length;
+    }
+    const normalizedKeyword = continuationKeyword.trim().toLowerCase();
+    if (normalizedKeyword) {
+      return filteredContinuations.length;
+    }
+    return selectedContinuationStatus
+      ? allContinuations.filter((item) => item.status === selectedContinuationStatus).length
+      : allContinuations.length;
+  }, [
+    filteredContinuations.length,
+    hasLoadedAllContinuations,
+    continuationKeyword,
+    allContinuations,
+    selectedContinuationStatus,
+  ]);
+  /* 当前仅占位,留给后续续写面板的"待审"徽标使用。
+   * TypeScript 不认 eslint 的下划线豁免,用 void 标记"故意未消费"。 */
+  const pendingVisibleContinuations = useMemo(
+    () => filteredContinuations.filter((item) => item.status === 'pending'),
+    [filteredContinuations],
+  );
+  void pendingVisibleContinuations;
+
   const pendingVisiblePlays = useMemo(
     () => filteredPlays.filter((play) => play.status === 'pending'),
     [filteredPlays],
@@ -1129,10 +1304,14 @@ export function AdminReviewPage() {
       ? filteredRepos.slice(0, MOBILE_REVIEW_LIST_PREVIEW_COUNT)
       : filteredRepos;
   const mobileRepoListLabel = selectedRepoStatus ? repoStatusLabelMap[selectedRepoStatus] : '全部';
-  const activeAuditLogs = useMemo(
-    () => (selectedAuditLogCategory === 'plays' ? allPlayReviewLogs : allRepoAuditLogs),
-    [allPlayReviewLogs, allRepoAuditLogs, selectedAuditLogCategory],
-  );
+  /* 续写面板:沿用 repo 的 mobile 折叠模式 */
+  const shouldCollapseMobileContinuationList =
+    isMobileReviewViewport && filteredContinuations.length > MOBILE_REVIEW_LIST_PREVIEW_COUNT;
+  const activeAuditLogs = useMemo(() => {
+    if (selectedAuditLogCategory === 'plays') return allPlayReviewLogs;
+    if (selectedAuditLogCategory === 'repos') return allRepoAuditLogs;
+    return allContinuationAuditLogs;
+  }, [allPlayReviewLogs, allRepoAuditLogs, allContinuationAuditLogs, selectedAuditLogCategory]);
   const shouldCollapseMobileAuditLogs =
     isMobileReviewViewport && activeAuditLogs.length > MOBILE_AUDIT_LOG_PREVIEW_COUNT;
   const visibleAuditLogs =
@@ -1329,6 +1508,27 @@ export function AdminReviewPage() {
       }
     }
   };
+
+  /* 续写面板:选中条目 + 编辑草稿同步 */
+  const adminSelectedContinuation = useMemo(
+    () => filteredContinuations.find((item) => item.id === selectedContinuationId) ?? null,
+    [filteredContinuations, selectedContinuationId],
+  );
+  /* 切换面板或筛选时清掉选中的续写,跟 repo 行为对齐。 */
+  useEffect(() => {
+    setSelectedContinuationId('');
+  }, [activePanel, selectedContinuationStatus]);
+  /* 选中条目变化时把编辑草稿初始化为它的当前内容/简介/作者/备注。 */
+  useEffect(() => {
+    if (adminSelectedContinuation) {
+      setContinuationEditDraft({
+        summary: adminSelectedContinuation.summary,
+        content: adminSelectedContinuation.content,
+        nickname: adminSelectedContinuation.nickname,
+        note: adminSelectedContinuation.reviewNote ?? '',
+      });
+    }
+  }, [adminSelectedContinuation]);
 
   const previousSubmission = useMemo(() => {
     if (!selectedPlay) {
@@ -2599,6 +2799,95 @@ export function AdminReviewPage() {
     }
   };
 
+  /* 续写审核操作:通过/拒绝/编辑/删除,接口与 repo 流程对齐。 */
+  const handleReviewContinuation = async (
+    continuationId: string,
+    action: ContinuationReviewAction,
+  ) => {
+    const note = continuationReviewNote.trim();
+    setContinuationBusyAction(action);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const updated = await playApi.reviewContinuation(continuationId, action, note);
+      if (updated) {
+        /* 本地同步:更新 allContinuations / continuations。 */
+        setAllContinuations((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        setContinuations((current) => {
+          const exists = current.some((item) => item.id === updated.id);
+          const shouldStay =
+            selectedContinuationStatus === undefined ||
+            updated.status === selectedContinuationStatus;
+          if (!exists) return current;
+          if (!shouldStay) return current.filter((item) => item.id !== updated.id);
+          return current.map((item) => (item.id === updated.id ? updated : item));
+        });
+      }
+      await Promise.all([loadContinuations(selectedContinuationStatus), loadAllContinuations()]);
+      if (activePanel === 'auditLogs') {
+        await loadAllAuditLogs();
+      }
+      setSuccessMessage(action === 'approve' ? '续写已通过。' : '续写已拒绝。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '续写审核失败');
+    } finally {
+      setContinuationBusyAction(null);
+    }
+  };
+
+  const handleUpdateContinuation = async () => {
+    if (!adminSelectedContinuation) return;
+    setContinuationBusyAction('delete');
+    setError('');
+    setSuccessMessage('');
+    try {
+      const updated = await playApi.updateContinuationByAdmin(adminSelectedContinuation.id, {
+        content: continuationEditDraft.content,
+        summary: continuationEditDraft.summary,
+        nickname: continuationEditDraft.nickname,
+        note: continuationEditDraft.note,
+      });
+      if (updated) {
+        setAllContinuations((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        setContinuations((current) =>
+          current.map((item) => (item.id === updated.id ? updated : item)),
+        );
+      }
+      await Promise.all([loadContinuations(selectedContinuationStatus), loadAllContinuations()]);
+      setSuccessMessage('续写已更新。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '续写更新失败');
+    } finally {
+      setContinuationBusyAction(null);
+    }
+  };
+
+  const handleDeleteContinuation = async (continuationId: string) => {
+    const confirmed = window.confirm('确认删除这条续写？删除后不可恢复。');
+    if (!confirmed) return;
+    setContinuationBusyAction('delete');
+    setError('');
+    setSuccessMessage('');
+    try {
+      await playApi.deleteContinuation(continuationId);
+      setAllContinuations((current) => current.filter((item) => item.id !== continuationId));
+      setContinuations((current) => current.filter((item) => item.id !== continuationId));
+      if (selectedContinuationId === continuationId) {
+        setSelectedContinuationId('');
+      }
+      await Promise.all([loadContinuations(selectedContinuationStatus), loadAllContinuations()]);
+      setSuccessMessage('续写已删除。');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '续写删除失败');
+    } finally {
+      setContinuationBusyAction(null);
+    }
+  };
+
   const handleLogout = async () => {
     await playApi.logoutAdmin();
     setSession(null);
@@ -3106,7 +3395,8 @@ export function AdminReviewPage() {
             {adminPanelTabs.map((panel) => {
               const showPendingDot =
                 (panel.value === 'review' && pendingPlayCount > 0) ||
-                (panel.value === 'repo' && pendingRepoCount > 0);
+                (panel.value === 'repo' && pendingRepoCount > 0) ||
+                (panel.value === 'continuations' && pendingContinuationCount > 0);
 
               return (
                 <button
@@ -4284,6 +4574,247 @@ export function AdminReviewPage() {
                 <div className="empty-panel">
                   {repoKeyword.trim() ? '没有匹配的 repo。' : '当前筛选没有 repo。'}
                 </div>
+              )}
+            </div>
+          ) : null}
+
+          {activePanel === 'continuations' ? (
+            <div className="stack-gap-md">
+              <div className="form-panel stack-gap-md admin-bulk-review-panel">
+                <div className="content-head wrap-mobile">
+                  <div>
+                    <h3>续写审核</h3>
+                    <p className="sub-copy">
+                      当前 {currentContinuationListCount} 条 · 待审核 {pendingContinuationCount}{' '}
+                      条。 作者留空时后台统一显示「匿名」,详情页不展示署名。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="inline-actions wrap-mobile admin-bulk-review-actions">
+                  <label className="field-inline">
+                    <span className="content-meta">关键词</span>
+                    <input
+                      className="admin-bulk-input"
+                      placeholder="搜索昵称 / 简介 / 正文 / 作者"
+                      value={continuationKeyword}
+                      onChange={(event) => setContinuationKeyword(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="inline-actions wrap-mobile admin-status-tabs">
+                  {continuationStatusTabs.map((tab) => (
+                    <button
+                      className={
+                        selectedContinuationStatus === tab.value ? 'tab-chip active' : 'tab-chip'
+                      }
+                      key={tab.label}
+                      onClick={() => setSelectedContinuationStatus(tab.value)}
+                      type="button"
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {filteredContinuations.length > 0 ? (
+                  <div className="stack-gap-sm">
+                    {filteredContinuations
+                      .slice(
+                        0,
+                        shouldCollapseMobileContinuationList && !isContinuationMobileExpanded
+                          ? MOBILE_REVIEW_LIST_PREVIEW_COUNT
+                          : undefined,
+                      )
+                      .map((item) => {
+                        const active = selectedContinuationId === item.id;
+                        return (
+                          <button
+                            className={
+                              active
+                                ? 'play-card stack-gap-sm admin-repo-card active'
+                                : 'play-card stack-gap-sm admin-repo-card'
+                            }
+                            key={item.id}
+                            onClick={() => setSelectedContinuationId(item.id)}
+                            type="button"
+                          >
+                            <div className="card-topline wrap-mobile">
+                              <span>《{item.playTitle ?? item.playId}》</span>
+                              <span className={`status-tag ${item.status}`}>
+                                {continuationStatusLabelMap[item.status]}
+                              </span>
+                            </div>
+                            <strong>{item.nickname.trim() ? item.nickname : '匿名'}</strong>
+                            <p className="summary">{item.summary}</p>
+                            <span className="content-meta">
+                              {formatAuditLogTime(item.createdAt)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    {shouldCollapseMobileContinuationList ? (
+                      <button
+                        className="button ghost mobile-expand-button"
+                        onClick={() => setIsContinuationMobileExpanded((v) => !v)}
+                        type="button"
+                      >
+                        {isContinuationMobileExpanded
+                          ? '收起续写列表'
+                          : `展开剩余 ${
+                              filteredContinuations.length - MOBILE_REVIEW_LIST_PREVIEW_COUNT
+                            } 条续写`}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="empty-panel">
+                    {continuationKeyword.trim() ? '没有匹配的续写。' : '当前筛选没有续写。'}
+                  </div>
+                )}
+              </div>
+
+              {adminSelectedContinuation ? (
+                <section className="form-panel stack-gap-md admin-repo-detail-panel">
+                  <div className="content-head wrap-mobile">
+                    <div>
+                      <h3>续写详情</h3>
+                      <p className="sub-copy">
+                        《{adminSelectedContinuation.playTitle ?? adminSelectedContinuation.playId}
+                        》· 作者 {adminSelectedContinuation.playAuthorName ?? '匿名'}
+                      </p>
+                    </div>
+                    <span className="content-meta">
+                      {continuationStatusLabelMap[adminSelectedContinuation.status]} ·{' '}
+                      {formatAuditLogTime(adminSelectedContinuation.createdAt)}
+                    </span>
+                  </div>
+
+                  <label>
+                    <span>简介（必填）</span>
+                    <ClearableField
+                      onClear={() =>
+                        setContinuationEditDraft((current) => ({ ...current, summary: '' }))
+                      }
+                      visible={Boolean(continuationEditDraft.summary)}
+                    >
+                      <input
+                        value={continuationEditDraft.summary}
+                        onChange={(event) =>
+                          setContinuationEditDraft((current) => ({
+                            ...current,
+                            summary: event.target.value,
+                          }))
+                        }
+                        placeholder="这条续写写什么？"
+                      />
+                    </ClearableField>
+                  </label>
+
+                  <label>
+                    <span>作者（可空，空字符串在详情页不展示）</span>
+                    <ClearableField
+                      onClear={() =>
+                        setContinuationEditDraft((current) => ({ ...current, nickname: '' }))
+                      }
+                      visible={Boolean(continuationEditDraft.nickname)}
+                    >
+                      <input
+                        value={continuationEditDraft.nickname}
+                        onChange={(event) =>
+                          setContinuationEditDraft((current) => ({
+                            ...current,
+                            nickname: event.target.value,
+                          }))
+                        }
+                        placeholder="留空表示匿名续写"
+                      />
+                    </ClearableField>
+                  </label>
+
+                  <label>
+                    <span>正文（必填）</span>
+                    <textarea
+                      rows={10}
+                      value={continuationEditDraft.content}
+                      onChange={(event) =>
+                        setContinuationEditDraft((current) => ({
+                          ...current,
+                          content: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    <span>审核备注</span>
+                    <ClearableField
+                      onClear={() =>
+                        setContinuationEditDraft((current) => ({ ...current, note: '' }))
+                      }
+                      visible={Boolean(continuationEditDraft.note)}
+                    >
+                      <input
+                        value={continuationEditDraft.note}
+                        onChange={(event) =>
+                          setContinuationEditDraft((current) => ({
+                            ...current,
+                            note: event.target.value,
+                          }))
+                        }
+                      />
+                    </ClearableField>
+                  </label>
+
+                  <div className="inline-actions wrap-mobile admin-repo-action-row">
+                    {continuationActionMeta.map((meta) => (
+                      <button
+                        className={meta.style === 'danger' ? 'button danger' : 'button primary'}
+                        disabled={continuationBusyAction !== null}
+                        key={meta.action}
+                        onClick={() =>
+                          void handleReviewContinuation(adminSelectedContinuation.id, meta.action)
+                        }
+                        type="button"
+                      >
+                        {continuationBusyAction === meta.action ? '处理中' : meta.label}
+                      </button>
+                    ))}
+                    <button
+                      className="button secondary"
+                      disabled={continuationBusyAction !== null}
+                      onClick={() => void handleUpdateContinuation()}
+                      type="button"
+                    >
+                      保存修改
+                    </button>
+                    <button
+                      className="button ghost"
+                      disabled={continuationBusyAction !== null}
+                      onClick={() => void handleDeleteContinuation(adminSelectedContinuation.id)}
+                      type="button"
+                    >
+                      删除
+                    </button>
+                  </div>
+
+                  <label>
+                    <span>本次审核备注（通过/拒绝时使用，可独立于上方）</span>
+                    <ClearableField
+                      onClear={() => setContinuationReviewNote('')}
+                      visible={Boolean(continuationReviewNote)}
+                    >
+                      <input
+                        value={continuationReviewNote}
+                        onChange={(event) => setContinuationReviewNote(event.target.value)}
+                        placeholder="留空时记为「无备注」"
+                      />
+                    </ClearableField>
+                  </label>
+                </section>
+              ) : (
+                <div className="empty-panel">从左侧选一条续写进入详情审核</div>
               )}
             </div>
           ) : null}

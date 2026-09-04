@@ -43,7 +43,10 @@ import {
   type PlazaView,
   type PlayPreferenceStore,
   type RandomMode,
+  readPlazaNotificationSince,
+  writePlazaNotificationSince,
 } from '../../services/browser-play-preferences';
+import { getVisitorId } from '../../services/browser-repo-history';
 import {
   downloadBlobFile,
   downloadTextFile,
@@ -62,6 +65,7 @@ import {
 import {
   DEFAULT_CATEGORY,
   PLAYS_UPDATED_EVENT,
+  type NotificationSummary,
   type Play,
   type RepoSummary,
 } from '../../types/play';
@@ -93,6 +97,22 @@ type RestoreMode = 'top' | 'scroll' | 'anchor';
 type PendingRefreshState = {
   nextPlays: Play[];
   addedCount: number;
+};
+
+/* 三段通知拼接:「修改 X 篇 / 续写 X 条 / 新增 X 篇」。
+ * 任意段 >0 才展示;全为 0 返回空串(调用方不弹窗)。 */
+const formatNotificationToast = (summary: NotificationSummary): string => {
+  const lines: string[] = [];
+  if (summary.modified > 0) {
+    lines.push(`修改 ${summary.modified} 篇`);
+  }
+  if (summary.continuations > 0) {
+    lines.push(`续写 ${summary.continuations} 条`);
+  }
+  if (summary.newPlays > 0) {
+    lines.push(`新增 ${summary.newPlays} 篇`);
+  }
+  return lines.join(' / ');
 };
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -647,6 +667,14 @@ export function PlayListPage() {
     readPlazaBool(PLAZA_BLOCK_DISLIKED_ON_EXPORT_KEY, false),
   );
   const [pendingRefresh, setPendingRefresh] = useState<PendingRefreshState | null>(null);
+  /* 三段通知汇总:modified / continuations / newPlays。
+   * 由后端 /api/notification-summary 计算,前端只用它来格式化浮窗文案,
+   * 不参与列表渲染(列表本身用的是全部已通过 plays,与该汇总无关)。
+   * 当前只把 setNotificationSummary 用于触发浮窗弹一次,
+   * state 值留作后续徽标 / 折叠区未读数的扩展点。
+   * TypeScript 不认 eslint 的下划线豁免,用 void 标记"故意未消费"。 */
+  const [notificationSummary, setNotificationSummary] = useState<NotificationSummary | null>(null);
+  void notificationSummary;
   const plazaPanel = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const panel = params.get('panel');
@@ -727,13 +755,31 @@ export function PlayListPage() {
     }
   }, []);
 
+  /* 续写计数:广场卡片右下角徽章「续写 N」用,与 repo 计数并行加载。 */
+  const [continuationCounts, setContinuationCounts] = useState<RepoSummary[]>([]);
+  const loadContinuationCounts = useCallback(async (targetPlays: Play[]) => {
+    if (targetPlays.length === 0) {
+      setContinuationCounts([]);
+      return;
+    }
+
+    try {
+      setContinuationCounts(
+        await playApi.getContinuationCounts(targetPlays.map((play) => play.id)),
+      );
+    } catch {
+      setContinuationCounts([]);
+    }
+  }, []);
+
   useEffect(() => {
     playsRef.current = plays;
   }, [plays]);
 
   useEffect(() => {
     void loadRepoCounts(plays);
-  }, [loadRepoCounts, plays]);
+    void loadContinuationCounts(plays);
+  }, [loadRepoCounts, loadContinuationCounts, plays]);
 
   useEffect(() => {
     autoRefreshRef.current = autoRefreshOnNewPlays;
@@ -797,12 +843,38 @@ export function PlayListPage() {
     [],
   );
 
+  /* 加载「修改 / 续写 / 新增」三段通知数,用于刷新浮窗文案。
+   * 每次 plays 列表变化、focus 时重拉一次。
+   * 必须放在 loadPublicPlays 等 effect 之前声明,否则 effect 体内首次引用时
+   * 该 const 还未绑定,TS 会报 used-before-declaration。 */
+  const loadNotificationSummary = useCallback(async () => {
+    const since = readPlazaNotificationSince();
+    const playIds = playsRef.current.map((play) => play.id);
+    const visitorId = getVisitorId();
+    try {
+      const summary = await playApi.getNotificationSummary(since, visitorId, playIds);
+      setNotificationSummary(summary);
+      const text = formatNotificationToast(summary);
+      if (text) {
+        showFloatingToast(text);
+      }
+      /* 把 since 推进到现在,避免下次重复提醒。 */
+      const nowIso = new Date().toISOString();
+      writePlazaNotificationSince(nowIso);
+    } catch {
+      /* 接口失败时不打扰用户,留旧 summary。 */
+    }
+  }, []);
+
   useEffect(() => {
     void loadPublicPlays({ showLoading: true });
+    void loadNotificationSummary();
 
     const handleRefresh = () => {
       void loadPublicPlays();
       void loadRepoCounts(playsRef.current);
+      void loadContinuationCounts(playsRef.current);
+      void loadNotificationSummary();
       setPreferenceStore(getPlayPreferenceStore());
     };
 
@@ -813,7 +885,7 @@ export function PlayListPage() {
       window.removeEventListener(PLAYS_UPDATED_EVENT, handleRefresh);
       window.removeEventListener('focus', handleRefresh);
     };
-  }, [loadPublicPlays, loadRepoCounts]);
+  }, [loadPublicPlays, loadRepoCounts, loadContinuationCounts, loadNotificationSummary]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1767,24 +1839,27 @@ export function PlayListPage() {
   /* 广场卡片的第二行元信息:
    * - 分类
    * - 作者
-   * - 若同标题同分类存在 >1 个版本,则在作者后面加"衍生"标记,提示打开详情看历次版本
+   * - 续写条数(若 > 0,挂在作者后面提示"这篇有 N 条续写",
+   *   替换旧版"衍生"徽章。续写走 continuations 表独立审核,
+   *   不再复用 plays 多版本折叠的 versionCount。)
    * - repo 评论数(若 > 0) */
-  const renderCompactMeta = (play: Play, versionCount = 1) => {
+  const renderCompactMeta = (play: Play) => {
     const repoCount = repoCounts.find((item) => item.playId === play.id)?.count ?? 0;
-    const hasDerivedVersions = versionCount > 1;
+    const continuationCount =
+      continuationCounts.find((item) => item.playId === play.id)?.count ?? 0;
 
     return (
       <div className="compact-meta-row compact-meta-row-small">
         <span className="compact-meta-item">◈ {play.category?.trim() || DEFAULT_CATEGORY}</span>
         <span className="compact-meta-item compact-meta-item-with-repo">
           <span>✎ {play.authorName}</span>
-          {hasDerivedVersions ? (
+          {continuationCount > 0 ? (
             <span
-              className="derived-badge"
-              aria-label={`共 ${versionCount} 个版本(含原文)`}
-              title={`共 ${versionCount} 个版本(含原文)`}
+              className="derived-badge continuation-badge"
+              aria-label={`续写 ${continuationCount} 条`}
+              title={`续写 ${continuationCount} 条`}
             >
-              衍生
+              续写 {continuationCount}
             </span>
           ) : null}
           {repoCount > 0 ? (
@@ -2617,7 +2692,6 @@ export function PlayListPage() {
                   {pagedPlays.map((row) => {
                     const play = row.latest;
                     const checked = selectedIds.includes(play.id);
-                    const versionCount = row.versions.length;
 
                     return (
                       <article
@@ -2641,7 +2715,7 @@ export function PlayListPage() {
                                 <span>{selectionMode === 'export' ? '导出' : '选择'}</span>
                               </label>
                             ) : null}
-                            {renderCompactMeta(play, versionCount)}
+                            {renderCompactMeta(play)}
                           </div>
                         </div>
                         <h3>{play.title}</h3>

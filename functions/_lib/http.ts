@@ -86,6 +86,51 @@ export type RepoRecord = {
   replyToVisitorId?: string;
 };
 
+/* 续写:挂在原文下面的长文本内容,与 repos 平级但独立表。
+ *
+ * - nickname 可空字符串:表示「匿名/作者本人续写」,详情页不展示署名,
+ *   后台管理员统一展示为「匿名」。
+ * - summary 必填,作为续写列表的导语/简介。
+ * - 没有 parent/root 链式关系(不像 repo 支持回复),续写是扁平结构。
+ * - 与 repo 共用 visitor_id,用于「我发布的」「我收到的」统计。 */
+export type ContinuationStatus = 'pending' | 'approved' | 'rejected';
+export type ContinuationReviewAction = 'approve' | 'reject';
+
+export const validContinuationStatuses: ContinuationStatus[] = ['pending', 'approved', 'rejected'];
+export const validContinuationReviewActions: ContinuationReviewAction[] = ['approve', 'reject'];
+
+export type ContinuationRecord = {
+  id: string;
+  playId: string;
+  nickname: string;
+  visitorId: string;
+  summary: string;
+  content: string;
+  status: ContinuationStatus;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  playTitle?: string;
+  playAuthorName?: string;
+};
+
+/* 续写审核日志,结构与 RepoAuditLogRecord 对齐但只支持 approve/reject/edit/delete
+ * (不会用 'delete' 作为审核动作,'delete' 仅表示后台硬删一条续写)。 */
+export type ContinuationAuditAction = ContinuationReviewAction | 'delete' | 'edit';
+
+export type ContinuationAuditLogRecord = {
+  id: string;
+  continuationId: string;
+  playId: string;
+  action: ContinuationAuditAction;
+  operator: string;
+  note: string;
+  createdAt: string;
+  playTitle?: string;
+  nickname?: string;
+};
+
 export type AdminSessionRecord = {
   token: string;
   username: string;
@@ -199,6 +244,57 @@ export const normalizeRepo = (row: Record<string, unknown>): RepoRecord => ({
   playAuthorName: row.play_author_name ? String(row.play_author_name) : undefined,
   replyToNickname: row.reply_to_nickname ? String(row.reply_to_nickname) : undefined,
   replyToVisitorId: row.reply_to_visitor_id ? String(row.reply_to_visitor_id) : undefined,
+});
+
+export const parseContinuationStatus = (value?: string | null): ContinuationStatus | undefined => {
+  const normalized = value?.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  return validContinuationStatuses.includes(normalized as ContinuationStatus)
+    ? (normalized as ContinuationStatus)
+    : undefined;
+};
+
+export const parseContinuationReviewAction = (value: unknown): ContinuationReviewAction | null => {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  return validContinuationReviewActions.includes(normalized as ContinuationReviewAction)
+    ? (normalized as ContinuationReviewAction)
+    : null;
+};
+
+export const normalizeContinuation = (row: Record<string, unknown>): ContinuationRecord => ({
+  id: String(row.id),
+  playId: String(row.play_id),
+  /* nickname 在落库时统一写为「空字符串 = 匿名」,这里直接返回字符串,
+   * 前端按是否非空决定是否展示署名。后台管理员视图统一把空字符串
+   * 渲染为「匿名」。 */
+  nickname: row.nickname ? String(row.nickname) : '',
+  visitorId: String(row.visitor_id),
+  summary: String(row.summary ?? ''),
+  content: String(row.content),
+  status: String(row.status) as ContinuationStatus,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at),
+  reviewedAt: row.reviewed_at ? String(row.reviewed_at) : undefined,
+  reviewNote: row.review_note ? String(row.review_note) : undefined,
+  playTitle: row.play_title ? String(row.play_title) : undefined,
+  playAuthorName: row.play_author_name ? String(row.play_author_name) : undefined,
+});
+
+export const normalizeContinuationAuditLog = (
+  row: Record<string, unknown>,
+): ContinuationAuditLogRecord => ({
+  id: String(row.id),
+  continuationId: String(row.continuation_id),
+  playId: String(row.play_id),
+  action: String(row.action) as ContinuationAuditAction,
+  operator: String(row.operator),
+  note: String(row.note),
+  createdAt: String(row.created_at),
+  playTitle: row.play_title ? String(row.play_title) : undefined,
+  nickname: row.nickname === undefined || row.nickname === null ? undefined : String(row.nickname),
 });
 
 export const normalizeSession = (row: Record<string, unknown>): AdminSessionRecord => ({

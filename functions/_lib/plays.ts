@@ -433,6 +433,43 @@ export const updateAdminPlay = async (
  * pending 待审核 play,带 submission_type='modify' 和 parent_play_id。
  * 审核通过时由 reviewPlay 把字段合入原 play 并删除这条 modification,
  * 拒绝 / 下线时仅修改本条 status。 */
+/* 把一个 play_id 解析到「同 (title + category) 最早一条」的 id。
+ *
+ * 背景:1.6 主题把衍生版本做成同 title+category 下的多个 plays 行,导致
+ * 「修改」流程的 parent_play_id 可能落在衍生版本上而非原文。
+ * 合入时就出现「改了一版,反而又多了一版」的体验问题。
+ *
+ * 这里把 parent_play_id 收敛到同系列最早一条,后续所有 modify 合入、
+ * 同系列跟随都基于该 root id,自然就让修改永远作用于原文。
+ *
+ * 兼容策略:
+ * - 原 play 本身已是 root 时,直接返回自己;
+ * - 同系列有多条且当前不是最早一条时,取 MIN(created_at);
+ * - 若同系列没有其他记录(只剩自己),仍然返回自己。
+ * - 旧数据尚未走 submission_type='modify' 路径时,该函数不会
+ *   被触发,不影响。 */
+export const resolveRootPlayId = async (db: D1Database, playId: string): Promise<string> => {
+  const target = await db
+    .prepare(`SELECT id, title, category FROM plays WHERE id = ? LIMIT 1`)
+    .bind(playId)
+    .first<{ id?: string; title?: string; category?: string }>();
+  if (!target?.id) {
+    return playId;
+  }
+
+  const root = await db
+    .prepare(
+      `SELECT id FROM plays
+       WHERE title = ? AND category = ?
+       ORDER BY created_at ASC, id ASC
+       LIMIT 1`,
+    )
+    .bind(target.title ?? '', target.category ?? '')
+    .first<{ id?: string }>();
+
+  return root?.id ?? target.id;
+};
+
 export const submitPlayEdit = async (
   db: D1Database,
   parentPlayId: string,
@@ -460,6 +497,12 @@ export const submitPlayEdit = async (
     await ensureTagByName(db, nextCategory);
   }
 
+  /* 上溯 parent_play_id 到同 title+category 最早一条,避免
+   * "点修改时落在衍生版本上、合入后再新增一版"的体验 bug。
+   * 终态保证:无论用户在哪个版本点修改,合入目标都是同一组
+   * 作品里的「原文」(最早一条)。 */
+  const rootPlayId = await resolveRootPlayId(db, parentPlayId);
+
   const id = makeId('play');
   const timestamp = now();
 
@@ -479,7 +522,7 @@ export const submitPlayEdit = async (
       nextContent,
       timestamp,
       timestamp,
-      parentPlayId,
+      rootPlayId,
     )
     .run();
 

@@ -108,6 +108,65 @@ export type RepoReviewResult = {
   skippedCount: number;
 };
 
+/* 续写:挂在原文小剧场下面的长文本内容,与 repos 平级但独立审核。
+ *
+ * - nickname 可空:未填写表示「匿名 / 原作者本人续写」,详情页不展示署名
+ * - summary 必填,作为列表导语
+ * - status 与 repos 一致,各自走独立审核池
+ * - authorNickname 字段保留,语义与 nickname 相同,便于后续追溯 */
+export type ContinuationStatus = 'pending' | 'approved' | 'rejected';
+export type ContinuationReviewAction = 'approve' | 'reject';
+
+export type Continuation = {
+  id: string;
+  playId: string;
+  nickname: string;
+  visitorId: string;
+  summary: string;
+  content: string;
+  status: ContinuationStatus;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  playTitle?: string;
+  playAuthorName?: string;
+};
+
+export type ContinuationDraft = {
+  playId: string;
+  nickname: string;
+  visitorId: string;
+  summary: string;
+  content: string;
+};
+
+export type ContinuationAuditAction = ContinuationReviewAction | 'delete' | 'edit';
+
+export type ContinuationAuditLog = {
+  id: string;
+  continuationId: string;
+  playId: string;
+  action: ContinuationAuditAction;
+  operator: string;
+  note: string;
+  createdAt: string;
+  playTitle?: string;
+  nickname?: string;
+};
+
+/* 广场「有新内容」通知的三段汇总。
+ * modified 自 since 以来 review_logs 'approve' + '[修改] %' 的条目;
+ * continuations 自 since 以来通过的续写条数;
+ * newPlays 自 since 以来通过的原文小剧场条数。
+ * 未通过(pending / rejected / offline)均不计入。 */
+export type NotificationSummary = {
+  modified: number;
+  continuations: number;
+  newPlays: number;
+  since: string;
+};
+
 export type BulkReviewResult = {
   action: ReviewAction;
   updatedIds: string[];
@@ -192,6 +251,12 @@ export const statusLabelMap: Record<PlayStatus, string> = {
 };
 
 export const repoStatusLabelMap: Record<RepoStatus, string> = {
+  pending: '待审核',
+  approved: '已通过',
+  rejected: '已拒绝',
+};
+
+export const continuationStatusLabelMap: Record<ContinuationStatus, string> = {
   pending: '待审核',
   approved: '已通过',
   rejected: '已拒绝',

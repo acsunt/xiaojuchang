@@ -20,7 +20,13 @@ import {
 
 import { getCachedPublicPlayById, getCachedPublicPlays, playApi } from '../../services/play-api';
 
-import { DEFAULT_CATEGORY, type Play, type Repo, type RepoOrder } from '../../types/play';
+import {
+  DEFAULT_CATEGORY,
+  type Play,
+  type Repo,
+  type RepoOrder,
+  type Continuation,
+} from '../../types/play';
 
 import { RepoMarkdown } from '../repos/RepoMarkdown';
 
@@ -87,6 +93,27 @@ export function PlayDetailPage() {
   const [repos, setRepos] = useState<Repo[]>([]);
 
   const [repoOrder, setRepoOrder] = useState<RepoOrder>('asc');
+
+  /* 续写区状态:与现有 repo 区平级,挂在小剧场正文下、repo 区之上。
+   *
+   * 续写 composer 三字段:
+   * - nickname(作者/可选,留空表示匿名)
+   * - summary(简介/必填)
+   * - content(正文/必填)
+   *
+   * 编辑模式下走 updateContinuationByAuthor(原地改,状态重置为 pending)。
+   * 没有 parent/root 链(续写是扁平结构),不能像 repo 那样"回复某条"。 */
+  const [continuations, setContinuations] = useState<Continuation[]>([]);
+  const [continuationOrder, setContinuationOrder] = useState<RepoOrder>('asc');
+  const [continuationComposerOpen, setContinuationComposerOpen] = useState(false);
+  const [continuationNickname, setContinuationNickname] = useState('');
+  const [continuationSummary, setContinuationSummary] = useState('');
+  const [continuationContent, setContinuationContent] = useState('');
+  const [continuationEditingId, setContinuationEditingId] = useState('');
+  const [continuationSubmitting, setContinuationSubmitting] = useState(false);
+  const [continuationNicknameHistory, setContinuationNicknameHistory] = useState<string[]>(() =>
+    getRepoNicknameHistory(),
+  );
 
   const [repoNickname, setRepoNickname] = useState('');
 
@@ -268,6 +295,13 @@ export function PlayDetailPage() {
       .catch(() => setRepos([]));
   }, [id, repoOrder]);
 
+  useEffect(() => {
+    playApi
+      .getContinuationsByPlayId(id, continuationOrder)
+      .then(setContinuations)
+      .catch(() => setContinuations([]));
+  }, [id, continuationOrder]);
+
   const handleCopy = async (value: string, label: string) => {
     try {
       await copyText(value);
@@ -308,6 +342,84 @@ export function PlayDetailPage() {
         playSnapshot: target,
       },
     });
+  };
+
+  /* 续写 composer:打开/关闭 helper,跟 repoComposerOpen 行为对齐 */
+  const openContinuationComposer = () => {
+    setContinuationEditingId('');
+    setContinuationNickname('');
+    setContinuationSummary('');
+    setContinuationContent('');
+    setContinuationComposerOpen(true);
+    setContinuationNicknameHistory(getRepoNicknameHistory());
+  };
+  const closeContinuationComposer = () => {
+    setContinuationComposerOpen(false);
+    setContinuationEditingId('');
+  };
+
+  const handleEditContinuation = (target: Continuation) => {
+    if (!target) {
+      return;
+    }
+    /* 点"修改"回填所有字段,包括作者/简介/正文;
+     * 提交时走 updateContinuationByAuthor(原地覆盖,状态回 pending)。 */
+    setContinuationEditingId(target.id);
+    setContinuationNickname(target.nickname ?? '');
+    setContinuationSummary(target.summary ?? '');
+    setContinuationContent(target.content ?? '');
+    setContinuationComposerOpen(true);
+    setContinuationNicknameHistory(getRepoNicknameHistory());
+  };
+
+  const handleSubmitContinuation = async () => {
+    if (!play) {
+      return;
+    }
+    const summary = continuationSummary.trim();
+    const content = continuationContent.trim();
+    const nickname = continuationNickname.trim();
+    if (!summary || !content) {
+      showFloatingToast('简介和正文不能为空', 'error');
+      return;
+    }
+
+    setContinuationSubmitting(true);
+    try {
+      if (continuationEditingId) {
+        /* 修改模式:原地覆盖,状态重置为 pending 等待重新审核。 */
+        await playApi.updateContinuationByAuthor(continuationEditingId, visitorId, {
+          nickname,
+          summary,
+          content,
+        });
+        showFloatingToast('续写修改已提交,等待重新审核。');
+      } else {
+        await playApi.createContinuation({
+          playId: play.id,
+          nickname,
+          visitorId,
+          summary,
+          content,
+        });
+        showFloatingToast('续写已提交,审核通过后会显示。');
+      }
+      setContinuationComposerOpen(false);
+      setContinuationEditingId('');
+      if (nickname) {
+        setContinuationNicknameHistory(rememberRepoNickname(nickname));
+      }
+      /* 刷新列表:重新拉一次 status='approved' 的续写 */
+      setContinuations(await playApi.getContinuationsByPlayId(play.id, continuationOrder));
+    } catch (reason) {
+      showFloatingToast(reason instanceof Error ? reason.message : '续写提交失败', 'error');
+    } finally {
+      setContinuationSubmitting(false);
+    }
+  };
+
+  const handleClearContinuationNicknameHistory = () => {
+    setContinuationNicknameHistory(clearRepoNicknameHistory());
   };
 
   const handleSubmitRepo = async () => {
@@ -415,26 +527,25 @@ export function PlayDetailPage() {
    * 修改任意版本：跳到 /upload,只回填那一版的内容,
    * 提交后会在同 title+category 同组的尾部追加一版。
    */
+  /* 旧版的「上传衍生」已下线。
+   *
+   * 衍生版本从 plays.submission_type='derived' 改造为 continuations 表后,
+   * 这里改为「跳到续写区并展开 composer」,语义与原按钮一致:
+   * 用户表达「我想在这条原文下面续一段」。
+   *
+   * 直接打开 composer 而不是新建路由跳转,避免用户在详情页和
+   * /upload 页面之间来回切换。 */
   const handleUploadDerived = () => {
-    const original = versionItems[0] ?? play;
-    if (!original) {
+    if (typeof document === 'undefined') {
       return;
     }
-    navigate('/upload', {
-      state: {
-        prefill: {
-          authorName: original.authorName,
-          title: original.title,
-          category: original.category,
-          summary: original.summary,
-          content: original.content,
-          existingDerived: versionItems.slice(1).map((item) => ({
-            summary: item.summary,
-            content: item.content,
-          })),
-          appendDerived: true,
-        },
-      },
+    openContinuationComposer();
+    /* 滚到续写区,让用户直接看到填写框 */
+    requestAnimationFrame(() => {
+      const target = document.querySelector('.continuation-panel');
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   };
 
@@ -624,7 +735,7 @@ export function PlayDetailPage() {
                         onClick={handleUploadDerived}
                         type="button"
                       >
-                        上传衍生
+                        续写
                       </button>
                     ) : null}
                   </div>
@@ -663,7 +774,7 @@ export function PlayDetailPage() {
                 onClick={handleUploadDerived}
                 type="button"
               >
-                上传衍生
+                续写
               </button>
             </div>
             <div className="inline-actions">
@@ -867,6 +978,178 @@ export function PlayDetailPage() {
             ))
           ) : (
             <div className="empty-panel">还没有通过审核的 repo。</div>
+          )}
+        </div>
+      </section>
+
+      {/* 续写区:与 repo 区平级,挂在小剧场正文下、repo 区之上。
+       * 续写是扁平结构(没有回复链),只展示已通过条目,
+       * 用户通过「续写」按钮展开 composer,
+       * 编辑现有续写点击卡片右侧的「修改」按钮原地覆盖提交。 */}
+      <section className="form-panel stack-gap-md continuation-panel">
+        <div className="content-head wrap-mobile">
+          <div>
+            <h3>续写</h3>
+            <p className="sub-copy">
+              续写是直接挂在原文下的独立长文,作者(可选) / 简介(必填) / 正文(必填) 三个字段,
+              提交后进入独立审核池;原作者修改会原地覆盖并重新审核。
+            </p>
+          </div>
+
+          <div className="continuation-toolbar-row">
+            <div className="continuation-sort-group">
+              <button
+                className={continuationOrder === 'asc' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setContinuationOrder('asc')}
+                type="button"
+              >
+                正序
+              </button>
+              <button
+                className={continuationOrder === 'desc' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setContinuationOrder('desc')}
+                type="button"
+              >
+                倒序
+              </button>
+            </div>
+            <button
+              className={continuationComposerOpen ? 'button secondary' : 'button primary'}
+              onClick={() =>
+                continuationComposerOpen ? closeContinuationComposer() : openContinuationComposer()
+              }
+              type="button"
+            >
+              {continuationComposerOpen ? '收起续写' : '续写'}
+            </button>
+          </div>
+        </div>
+
+        {continuationComposerOpen ? (
+          <div className="continuation-form-grid">
+            <label>
+              <span>作者（可空，留空即匿名，详情页不展示署名）</span>
+              <ClearableField
+                onClear={() => setContinuationNickname('')}
+                visible={Boolean(continuationNickname)}
+              >
+                <input
+                  list="repo-nickname-history"
+                  value={continuationNickname}
+                  onChange={(event) => setContinuationNickname(event.target.value)}
+                  placeholder="留空 = 匿名续写"
+                />
+              </ClearableField>
+            </label>
+
+            {continuationNicknameHistory.length > 0 ? (
+              <div className="stack-gap-sm">
+                <div className="inline-actions wrap-mobile author-history-inline">
+                  <span className="content-meta">
+                    历史昵称 {continuationNicknameHistory.length} 个
+                  </span>
+                  <button
+                    className="button ghost"
+                    onClick={handleClearContinuationNicknameHistory}
+                    type="button"
+                  >
+                    清空昵称历史
+                  </button>
+                </div>
+                <div className="tag-cloud compact-tag-cloud repo-history-row">
+                  {continuationNicknameHistory.map((nickname) => {
+                    const active = continuationNickname === nickname;
+                    return (
+                      <button
+                        className={active ? 'tag-chip active' : 'tag-chip'}
+                        key={nickname}
+                        onClick={() => setContinuationNickname(nickname)}
+                        type="button"
+                      >
+                        {nickname}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            <label>
+              <span>简介（必填，用于说明这条续写写什么）</span>
+              <ClearableField
+                onClear={() => setContinuationSummary('')}
+                visible={Boolean(continuationSummary)}
+              >
+                <input
+                  value={continuationSummary}
+                  onChange={(event) => setContinuationSummary(event.target.value)}
+                  placeholder="给续写起个一句话导语"
+                />
+              </ClearableField>
+            </label>
+
+            <label>
+              <span>正文（必填）</span>
+              <textarea
+                rows={8}
+                value={continuationContent}
+                onChange={(event) => setContinuationContent(event.target.value)}
+                placeholder="把续写的正文填在这里"
+              />
+            </label>
+
+            <div className="inline-actions wrap-mobile continuation-composer-actions">
+              <button className="button ghost" onClick={closeContinuationComposer} type="button">
+                取消
+              </button>
+              <button
+                className="button primary"
+                disabled={continuationSubmitting}
+                onClick={() => void handleSubmitContinuation()}
+                type="button"
+              >
+                {continuationSubmitting
+                  ? '提交中'
+                  : continuationEditingId
+                    ? '提交修改'
+                    : '提交续写'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="continuation-list stack-gap-sm">
+          {continuations.length > 0 ? (
+            continuations.map((item) => {
+              const showAuthor = item.nickname && item.nickname.trim().length > 0;
+              return (
+                <article className="continuation-card" key={item.id}>
+                  <div className="continuation-card-head">
+                    <div className="stack-gap-xs">
+                      <div className="card-topline wrap-mobile">
+                        <strong>{item.summary}</strong>
+                      </div>
+                      {showAuthor ? (
+                        <span className="content-meta">作者：{item.nickname}</span>
+                      ) : (
+                        <span className="content-meta">匿名续写</span>
+                      )}
+                      <span className="content-meta">{formatDate(item.createdAt)}</span>
+                    </div>
+                    <button
+                      className="button secondary continuation-edit-button"
+                      onClick={() => handleEditContinuation(item)}
+                      type="button"
+                    >
+                      修改
+                    </button>
+                  </div>
+                  <p className="play-detail-copy continuation-content">{item.content}</p>
+                </article>
+              );
+            })
+          ) : (
+            <div className="empty-panel">还没有通过审核的续写。</div>
           )}
         </div>
       </section>

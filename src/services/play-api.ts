@@ -4,6 +4,12 @@ import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT } from '../types/play';
 import type {
   AdminSession,
   BulkReviewResult,
+  Continuation,
+  ContinuationAuditLog,
+  ContinuationDraft,
+  ContinuationReviewAction,
+  ContinuationStatus,
+  NotificationSummary,
   Play,
   PlayDraft,
   PlayStatus,
@@ -634,6 +640,187 @@ export const playApi = {
 
     const play = mockDb.getAdminPlayById(id);
     return Promise.resolve(play ? normalizePlaySummary(play) : null);
+  },
+
+  /* 续写:挂在原文下面的独立审核池,与 repos 平级。
+   *
+   * - nickname 可空(空字符串表示「匿名 / 原作者本人续写」,详情页不展示)
+   * - 用户自己可 PUT 修改,状态回到 pending
+   * - 后台管理员审核通过 / 拒绝独立进行
+   */
+  async getContinuationsByPlayId(playId: string, order: RepoOrder): Promise<Continuation[]> {
+    if (apiMode === 'remote') {
+      return jsonRequest<Continuation[]>(
+        `/api/continuations?playId=${encodeURIComponent(playId)}&order=${order}`,
+      );
+    }
+    return Promise.resolve(mockDb.getContinuationsByPlayId(playId, order));
+  },
+
+  async getMyContinuations(visitorId: string, order: RepoOrder): Promise<Continuation[]> {
+    const normalized = visitorId.trim();
+    if (!normalized) {
+      return [];
+    }
+    if (apiMode === 'remote') {
+      return jsonRequest<Continuation[]>(
+        `/api/continuations?visitorId=${encodeURIComponent(normalized)}&order=${order}`,
+      );
+    }
+    return Promise.resolve(mockDb.getMyContinuations(normalized, order));
+  },
+
+  async getReceivedContinuations(
+    playIds: string[],
+    visitorId: string,
+    order: RepoOrder,
+  ): Promise<Continuation[]> {
+    const normalizedPlayIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+    const normalizedVisitorId = visitorId.trim();
+    if (normalizedPlayIds.length === 0 && !normalizedVisitorId) {
+      return [];
+    }
+    if (apiMode === 'remote') {
+      return jsonRequest<Continuation[]>('/api/continuations', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'received',
+          playIds: normalizedPlayIds,
+          visitorId: normalizedVisitorId,
+          order,
+        }),
+      });
+    }
+    return Promise.resolve(
+      mockDb.getReceivedContinuations(normalizedPlayIds, normalizedVisitorId, order),
+    );
+  },
+
+  async createContinuation(draft: ContinuationDraft): Promise<Continuation> {
+    if (apiMode === 'remote') {
+      const item = await jsonRequest<Continuation>('/api/continuations', {
+        method: 'POST',
+        body: JSON.stringify(draft),
+      });
+      emitPublicPlaysUpdated();
+      return item;
+    }
+    const item = mockDb.createContinuation(draft);
+    return Promise.resolve(item);
+  },
+
+  async updateContinuationByAuthor(
+    continuationId: string,
+    visitorId: string,
+    patch: { nickname?: string; summary?: string; content?: string },
+  ): Promise<Continuation | null> {
+    if (apiMode === 'remote') {
+      const item = await jsonRequest<Continuation | null>(
+        `/api/continuations/${encodeURIComponent(continuationId)}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ visitorId, ...patch }),
+        },
+      );
+      emitPublicPlaysUpdated();
+      return item;
+    }
+    const item = mockDb.updateContinuationByAuthor(continuationId, visitorId, patch);
+    return Promise.resolve(item);
+  },
+
+  async getContinuationCounts(playIds: string[]): Promise<RepoSummary[]> {
+    if (playIds.length === 0) {
+      return [];
+    }
+    if (apiMode === 'remote') {
+      return jsonRequest<RepoSummary[]>('/api/continuations/counts', {
+        method: 'POST',
+        body: JSON.stringify({ playIds }),
+      });
+    }
+    return Promise.resolve(mockDb.getContinuationCounts(playIds));
+  },
+
+  async getAdminContinuations(status?: ContinuationStatus): Promise<Continuation[]> {
+    if (apiMode === 'remote') {
+      const query = status ? `?status=${status}` : '';
+      return jsonRequest<Continuation[]>(`/api/admin/continuations${query}`);
+    }
+    return Promise.resolve(mockDb.getAdminContinuations(status));
+  },
+
+  async reviewContinuation(
+    continuationId: string,
+    action: ContinuationReviewAction,
+    note: string,
+  ): Promise<Continuation | null> {
+    if (apiMode === 'remote') {
+      const item = await jsonRequest<Continuation | null>(
+        `/api/admin/continuations/${encodeURIComponent(continuationId)}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ action, note }),
+        },
+      );
+      emitPublicPlaysUpdated();
+      return item;
+    }
+    const item = mockDb.reviewContinuation(continuationId, action, note);
+    return Promise.resolve(item);
+  },
+
+  async updateContinuationByAdmin(
+    continuationId: string,
+    patch: { content?: string; summary?: string; note?: string; nickname?: string },
+  ): Promise<Continuation | null> {
+    if (apiMode === 'remote') {
+      const item = await jsonRequest<Continuation | null>(
+        `/api/admin/continuations/${encodeURIComponent(continuationId)}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        },
+      );
+      emitPublicPlaysUpdated();
+      return item;
+    }
+    const item = mockDb.updateContinuationByAdmin(continuationId, patch);
+    return Promise.resolve(item);
+  },
+
+  async deleteContinuation(continuationId: string): Promise<boolean> {
+    if (apiMode === 'remote') {
+      await jsonRequest<{ ok: boolean }>(
+        `/api/admin/continuations/${encodeURIComponent(continuationId)}`,
+        { method: 'DELETE' },
+      );
+      emitPublicPlaysUpdated();
+      return true;
+    }
+    return Promise.resolve(mockDb.deleteContinuation(continuationId));
+  },
+
+  async getAllContinuationAuditLogs(): Promise<ContinuationAuditLog[]> {
+    if (apiMode === 'remote') {
+      return jsonRequest<ContinuationAuditLog[]>('/api/admin/review-logs/continuations');
+    }
+    return Promise.resolve(mockDb.getAllContinuationAuditLogs());
+  },
+
+  async getNotificationSummary(
+    since: string,
+    visitorId: string,
+    playIds: string[],
+  ): Promise<NotificationSummary> {
+    const normalizedPlayIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+    if (apiMode === 'remote') {
+      return jsonRequest<NotificationSummary>('/api/notification-summary', {
+        method: 'POST',
+        body: JSON.stringify({ since, visitorId, playIds: normalizedPlayIds }),
+      });
+    }
+    return Promise.resolve(mockDb.getNotificationSummary(since, visitorId, normalizedPlayIds));
   },
 
   async getAdminTags(): Promise<Tag[]> {

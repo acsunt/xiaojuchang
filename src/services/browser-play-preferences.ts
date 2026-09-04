@@ -5,7 +5,32 @@ const PLAZA_NAVIGATION_SNAPSHOT_KEY = 'mini-theater.plaza-navigation-snapshot';
 const PLAZA_AUTO_REFRESH_KEY = 'mini-theater.plaza-auto-refresh';
 const PLAZA_CONTROLS_COLLAPSED_KEY = 'mini-theater:plaza-controls-collapsed';
 const PLAZA_TOOLBAR_COLLAPSED_KEY = 'mini-theater:plaza-toolbar-collapsed';
+const PLAZA_NOTIFICATION_SINCE_KEY = 'mini-theater:plaza-notification-since';
+
+export const readPlazaNotificationSince = (): string => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  try {
+    return window.localStorage.getItem(PLAZA_NOTIFICATION_SINCE_KEY) ?? '';
+  } catch {
+    return '';
+  }
+};
+
+export const writePlazaNotificationSince = (iso: string): void => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(PLAZA_NOTIFICATION_SINCE_KEY, iso);
+  } catch {
+    /* localStorage 写失败时静默,不打扰用户。 */
+  }
+};
+
 const PLAZA_TOOLBAR_UPDATED_EVENT = 'mini-theater:plaza-toolbar-updated';
+
 const DETAIL_FLAT_VIEW_KEY = 'mini-theater:detail-flat-view';
 const DETAIL_VERSION_SELECTION_KEY = 'mini-theater:detail-version-selection';
 const ADMIN_REVIEW_DIFF_FLAT_KEY = 'mini-theater:admin-review-diff-flat';

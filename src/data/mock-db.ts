@@ -1,6 +1,12 @@
 import type {
   AdminSession,
   BulkReviewResult,
+  Continuation,
+  ContinuationAuditLog,
+  ContinuationDraft,
+  ContinuationReviewAction,
+  ContinuationStatus,
+  NotificationSummary,
   Play,
   PlayDraft,
   PlayStatus,
@@ -22,6 +28,8 @@ const PLAY_STORE_KEY = 'mini-theater.plays';
 const REVIEW_LOG_STORE_KEY = 'mini-theater.review-logs';
 const REPO_REVIEW_LOG_STORE_KEY = 'mini-theater.repo-review-logs';
 const REPO_STORE_KEY = 'mini-theater.repos';
+const CONTINUATION_STORE_KEY = 'mini-theater.continuations';
+const CONTINUATION_REVIEW_LOG_STORE_KEY = 'mini-theater.continuation-review-logs';
 const ADMIN_SESSION_KEY = 'mini-theater.admin-session';
 const TAG_STORE_KEY = 'mini-theater.tags';
 const SITE_SETTINGS_STORE_KEY = 'mini-theater.site-settings';
@@ -178,6 +186,12 @@ const getRepoReviewLogs = () =>
 const setRepoReviewLogs = (logs: RepoAuditLog[]) => writeStore(REPO_REVIEW_LOG_STORE_KEY, logs);
 const getRepos = () => readStore<Repo[]>(REPO_STORE_KEY, []);
 const setRepos = (repos: Repo[]) => writeStore(REPO_STORE_KEY, repos);
+const getContinuations = () => readStore<Continuation[]>(CONTINUATION_STORE_KEY, []);
+const setContinuations = (items: Continuation[]) => writeStore(CONTINUATION_STORE_KEY, items);
+const getContinuationReviewLogs = () =>
+  readStore<ContinuationAuditLog[]>(CONTINUATION_REVIEW_LOG_STORE_KEY, []);
+const setContinuationReviewLogs = (logs: ContinuationAuditLog[]) =>
+  writeStore(CONTINUATION_REVIEW_LOG_STORE_KEY, logs);
 const getSiteSettings = () => readStore<SiteSettings>(SITE_SETTINGS_STORE_KEY, seedSiteSettings);
 const setSiteSettings = (settings: SiteSettings) => writeStore(SITE_SETTINGS_STORE_KEY, settings);
 
@@ -1033,6 +1047,291 @@ export const mockDb = {
       ),
     );
     return before - getRepos().length;
+  },
+
+  /* 续写相关 mock 方法。
+   *
+   * 与 repos 行为对齐:作者提交 → status='pending' 进入待审核,
+   * 管理员 approve/reject 后出现在详情页(approved)或被拒绝(rejected)。
+   * nickname 可空字符串(空表示「匿名 / 原作者本人续写」,详情页不展示)。 */
+  getContinuationsByPlayId(playId: string, order: 'asc' | 'desc') {
+    return getContinuations()
+      .filter((item) => item.playId === playId && item.status === 'approved')
+      .sort((left, right) =>
+        order === 'desc'
+          ? right.createdAt.localeCompare(left.createdAt)
+          : left.createdAt.localeCompare(right.createdAt),
+      );
+  },
+
+  getMyContinuations(visitorId: string, order: 'asc' | 'desc') {
+    return getContinuations()
+      .filter((item) => item.visitorId === visitorId)
+      .sort((left, right) =>
+        order === 'desc'
+          ? right.createdAt.localeCompare(left.createdAt)
+          : left.createdAt.localeCompare(right.createdAt),
+      );
+  },
+
+  getReceivedContinuations(playIds: string[], visitorId: string, order: 'asc' | 'desc') {
+    const playIdSet = new Set(playIds);
+    return getContinuations()
+      .filter(
+        (item) =>
+          (item.status === 'approved' || item.status === 'rejected') &&
+          item.visitorId !== visitorId &&
+          playIdSet.has(item.playId),
+      )
+      .sort((left, right) =>
+        order === 'desc'
+          ? right.createdAt.localeCompare(left.createdAt)
+          : left.createdAt.localeCompare(right.createdAt),
+      );
+  },
+
+  createContinuation(draft: ContinuationDraft) {
+    const play = this.getPublicPlayById(draft.playId);
+    if (!play) {
+      throw new Error('小剧场不存在，或尚未通过审核');
+    }
+    const createdAt = now();
+    const item: Continuation = {
+      id: makeId('cont'),
+      playId: draft.playId.trim(),
+      nickname: (draft.nickname ?? '').trim(),
+      visitorId: draft.visitorId.trim(),
+      summary: draft.summary.trim(),
+      content: draft.content.trim(),
+      status: 'pending',
+      createdAt,
+      updatedAt: createdAt,
+      playTitle: play.title,
+      playAuthorName: play.authorName,
+    };
+    setContinuations([item, ...getContinuations()]);
+    emitPlaysUpdated();
+    return item;
+  },
+
+  updateContinuationByAuthor(
+    continuationId: string,
+    visitorId: string,
+    patch: { nickname?: string; summary?: string; content?: string },
+  ) {
+    const target = getContinuations().find((item) => item.id === continuationId);
+    if (!target) {
+      throw new Error('续写不存在');
+    }
+    if (target.visitorId !== visitorId.trim()) {
+      throw new Error('只有原作者才能修改这条续写');
+    }
+    const updatedAt = now();
+    const next: Continuation = {
+      ...target,
+      nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
+      summary: patch.summary !== undefined ? patch.summary.trim() : target.summary,
+      content: patch.content !== undefined ? patch.content.trim() : target.content,
+      status: 'pending',
+      reviewedAt: undefined,
+      reviewNote: undefined,
+      updatedAt,
+    };
+    setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
+    emitPlaysUpdated();
+    return next;
+  },
+
+  getContinuationCounts(playIds: string[]) {
+    const playIdSet = new Set(playIds);
+    const items = getContinuations().filter(
+      (item) => item.status === 'approved' && playIdSet.has(item.playId),
+    );
+    const summaryMap = new Map<
+      string,
+      { count: number; firstCreatedAt?: string; lastCreatedAt?: string }
+    >();
+    items.forEach((item) => {
+      const current = summaryMap.get(item.playId) ?? { count: 0 };
+      current.count += 1;
+      if (!current.firstCreatedAt || item.createdAt < current.firstCreatedAt) {
+        current.firstCreatedAt = item.createdAt;
+      }
+      if (!current.lastCreatedAt || item.createdAt > current.lastCreatedAt) {
+        current.lastCreatedAt = item.createdAt;
+      }
+      summaryMap.set(item.playId, current);
+    });
+    return playIds.map((playId) => {
+      const summary = summaryMap.get(playId);
+      return {
+        playId,
+        count: summary?.count ?? 0,
+        firstCreatedAt: summary?.firstCreatedAt,
+        lastCreatedAt: summary?.lastCreatedAt,
+      };
+    });
+  },
+
+  getAdminContinuations(status?: ContinuationStatus) {
+    const items = getContinuations().sort((left, right) =>
+      right.createdAt.localeCompare(left.createdAt),
+    );
+    return status ? items.filter((item) => item.status === status) : items;
+  },
+
+  reviewContinuation(
+    continuationId: string,
+    action: ContinuationReviewAction,
+    note: string,
+  ): Continuation | null {
+    const target = getContinuations().find((item) => item.id === continuationId);
+    if (!target) {
+      return null;
+    }
+    const status: ContinuationStatus = action === 'approve' ? 'approved' : 'rejected';
+    const updatedAt = now();
+    const next: Continuation = {
+      ...target,
+      status,
+      reviewNote: note.trim() || '无备注',
+      reviewedAt: updatedAt,
+      updatedAt,
+    };
+    setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
+    setContinuationReviewLogs([
+      {
+        id: makeId('cont_review'),
+        continuationId: next.id,
+        playId: next.playId,
+        action,
+        operator: this.getSession()?.username ?? 'unknown',
+        note: next.reviewNote ?? '',
+        createdAt: updatedAt,
+        playTitle: next.playTitle,
+        nickname: next.nickname || undefined,
+      },
+      ...getContinuationReviewLogs(),
+    ]);
+    emitPlaysUpdated();
+    return next;
+  },
+
+  updateContinuationByAdmin(
+    continuationId: string,
+    patch: { content?: string; summary?: string; note?: string; nickname?: string },
+  ): Continuation | null {
+    const target = getContinuations().find((item) => item.id === continuationId);
+    if (!target) {
+      return null;
+    }
+    const updatedAt = now();
+    const next: Continuation = {
+      ...target,
+      content: patch.content !== undefined ? patch.content.trim() : target.content,
+      summary: patch.summary !== undefined ? patch.summary.trim() : target.summary,
+      nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
+      reviewNote: patch.note !== undefined ? patch.note.trim() : target.reviewNote,
+      updatedAt,
+    };
+    setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
+    setContinuationReviewLogs([
+      {
+        id: makeId('cont_review'),
+        continuationId: next.id,
+        playId: next.playId,
+        action: 'edit',
+        operator: this.getSession()?.username ?? 'unknown',
+        note: next.reviewNote ?? '',
+        createdAt: updatedAt,
+        playTitle: next.playTitle,
+        nickname: next.nickname || undefined,
+      },
+      ...getContinuationReviewLogs(),
+    ]);
+    emitPlaysUpdated();
+    return next;
+  },
+
+  deleteContinuation(continuationId: string): boolean {
+    const target = getContinuations().find((item) => item.id === continuationId);
+    if (!target) {
+      return false;
+    }
+    setContinuationReviewLogs([
+      {
+        id: makeId('cont_review'),
+        continuationId: target.id,
+        playId: target.playId,
+        action: 'delete',
+        operator: this.getSession()?.username ?? 'unknown',
+        note: '后台删除续写',
+        createdAt: now(),
+        playTitle: target.playTitle,
+        nickname: target.nickname || undefined,
+      },
+      ...getContinuationReviewLogs(),
+    ]);
+    setContinuations(getContinuations().filter((item) => item.id !== continuationId));
+    emitPlaysUpdated();
+    return true;
+  },
+
+  getAllContinuationAuditLogs(): ContinuationAuditLog[] {
+    return getContinuationReviewLogs();
+  },
+
+  getNotificationSummary(since: string, visitorId: string, playIds: string[]): NotificationSummary {
+    const sinceTime = since ? new Date(since).getTime() : 0;
+    const playIdSet = new Set(playIds);
+    const plays = getPlays().filter(
+      (play) => play.status === 'approved' && (playIds.length === 0 || playIdSet.has(play.id)),
+    );
+    const continuations = getContinuations();
+    const reviews = getReviewLogs();
+
+    const modified = reviews.filter((log) => {
+      if (log.action !== 'approve' || !log.note.startsWith('[修改]')) {
+        return false;
+      }
+      if (!sinceTime) {
+        return true;
+      }
+      return new Date(log.createdAt).getTime() > sinceTime;
+    }).length;
+
+    const passedContinuations = continuations.filter((item) => {
+      if (item.status !== 'approved') {
+        return false;
+      }
+      if (visitorId && item.visitorId !== visitorId) {
+        return false;
+      }
+      if (playIds.length > 0 && !playIdSet.has(item.playId)) {
+        return false;
+      }
+      if (!sinceTime) {
+        return true;
+      }
+      return new Date(item.createdAt).getTime() > sinceTime;
+    }).length;
+
+    const newPlays = plays.filter((play) => {
+      if (play.submissionType && play.submissionType !== 'original') {
+        return false;
+      }
+      if (!sinceTime) {
+        return true;
+      }
+      return new Date(play.createdAt).getTime() > sinceTime;
+    }).length;
+
+    return {
+      modified,
+      continuations: passedContinuations,
+      newPlays,
+      since: since || '',
+    };
   },
 
   bulkReviewPlays(playIds: string[], action: ReviewAction, note: string): BulkReviewResult {
