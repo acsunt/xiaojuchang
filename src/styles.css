@@ -1447,6 +1447,39 @@ body[data-style='default'][data-mode='day'] .button.danger {
   overflow-x: auto;
 }
 
+/* 续写审核面板的搜索输入框：手机端必须占满一行。
+ * 父级 .admin-bulk-review-panel 用了 overflow-x: auto，
+ * 这会让子 label 默认被内容挤压，导致输入框只占一部分宽度。
+ * 这里显式把 label 设为 width:100% + min-width:0，
+ * 同时 input 强制 100% 宽度，确保手机端搜索框撑满一行。
+ * grid-column: 1 / -1 防止父级 grid 把它挤到某列。 */
+.admin-bulk-review-search {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+}
+
+.admin-bulk-review-search .admin-bulk-input {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .admin-bulk-review-search {
+    /* 手机端强制占满一行,无视父级 flex/grid 的挤压 */
+    flex: 0 0 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .admin-bulk-review-search .admin-bulk-input {
+    flex: 0 0 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
+
 .admin-bulk-review-head {
   align-items: center;
   gap: 12px;
@@ -2349,6 +2382,9 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   padding: 0 6px;
   height: 18px;
   border-radius: 999px;
+  /* 跟随主题:用 --accent(主色)做边框/文字/底色基调,
+   * 同时在 brutalism / retro 等特殊主题下被下方 body[data-style=...] 覆盖,
+   * 让徽标视觉与卡片底色/文字色保持一致。 */
   border: 1px solid color-mix(in srgb, var(--accent, #6c8cff) 55%, transparent);
   color: color-mix(in srgb, var(--accent, #6c8cff) 88%, var(--text) 12%);
   background: color-mix(in srgb, var(--accent, #6c8cff) 12%, transparent);
@@ -2357,6 +2393,46 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   letter-spacing: 0.02em;
   white-space: nowrap;
   margin-left: 2px;
+}
+
+/* brutalism:黄底黑字/黑底黄字为主,徽标换成粗野对比风格 */
+body[data-style='brutalism'] .derived-badge {
+  border: 2px solid currentColor;
+  background: var(--card-bg, #ffeb3b);
+  color: var(--heading-color, #000);
+  border-radius: 0;
+}
+body[data-style='brutalism'][data-mode='day'] .derived-badge {
+  background: #ffeb3b;
+  color: #000;
+  border-color: #000;
+}
+body[data-style='brutalism'][data-mode='night'] .derived-badge {
+  background: #000;
+  color: #ffeb3b;
+  border-color: #ffeb3b;
+}
+
+/* retro:复古墨褐底,徽标保持暖色调 */
+body[data-style='retro'] .derived-badge {
+  border-color: color-mix(in srgb, var(--accent, #a85a18) 70%, transparent);
+  color: color-mix(in srgb, var(--accent, #d28435) 80%, var(--text) 20%);
+  background: color-mix(in srgb, var(--accent, #d28435) 18%, transparent);
+}
+
+/* cyberpunk / synthwave / 其它霓虹主题:用更亮的 accent 颜色 */
+body[data-style='cyberpunk'] .derived-badge,
+body[data-style='synthwave'] .derived-badge {
+  border-color: color-mix(in srgb, var(--accent, #ff00d4) 70%, transparent);
+  color: color-mix(in srgb, var(--accent, #ff7adf) 88%, var(--text) 12%);
+  background: color-mix(in srgb, var(--accent, #ff00d4) 18%, transparent);
+}
+
+/* gradient / watercolor / aurora 等柔和主题:让徽标更通透 */
+body[data-style='gradient'] .derived-badge,
+body[data-style='watercolor'] .derived-badge,
+body[data-style='aurora'] .derived-badge {
+  background: color-mix(in srgb, var(--accent, #6c8cff) 18%, var(--panel-strong) 82%);
 }
 
 .preview-copy-clamped {
@@ -2542,6 +2618,138 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   width: auto;
 }
 
+/* 续写工具栏:复用 repo-toolbar-row 的布局,确保手机端正序/倒序
+ * 与「续写」按钮在同一行,间距模仿 repo。 */
+.continuation-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.continuation-sort-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.continuation-sort-group .tab-chip,
+.continuation-composer-toggle {
+  width: auto;
+}
+
+.continuation-card {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.continuation-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.continuation-summary-line {
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 3ch;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.continuation-summary {
+  /* 同 plaza-card-summary:简介前加 ✦ 图标 */
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: calc(13px * var(--text-scale, 1));
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.continuation-summary::before {
+  content: '✦';
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: calc(11px * var(--text-scale, 1));
+  line-height: 1.9;
+  opacity: 0.86;
+}
+
+.continuation-edit-button {
+  flex: 0 0 auto;
+}
+
+.continuation-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.continuation-content {
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+
+.continuation-composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.continuation-preview-summary {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: calc(13px * var(--text-scale, 1));
+  line-height: 1.45;
+}
+
+.continuation-preview-summary::before {
+  content: '✦';
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: calc(11px * var(--text-scale, 1));
+  line-height: 1.9;
+  opacity: 0.86;
+}
+
+@media (max-width: 720px) {
+  .continuation-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  .continuation-sort-group {
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+  .continuation-composer-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* 取消/提交修改 同一行铺满 */
+  .continuation-composer-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+  .continuation-composer-actions > .button {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    white-space: nowrap;
+  }
+}
+
 .repo-card-meta-line {
   min-width: 0;
   gap: 3ch;
@@ -2554,6 +2762,111 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 
 .repo-reply-button {
   flex: 0 0 auto;
+}
+
+/* 续写区卡片头:与 repo-card-head 完全一致,
+ * 头部 meta-line 在左,「修改」按钮贴右,布局沿用 repo 的「回复」按钮。 */
+.continuation-card-head.repo-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.continuation-card-meta-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 3ch;
+  flex-wrap: wrap;
+}
+
+.continuation-summary {
+  min-width: 0;
+}
+
+.continuation-summary-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  row-gap: 2px;
+}
+
+.continuation-summary-line .continuation-summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.continuation-summary-text {
+  font-size: calc(14px * var(--text-scale, 1));
+  color: var(--text);
+}
+
+.continuation-content {
+  margin: 0;
+}
+
+.continuation-edit-button {
+  flex: 0 0 auto;
+}
+
+.continuation-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+/* 续写工具栏：与 repo-toolbar-row 完全一致,
+ * 手机端让「正序 / 倒序 / 续写」按钮同行,与 repo 行为对齐。 */
+.continuation-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.continuation-sort-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  /* 与 repo 的 sort-group 一致,正序/倒序之间保持 10px 距离 */
+}
+
+.continuation-toolbar-row .button,
+.continuation-toolbar-row .tab-chip {
+  width: auto;
+}
+
+.continuation-composer-toggle {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .continuation-toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+  .continuation-toolbar-row .button,
+  .continuation-toolbar-row .tab-chip {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  /* 续写「修改」按钮：与 repo 的「回复」按钮位置一致,固定宽度 */
+  .continuation-edit-button {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: max-content;
+  }
+  .continuation-card-meta-line {
+    gap: 8px;
+  }
+  .continuation-summary-line {
+    width: 100%;
+  }
 }
 
 .repo-form-grid {
@@ -5328,16 +5641,17 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
     width: fit-content;
   }
 
-  /* 详情页续写编辑器：手机端把「取消 / 提交续写」强制同一行，
-   * 避免默认 flex-wrap 让两个按钮纵向堆叠。 */
+  /* 详情页续写编辑器：手机端把「取消 / 提交修改」强制同一行，并铺满整行。 */
   .continuation-composer-actions {
     flex-wrap: nowrap;
+    width: 100%;
   }
 
-  /* 详情页续写编辑器：让两个按钮在窄屏也只占文字宽度，不撑满整行。 */
+  /* 详情页续写编辑器：让两个按钮在窄屏各占一半，铺满整行。 */
   .continuation-composer-actions > .button {
     width: auto;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-width: 0;
     white-space: nowrap;
   }
 

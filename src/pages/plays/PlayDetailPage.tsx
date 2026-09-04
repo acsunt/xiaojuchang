@@ -530,25 +530,8 @@ export function PlayDetailPage() {
   /* 旧版的「上传衍生」已下线。
    *
    * 衍生版本从 plays.submission_type='derived' 改造为 continuations 表后,
-   * 这里改为「跳到续写区并展开 composer」,语义与原按钮一致:
-   * 用户表达「我想在这条原文下面续一段」。
-   *
-   * 直接打开 composer 而不是新建路由跳转,避免用户在详情页和
-   * /upload 页面之间来回切换。 */
-  const handleUploadDerived = () => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    openContinuationComposer();
-    /* 滚到续写区,让用户直接看到填写框 */
-    requestAnimationFrame(() => {
-      const target = document.querySelector('.continuation-panel');
-      if (target instanceof HTMLElement) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    });
-  };
-
+   * 续写区自带「续写」按钮(详见 continuation-panel),
+   * 不再需要在正文标题旁另放一个入口,函数也一并移除。 */
   const handleEditVersion = (target: Play) => {
     if (!target) {
       return;
@@ -601,7 +584,9 @@ export function PlayDetailPage() {
             </button>
           </div>
 
-          {play.summary ? <p className="sub-copy">{play.summary}</p> : null}
+          {play.summary ? (
+            <p className="sub-copy plaza-card-summary">{play.summary}</p>
+          ) : null}
 
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
@@ -706,7 +691,6 @@ export function PlayDetailPage() {
           {visibleVersionItems.map((item) => {
             const versionIndex = versionItems.findIndex((row) => row.id === item.id);
             const isCurrent = item.id === id;
-            const isOriginal = versionIndex === 0;
             return (
               <article
                 className={
@@ -729,15 +713,6 @@ export function PlayDetailPage() {
                     >
                       修改
                     </button>
-                    {isOriginal ? (
-                      <button
-                        className="button secondary detail-upload-derived-button"
-                        onClick={handleUploadDerived}
-                        type="button"
-                      >
-                        续写
-                      </button>
-                    ) : null}
                   </div>
                   <div className="inline-actions">
                     <span className="content-meta">约 {item.content.length} 字</span>
@@ -769,13 +744,6 @@ export function PlayDetailPage() {
               >
                 修改
               </button>
-              <button
-                className="button secondary detail-upload-derived-button"
-                onClick={handleUploadDerived}
-                type="button"
-              >
-                续写
-              </button>
             </div>
             <div className="inline-actions">
               <span className="content-meta">约 {play.content.length} 字</span>
@@ -797,20 +765,23 @@ export function PlayDetailPage() {
 
       {/* 续写区:与 repo 区平级,挂在小剧场正文下、repo 区之下。
        * 续写是扁平结构(没有回复链),只展示已通过条目,
-       * 用户通过「展开续写」按钮展开 composer,
-       * 编辑现有续写点击卡片右侧的「修改」按钮原地覆盖提交。 */}
+       * 用户通过「续写」按钮展开 composer,
+       * 编辑现有续写点击卡片右侧的「修改」按钮原地覆盖提交。
+       *
+       * 工具栏排版:沿用 repo 的 repo-toolbar-row / repo-sort-group,
+       * 手机端让正序/倒序与「续写」按钮在水平同一行,
+       * 正序/倒序之间用 10px gap 保持 repo 一致的间距。 */}
       <section className="form-panel stack-gap-md continuation-panel">
         <div className="content-head wrap-mobile">
           <div>
             <h3>续写</h3>
             <p className="sub-copy">
-              续写是直接挂在原文下的独立长文,作者(可选) / 简介(必填) / 正文(必填) 三个字段,
-              提交后进入独立审核池;原作者修改会原地覆盖并重新审核。
+              续写是补充的指令，或者同一个系列的小剧场。
             </p>
           </div>
 
-          <div className="continuation-toolbar-row">
-            <div className="continuation-sort-group">
+          <div className="repo-toolbar-row continuation-toolbar-row">
+            <div className="repo-sort-group continuation-sort-group">
               <button
                 className={continuationOrder === 'asc' ? 'tab-chip active' : 'tab-chip'}
                 onClick={() => setContinuationOrder('asc')}
@@ -837,7 +808,7 @@ export function PlayDetailPage() {
               }
               type="button"
             >
-              {continuationComposerOpen ? '收起续写' : '展开续写'}
+              {continuationComposerOpen ? '收起续写' : '续写'}
             </button>
           </div>
         </div>
@@ -845,7 +816,7 @@ export function PlayDetailPage() {
         {continuationComposerOpen ? (
           <div className="continuation-form-grid">
             <label>
-              <span>作者（可空，留空即匿名，详情页不展示署名）</span>
+              <span>作者（与原文作者为同一人可留空）</span>
               <ClearableField
                 onClear={() => setContinuationNickname('')}
                 visible={Boolean(continuationNickname)}
@@ -854,7 +825,7 @@ export function PlayDetailPage() {
                   list="repo-nickname-history"
                   value={continuationNickname}
                   onChange={(event) => setContinuationNickname(event.target.value)}
-                  placeholder="留空 = 匿名续写"
+                  placeholder="写下你的笔名"
                 />
               </ClearableField>
             </label>
@@ -892,7 +863,7 @@ export function PlayDetailPage() {
             ) : null}
 
             <label>
-              <span>简介（必填，用于说明这条续写写什么）</span>
+              <span>简介</span>
               <ClearableField
                 onClear={() => setContinuationSummary('')}
                 visible={Boolean(continuationSummary)}
@@ -906,7 +877,7 @@ export function PlayDetailPage() {
             </label>
 
             <label>
-              <span>正文（必填）</span>
+              <span>正文</span>
               <textarea
                 rows={8}
                 value={continuationContent}
@@ -940,21 +911,23 @@ export function PlayDetailPage() {
             continuations.map((item) => {
               const showAuthor = item.nickname && item.nickname.trim().length > 0;
               return (
-                <article className="continuation-card" key={item.id}>
-                  <div className="continuation-card-head">
-                    <div className="stack-gap-xs">
-                      <div className="card-topline wrap-mobile">
-                        <strong>{item.summary}</strong>
-                      </div>
+                <article className="continuation-card repo-card" key={item.id}>
+                  <div className="continuation-card-head repo-card-head">
+                    <div className="repo-card-meta-line continuation-summary-line">
+                      <strong className="continuation-summary plaza-card-summary">
+                        {item.summary}
+                      </strong>
                       {showAuthor ? (
                         <span className="content-meta">作者：{item.nickname}</span>
                       ) : (
-                        <span className="content-meta">匿名续写</span>
+                        <span className="content-meta">匿名</span>
                       )}
-                      <span className="content-meta">{formatDate(item.createdAt)}</span>
+                      <span className="content-meta repo-card-date">
+                        {formatDate(item.createdAt)}
+                      </span>
                     </div>
                     <button
-                      className="button secondary continuation-edit-button"
+                      className="button secondary repo-reply-button continuation-edit-button"
                       onClick={() => handleEditContinuation(item)}
                       type="button"
                     >
@@ -977,7 +950,7 @@ export function PlayDetailPage() {
             <h3>repo</h3>
 
             <p className="sub-copy">
-              支持 Markdown、普通换行分段、图床链接缩略图。提交后进入独立审核池。
+              支持 Markdown图床链接缩略图，欢迎给各位大大积极repo。
             </p>
           </div>
 

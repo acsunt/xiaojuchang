@@ -1516,8 +1516,10 @@ export function AdminReviewPage() {
         summary: adminSelectedContinuation.summary,
         content: adminSelectedContinuation.content,
         nickname: adminSelectedContinuation.nickname,
-        note: adminSelectedContinuation.reviewNote ?? '',
+        note: '',
       });
+      /* 切换到另一条续写时清空「本次审核备注」,避免上一条备注混到新一条。 */
+      setContinuationReviewNote('');
     }
   }, [adminSelectedContinuation]);
 
@@ -2828,28 +2830,62 @@ export function AdminReviewPage() {
     }
   };
 
+  /* 续写更新:无论当前是 approved / pending / rejected,管理员编辑后都把状态重置为 pending,
+   * 与原作者 updateContinuationByAuthor 行为对齐,确保审核池始终能看到最新版本。
+   * 这样保存后会有可见的变化:从「已通过」列表里消失,出现在「待审核」列表里。 */
   const handleUpdateContinuation = async () => {
     if (!adminSelectedContinuation) return;
+    /* 原本「已通过/已拒绝」的续写保存后会回到待审核池。
+     * 提前弹一次确认,避免用户保存后看不到任何反馈/详情面板直接清空导致疑惑。 */
+    const wasApprovedOrRejected =
+      adminSelectedContinuation.status === 'approved' ||
+      adminSelectedContinuation.status === 'rejected';
+    if (
+      wasApprovedOrRejected &&
+      !window.confirm('保存后这条续写会重新进入「待审核」池，确认保存吗？')
+    ) {
+      return;
+    }
+    const savedId = adminSelectedContinuation.id;
     setContinuationBusyAction('update');
     setError('');
     setSuccessMessage('');
     try {
-      const updated = await playApi.updateContinuationByAdmin(adminSelectedContinuation.id, {
+      const updated = await playApi.updateContinuationByAdmin(savedId, {
         content: continuationEditDraft.content,
         summary: continuationEditDraft.summary,
         nickname: continuationEditDraft.nickname,
         note: continuationEditDraft.note,
       });
       if (updated) {
+        /* 状态重置为 pending 后立即本地同步,确保切回「待审核」tab 看得到。 */
+        const nextItem: Continuation = {
+          ...updated,
+          status: 'pending',
+          reviewedAt: undefined,
+        };
         setAllContinuations((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item)),
+          current.map((item) => (item.id === nextItem.id ? nextItem : item)),
         );
-        setContinuations((current) =>
-          current.map((item) => (item.id === updated.id ? updated : item)),
-        );
+        setContinuations((current) => {
+          const exists = current.some((item) => item.id === nextItem.id);
+          if (!exists) return current;
+          /* 若当前 tab 不是 pending,把这条从当前视图里清掉,避免重复展示。 */
+          if (selectedContinuationStatus && nextItem.status !== selectedContinuationStatus) {
+            return current.filter((item) => item.id !== nextItem.id);
+          }
+          return current.map((item) => (item.id === nextItem.id ? nextItem : item));
+        });
       }
-      await Promise.all([loadContinuations(selectedContinuationStatus), loadAllContinuations()]);
-      setSuccessMessage('续写已更新。');
+      /* 保存后强制切到「待审核」tab,这样用户能立即看到这条续写已经回到待审核池,
+       * 解决「点击保存按钮但详情面板直接清空,看不到任何反馈」的问题。 */
+      if (wasApprovedOrRejected || selectedContinuationStatus !== 'pending') {
+        setSelectedContinuationStatus('pending');
+      }
+      setSelectedContinuationId(updated?.id ?? savedId);
+      await Promise.all([loadContinuations('pending'), loadAllContinuations()]);
+      setSuccessMessage('续写已更新,已重新进入待审核池。');
+      showFloatingToast('续写已重新进入待审核池');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '续写更新失败');
     } finally {
@@ -4654,17 +4690,15 @@ export function AdminReviewPage() {
                   </div>
                 </div>
 
-                <div className="inline-actions wrap-mobile admin-bulk-review-actions">
-                  <label className="field-inline">
-                    <span className="content-meta">关键词</span>
-                    <input
-                      className="admin-bulk-input"
-                      placeholder="搜索昵称 / 简介 / 正文 / 作者"
-                      value={continuationKeyword}
-                      onChange={(event) => setContinuationKeyword(event.target.value)}
-                    />
-                  </label>
-                </div>
+                <label className="admin-bulk-review-search">
+                  <span>关键词</span>
+                  <input
+                    className="admin-bulk-input"
+                    placeholder="搜索昵称 / 简介 / 正文 / 作者"
+                    value={continuationKeyword}
+                    onChange={(event) => setContinuationKeyword(event.target.value)}
+                  />
+                </label>
 
                 <div className="inline-actions wrap-mobile admin-status-tabs">
                   {continuationStatusTabs.map((tab) => (
@@ -4710,7 +4744,7 @@ export function AdminReviewPage() {
                               </span>
                             </div>
                             <strong>{item.nickname.trim() ? item.nickname : '匿名'}</strong>
-                            <p className="summary">{item.summary}</p>
+                            <p className="summary plaza-card-summary">{item.summary}</p>
                             <span className="content-meta">
                               {formatAuditLogTime(item.createdAt)}
                             </span>
@@ -4815,8 +4849,8 @@ export function AdminReviewPage() {
                         </div>
                         <div className="inline-detail-block stack-gap-md preview-content-block">
                           <div className="preview-section-header">
-                            <span className="content-meta">
-                              简介：{adminSelectedContinuation.summary}
+                            <span className="content-meta plaza-card-summary continuation-preview-summary">
+                              {adminSelectedContinuation.summary}
                             </span>
                           </div>
                           <p className="admin-review-detail-content">
@@ -4911,6 +4945,7 @@ export function AdminReviewPage() {
                                   note: event.target.value,
                                 }))
                               }
+                              placeholder="默认空,留空时记为「无备注」"
                               value={continuationEditDraft.note}
                             />
                           </ClearableField>
@@ -4920,7 +4955,9 @@ export function AdminReviewPage() {
                   </div>
 
                   {/* 4 按钮同行:删除 / 拒绝 / 保存 / 通过,与 repo 审核的 action-row 顺序一致。
-                   * 保存按钮在草稿无变化时 disabled,与 repo 行为对齐,避免误点。 */}
+                   * 保存按钮始终可用,只校验必要字段(summary/content 非空)。
+                   * 已通过续写的保存也允许重发,触发重新审核(状态回 pending),
+                   * 避免出现"按钮置灰 / 点击无响应"的体验。 */}
                   {(() => {
                     const draftSummary = continuationEditDraft.summary;
                     const draftNickname = continuationEditDraft.nickname;
@@ -4962,8 +4999,12 @@ export function AdminReviewPage() {
                           disabled={
                             continuationBusyAction !== null ||
                             draftContent.trim().length === 0 ||
-                            draftSummary.trim().length === 0 ||
+                            draftSummary.trim().length === 0
+                          }
+                          title={
                             draftUnchanged
+                              ? '内容没有改动,保存后会重新进入待审核池'
+                              : '保存修改并重新进入待审核池'
                           }
                           onClick={() => void handleUpdateContinuation()}
                           type="button"

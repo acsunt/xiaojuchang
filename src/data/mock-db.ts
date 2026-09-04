@@ -1226,12 +1226,15 @@ export const mockDb = {
       return null;
     }
     const updatedAt = now();
+    /* 管理员编辑后,续写回到待审核池,等审核员重新通过/拒绝。 */
     const next: Continuation = {
       ...target,
       content: patch.content !== undefined ? patch.content.trim() : target.content,
       summary: patch.summary !== undefined ? patch.summary.trim() : target.summary,
       nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
       reviewNote: patch.note !== undefined ? patch.note.trim() : target.reviewNote,
+      status: 'pending',
+      reviewedAt: undefined,
       updatedAt,
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
