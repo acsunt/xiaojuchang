@@ -326,8 +326,8 @@ export default function App() {
   const plazaPanel =
     location.pathname === '/plays' ? new URLSearchParams(location.search).get('panel') : '';
   const calendarNavActive = plazaPanel === 'calendar';
-  const derivedNavActive = plazaPanel === 'derived';
-  const openPlazaPanel = (panel: 'calendar' | 'derived') => {
+  const continuationNavActive = plazaPanel === 'continuations';
+  const openPlazaPanel = (panel: 'calendar' | 'continuations') => {
     const search = plazaPanel === panel ? '' : `?panel=${panel}`;
     navigate({ pathname: '/plays', search });
   };
@@ -367,11 +367,11 @@ export default function App() {
               ) : null}
             </NavLink>
             <button
-              className={derivedNavActive ? 'nav-pill active' : 'nav-pill'}
-              onClick={() => openPlazaPanel('derived')}
+              className={continuationNavActive ? 'nav-pill active' : 'nav-pill'}
+              onClick={() => openPlazaPanel('continuations')}
               type="button"
             >
-              衍生
+              续写
             </button>
             <button
               className={calendarNavActive ? 'nav-pill active' : 'nav-pill'}

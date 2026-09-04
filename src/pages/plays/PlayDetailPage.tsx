@@ -183,7 +183,7 @@ export function PlayDetailPage() {
 
     const panel = params.get('panel');
 
-    if (panel === 'calendar' || panel === 'derived') {
+    if (panel === 'calendar' || panel === 'continuations') {
       return panel;
     }
 
@@ -191,7 +191,7 @@ export function PlayDetailPage() {
   }, [location.search]);
 
   const navigationIds = useMemo(() => {
-    if (plazaPanel === 'derived' && play) {
+    if (plazaPanel === 'continuations' && play) {
       const cachedPlays = getCachedPublicPlays();
 
       const snapshotIds = plazaSnapshot?.filteredPlayIds ?? [];
@@ -321,7 +321,7 @@ export function PlayDetailPage() {
 
     const cachedTarget = getCachedPublicPlayById(targetId);
 
-    const preservedSearch = plazaPanel === 'derived' ? '?panel=derived' : '';
+    const preservedSearch = plazaPanel === 'continuations' ? '?panel=continuations' : '';
 
     navigate(`/plays/${targetId}${preservedSearch}`, {
       state: cachedTarget
@@ -335,7 +335,7 @@ export function PlayDetailPage() {
   const openVersionPlay = (target: Play) => {
     updatePlazaNavigationSnapshot({ anchorPlayId: target.id });
 
-    const preservedSearch = plazaPanel === 'derived' ? '?panel=derived' : '';
+    const preservedSearch = plazaPanel === 'continuations' ? '?panel=continuations' : '';
 
     navigate(`/plays/${target.id}${preservedSearch}`, {
       state: {

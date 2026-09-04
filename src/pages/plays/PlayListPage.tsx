@@ -55,7 +55,7 @@ import {
 import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
-import { PlazaDerivedPanel } from './PlazaDerivedPanel';
+import { PlazaContinuationPanel } from './PlazaContinuationPanel';
 import {
   collapsePlaysToLatest,
   getPlayVersionKey,
@@ -678,16 +678,16 @@ export function PlayListPage() {
   const plazaPanel = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const panel = params.get('panel');
-    if (panel === 'calendar' || panel === 'derived') {
+    if (panel === 'calendar' || panel === 'continuations') {
       return panel;
     }
 
     return params.get('calendar') === 'open' ? 'calendar' : '';
   }, [location.search]);
-  const sidePanelVisible = plazaPanel === 'calendar' || plazaPanel === 'derived';
+  const sidePanelVisible = plazaPanel === 'calendar' || plazaPanel === 'continuations';
   const previousPlazaPanelRef = useRef(plazaPanel);
 
-  // 手机端：切到衍生/新增面板时，必须在浏览器绘制前同步滚到顶部，
+  // 手机端：切到续写/新增面板时，必须在浏览器绘制前同步滚到顶部，
   // 否则会出现“内容被推到屏幕下方，刷新时闪烁一下”的现象。
   useLayoutEffect(() => {
     if (typeof window === 'undefined') {
@@ -1761,7 +1761,7 @@ export function PlayListPage() {
     });
   };
 
-  const openPlayDetail = (play: Play, fromPanel?: 'calendar' | 'derived') => {
+  const openPlayDetail = (play: Play, fromPanel?: 'calendar' | 'continuations') => {
     savePlazaNavigationSnapshot(createNavigationSnapshot(play.id));
     const preservedSearch = fromPanel ? `?panel=${fromPanel}` : '';
     navigate(`/plays/${play.id}${preservedSearch}`, {
@@ -1879,10 +1879,11 @@ export function PlayListPage() {
       <div className={sidePanelVisible ? 'plaza-layout' : 'plaza-layout calendar-hidden'}>
         {sidePanelVisible ? (
           <aside className="plaza-sidebar">
-            {plazaPanel === 'derived' ? (
-              <PlazaDerivedPanel
+            {plazaPanel === 'continuations' ? (
+              <PlazaContinuationPanel
                 plays={filteredPlays}
-                onOpenPlay={(play) => openPlayDetail(play, 'derived')}
+                continuationCounts={continuationCounts}
+                onOpenPlay={(play) => openPlayDetail(play, 'continuations')}
               />
             ) : (
               <PlazaCalendarPanel
