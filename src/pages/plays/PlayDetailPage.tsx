@@ -584,9 +584,7 @@ export function PlayDetailPage() {
             </button>
           </div>
 
-          {play.summary ? (
-            <p className="sub-copy plaza-card-summary">{play.summary}</p>
-          ) : null}
+          {play.summary ? <p className="sub-copy plaza-card-summary">{play.summary}</p> : null}
 
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
@@ -775,9 +773,7 @@ export function PlayDetailPage() {
         <div className="content-head wrap-mobile">
           <div>
             <h3>续写</h3>
-            <p className="sub-copy">
-              续写是补充的指令，或者同一个系列的小剧场。
-            </p>
+            <p className="sub-copy">续写是补充的指令，或者同一个系列的小剧场。</p>
           </div>
 
           <div className="repo-toolbar-row continuation-toolbar-row">
@@ -949,9 +945,7 @@ export function PlayDetailPage() {
           <div>
             <h3>repo</h3>
 
-            <p className="sub-copy">
-              支持 Markdown图床链接缩略图，欢迎给各位大大积极repo。
-            </p>
+            <p className="sub-copy">支持 Markdown图床链接缩略图，欢迎给各位大大积极repo。</p>
           </div>
 
           <div className="repo-toolbar-row">
