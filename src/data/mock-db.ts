@@ -1053,10 +1053,45 @@ export const mockDb = {
    *
    * 与 repos 行为对齐:作者提交 → status='pending' 进入待审核,
    * 管理员 approve/reject 后出现在详情页(approved)或被拒绝(rejected)。
-   * nickname 可空字符串(空表示「匿名 / 原作者本人续写」,详情页不展示)。 */
+   * nickname 可空字符串(空表示「匿名 / 原作者本人续写」,详情页不展示)。
+   *
+   * 详情页展示规则:
+   * - 状态为 approved:正常展示主字段(nickname/summary/content)
+   * - 状态为 pending/rejected 且有 lastApproved*:展示「旧版已通过」字段,
+   *   把 nickname/summary/content 重定向到 lastApproved*(同时把 status 标记为「已隐藏修订」)
+   * - 否则(从未通过过的 pending/被删除):不展示
+   * 这样作者编辑 / 被拒绝时,详情页不会突然消失,而是继续展示原内容。 */
   getContinuationsByPlayId(playId: string, order: 'asc' | 'desc') {
     return getContinuations()
-      .filter((item) => item.playId === playId && item.status === 'approved')
+      .filter((item) => {
+        if (item.playId !== playId) return false;
+        if (item.status === 'approved') return true;
+        /* pending/rejected 但有 lastApproved* 时也展示:
+         * 把 lastApproved 内容作为「旧版已通过」留在原地,
+         * 等下次重新审核通过再覆盖,避免读者看到突然消失。 */
+        if (
+          (item.status === 'pending' || item.status === 'rejected') &&
+          item.lastApprovedContent &&
+          item.lastApprovedContent.trim().length > 0
+        ) {
+          return true;
+        }
+        return false;
+      })
+      .map((item) => {
+        if (item.status === 'approved') return item;
+        /* 非 approved 但有 lastApproved 时,把展示字段替换为已通过的版本,
+         * 详情页仍按 approved 渲染,但前端能拿到 status 标记「已隐藏修订」。 */
+        return {
+          ...item,
+          nickname: item.lastApprovedNickname ?? item.nickname,
+          summary: item.lastApprovedSummary ?? item.summary,
+          content: item.lastApprovedContent ?? item.content,
+          /* 标记:这一条续写在管理后台实际是 pending/rejected,
+           * 详情页可以选择提示「本条后续修订暂未发布」之类的小标签。 */
+          _displayStatus: item.status,
+        };
+      })
       .sort((left, right) =>
         order === 'desc'
           ? right.createdAt.localeCompare(left.createdAt)
@@ -1127,6 +1162,22 @@ export const mockDb = {
       throw new Error('只有原作者才能修改这条续写');
     }
     const updatedAt = now();
+    /* 原状态为「已通过」时,把当前内容备份到 lastApproved* 字段,
+     * 等用户重新提交后被审核拒绝/被删除,详情页仍可展示这一份「旧版已通过」内容。 */
+    const lastApprovedSnapshot =
+      target.status === 'approved'
+        ? {
+            lastApprovedNickname: target.nickname,
+            lastApprovedSummary: target.summary,
+            lastApprovedContent: target.content,
+            lastApprovedAt: target.reviewedAt ?? updatedAt,
+          }
+        : {
+            lastApprovedNickname: target.lastApprovedNickname,
+            lastApprovedSummary: target.lastApprovedSummary,
+            lastApprovedContent: target.lastApprovedContent,
+            lastApprovedAt: target.lastApprovedAt,
+          };
     const next: Continuation = {
       ...target,
       nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
@@ -1136,6 +1187,7 @@ export const mockDb = {
       reviewedAt: undefined,
       reviewNote: undefined,
       updatedAt,
+      ...lastApprovedSnapshot,
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
     emitPlaysUpdated();
@@ -1191,12 +1243,28 @@ export const mockDb = {
     }
     const status: ContinuationStatus = action === 'approve' ? 'approved' : 'rejected';
     const updatedAt = now();
+    /* 通过时把当前的 nickname/summary/content 备份到 lastApproved*,
+     * 等再次被作者编辑走 updateContinuationByAuthor 时覆盖回主字段;
+     * 拒绝时不清,以便详情页能继续展示「旧版已通过」内容。 */
     const next: Continuation = {
       ...target,
       status,
       reviewNote: note.trim() || '无备注',
       reviewedAt: updatedAt,
       updatedAt,
+      ...(action === 'approve'
+        ? {
+            lastApprovedNickname: target.nickname,
+            lastApprovedSummary: target.summary,
+            lastApprovedContent: target.content,
+            lastApprovedAt: updatedAt,
+          }
+        : {
+            lastApprovedNickname: target.lastApprovedNickname,
+            lastApprovedSummary: target.lastApprovedSummary,
+            lastApprovedContent: target.lastApprovedContent,
+            lastApprovedAt: target.lastApprovedAt,
+          }),
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
     setContinuationReviewLogs([
@@ -1226,15 +1294,16 @@ export const mockDb = {
       return null;
     }
     const updatedAt = now();
-    /* 管理员编辑后,续写回到待审核池,等审核员重新通过/拒绝。 */
+    /* 管理员编辑：原状态为已通过的续写,管理员修改即视为发布,
+     * 保持 approved 状态(再审一遍没有意义);其它状态保持原状。 */
     const next: Continuation = {
       ...target,
       content: patch.content !== undefined ? patch.content.trim() : target.content,
       summary: patch.summary !== undefined ? patch.summary.trim() : target.summary,
       nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
       reviewNote: patch.note !== undefined ? patch.note.trim() : target.reviewNote,
-      status: 'pending',
-      reviewedAt: undefined,
+      status: target.status === 'approved' ? 'approved' : target.status,
+      reviewedAt: target.status === 'approved' ? target.reviewedAt : undefined,
       updatedAt,
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));

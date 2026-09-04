@@ -307,21 +307,40 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
             </span>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              type="button"
-              className="sp-btn"
-              style={{ flex: 1 }}
-              onClick={() => document.getElementById('bgUploadInput')?.click()}
+            <label
+              className="sp-btn advanced-bg-upload-button"
+              style={{
+                flex: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                cursor: 'pointer',
+              }}
             >
               <i className="fas fa-upload" /> 上传图片
-            </button>
-            <input
-              type="file"
-              id="bgUploadInput"
-              accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/*"
-              style={{ display: 'none' }}
-              onChange={handleBgUpload}
-            />
+              {/* 绝对定位 + 0 透明度而不是 display:none:
+               *  - display:none 会让部分 Android/iOS 浏览器拒绝弹出图片选择器。
+               *  - 0 透明度 + 绝对定位 1x1 既保留交互又不占布局。 */}
+              <input
+                type="file"
+                accept="image/*"
+                capture={undefined}
+                style={{
+                  position: 'absolute',
+                  width: 1,
+                  height: 1,
+                  padding: 0,
+                  margin: -1,
+                  overflow: 'hidden',
+                  clip: 'rect(0,0,0,0)',
+                  whiteSpace: 'nowrap',
+                  border: 0,
+                  opacity: 0,
+                }}
+                onChange={handleBgUpload}
+              />
+            </label>
             {/* 下载按钮:仅在有自定义背景图(image 或 url)时可用。
              * image 类型从 IndexedDB 读 Blob 触发下载,url 类型提示用户走浏览器右键另存为。*/}
             <button

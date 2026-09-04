@@ -2309,14 +2309,16 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 /* 单篇上传:衍生版本块
  * - 用低对比的分隔条圈住每一版
  * - 头部左侧写"衍生版本 N",右侧提供"删除该版本"入口 */
-.upload-derived-block {
+.upload-derived-block,
+.upload-continuation-block {
   padding: 12px 14px;
   border: 1px dashed color-mix(in srgb, var(--accent, #6c8cff) 45%, var(--border, #d0d0d0) 55%);
   border-radius: 10px;
   background: color-mix(in srgb, var(--accent, #6c8cff) 4%, transparent);
 }
 
-.upload-derived-head {
+.upload-derived-head,
+.upload-continuation-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2325,7 +2327,8 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 /* 「删除该版本」按钮：宽度收到文字宽度，避免继承 .text-button {width:100%}
  * 让手机端占据整行。 */
-.upload-derived-head .text-button {
+.upload-derived-head .text-button,
+.upload-continuation-head .text-button {
   width: fit-content;
   flex: 0 0 auto;
 }
@@ -2654,6 +2657,18 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   flex-wrap: nowrap;
 }
 
+/* 续写被作者编辑/审核拒绝时,详情页继续展示「旧版已通过」内容。
+ * 在卡片头部下方放一个柔和的小提示条,告诉读者这条续写后续有修订但暂未发布。 */
+.continuation-revision-banner {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--accent, #6c8cff) 8%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--accent, #6c8cff) 55%, transparent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin: 4px 0 6px;
+}
+
 .continuation-summary-line {
   min-width: 0;
   flex: 1 1 auto;
@@ -2804,6 +2819,34 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 
 .continuation-content {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 续写正文 + 复制按钮同行,正文占满,按钮贴右侧。 */
+.continuation-content-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* 简介旁边的小复制按钮:贴在简介 strong 之后,保持小尺寸不喧宾夺主 */
+.continuation-copy-button {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  font-size: calc(12px * var(--text-scale, 1));
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-soft);
+}
+
+.continuation-copy-button:hover,
+.continuation-copy-button:focus-visible {
+  background: color-mix(in srgb, var(--accent, #6c8cff) 12%, transparent);
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent, #6c8cff) 35%, transparent);
 }
 
 .continuation-edit-button {
@@ -7044,7 +7087,8 @@ body:not([data-style='default']) .repo-card,
 body:not([data-style='default']) .admin-card,
 body:not([data-style='default']) .tag-admin-card,
 body:not([data-style='default']) .inline-detail-block,
-body:not([data-style='default']) .upload-section {
+body:not([data-style='default']) .upload-section,
+body:not([data-style='default']) .plaza-derived-panel {
   background: var(--card-bg, var(--sp-panel-bg, #ffffff));
   color: var(--card-text, var(--sp-text, #1a1a1a));
   border: var(--card-border, 1px solid var(--sp-border, #e1e4e8));

@@ -76,15 +76,17 @@ export function PlazaContinuationPanel({
                   <span>续写 {count} 条</span>
                 </div>
                 <strong>{play.title}</strong>
+                {/* 分类 / 作者 / 简介 沿用小剧场列表 compact-meta-row 的图标:
+                 *  - 分类:◈
+                 *  - 作者:✎
+                 *  - 简介:✦(走 .plaza-card-summary 的 ::before) */}
                 <div className="compact-meta-row compact-meta-row-small plaza-derived-version-meta">
-                  <span>{play.authorName?.trim() || '匿名'}</span>
-                  <span className="plaza-derived-version-category">
-                    {play.category?.trim() || DEFAULT_CATEGORY}
+                  <span className="compact-meta-item">
+                    ◈ {play.category?.trim() || DEFAULT_CATEGORY}
                   </span>
+                  <span className="compact-meta-item">✎ {play.authorName?.trim() || '匿名'}</span>
                 </div>
-                {play.summary ? (
-                  <span className="sub-copy plaza-calendar-play-summary">{play.summary}</span>
-                ) : null}
+                {play.summary ? <p className="summary plaza-card-summary">{play.summary}</p> : null}
                 {lastCreatedAt ? (
                   <span className="sub-copy">最新续写：{formatDate(lastCreatedAt)}</span>
                 ) : null}

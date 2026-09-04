@@ -588,7 +588,7 @@ export function PlayDetailPage() {
 
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
-              <span>作者 {play.authorName}</span>
+              <span className="meta-row-author">✎ {play.authorName}</span>
 
               <span>
                 {plazaSnapshot?.activeTimeField === 'createdAt'
@@ -867,7 +867,7 @@ export function PlayDetailPage() {
                 <input
                   value={continuationSummary}
                   onChange={(event) => setContinuationSummary(event.target.value)}
-                  placeholder="给续写起个一句话导语"
+                  placeholder="告诉大家这是哪个版本或者增加的什么类型的指令"
                 />
               </ClearableField>
             </label>
@@ -906,17 +906,24 @@ export function PlayDetailPage() {
           {continuations.length > 0 ? (
             continuations.map((item) => {
               const showAuthor = item.nickname && item.nickname.trim().length > 0;
+              /* mock-db 在续写 status 不是 approved 但有 lastApproved* 时,
+               * 会把主字段重定向到旧版本内容,并把真实 status 写到 _displayStatus。
+               * 展示给读者时给一个温和的小标签,告知"作者后续修订暂未发布" */
+              const hiddenRevision = item._displayStatus && item._displayStatus !== 'approved';
+              const hiddenLabel =
+                item._displayStatus === 'pending'
+                  ? '本条后续修订等待审核'
+                  : item._displayStatus === 'rejected'
+                    ? '本条后续修订已被拒绝'
+                    : '';
               return (
                 <article className="continuation-card repo-card" key={item.id}>
                   <div className="continuation-card-head repo-card-head">
-                    <div className="repo-card-meta-line continuation-summary-line">
-                      <strong className="continuation-summary plaza-card-summary">
-                        {item.summary}
-                      </strong>
+                    <div className="repo-card-meta-line continuation-author-line">
                       {showAuthor ? (
-                        <span className="content-meta">作者：{item.nickname}</span>
+                        <span className="content-meta">✎ 作者：{item.nickname}</span>
                       ) : (
-                        <span className="content-meta">匿名</span>
+                        <span className="content-meta">✎ 匿名</span>
                       )}
                       <span className="content-meta repo-card-date">
                         {formatDate(item.createdAt)}
@@ -930,7 +937,41 @@ export function PlayDetailPage() {
                       修改
                     </button>
                   </div>
-                  <p className="play-detail-copy continuation-content">{item.content}</p>
+                  <div className="continuation-summary-row">
+                    <strong className="continuation-summary plaza-card-summary">
+                      {item.summary}
+                    </strong>
+                    <button
+                      aria-label="复制简介"
+                      className="icon-button continuation-copy-button"
+                      onClick={() => void handleCopy(item.summary, '简介')}
+                      title="复制简介"
+                      type="button"
+                    >
+                      ⧉
+                    </button>
+                  </div>
+                  {hiddenRevision ? (
+                    <div
+                      className="continuation-revision-banner"
+                      role="note"
+                      title="作者后续修改了这条续写，但尚未通过审核，这里展示的是被替换前的内容"
+                    >
+                      {hiddenLabel}
+                    </div>
+                  ) : null}
+                  <div className="continuation-content-row">
+                    <p className="play-detail-copy continuation-content">{item.content}</p>
+                    <button
+                      aria-label="复制正文"
+                      className="icon-button continuation-copy-button"
+                      onClick={() => void handleCopy(item.content, '正文')}
+                      title="复制正文"
+                      type="button"
+                    >
+                      ⧉
+                    </button>
+                  </div>
                 </article>
               );
             })
@@ -945,7 +986,7 @@ export function PlayDetailPage() {
           <div>
             <h3>repo</h3>
 
-            <p className="sub-copy">支持 Markdown图床链接缩略图，欢迎给各位大大积极repo。</p>
+            <p className="sub-copy">支持 Markdown和图床链接，欢迎给各位大大积极repo。</p>
           </div>
 
           <div className="repo-toolbar-row">

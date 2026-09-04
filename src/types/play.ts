@@ -131,6 +131,17 @@ export type Continuation = {
   reviewNote?: string;
   playTitle?: string;
   playAuthorName?: string;
+  /* 作者最近一次编辑前已通过的版本快照。
+   * 用户编辑后,状态回到 pending/rejected,详情页继续展示这一份「旧版已通过」内容,
+   * 等下次重新审核通过再覆盖回主字段。 */
+  lastApprovedNickname?: string;
+  lastApprovedSummary?: string;
+  lastApprovedContent?: string;
+  lastApprovedAt?: string;
+  /* mock-db 内部使用:详情页展示时,如果当前 status 不是 approved,
+   * 会被 mock-db 重定向到 lastApproved*,同时把真实 status 写到这里,
+   * 前端可以选择展示一个小标签(例如「本条后续修订暂未发布」)。 */
+  _displayStatus?: ContinuationStatus;
 };
 
 export type ContinuationDraft = {

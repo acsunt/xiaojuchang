@@ -6,6 +6,11 @@ import {
   parsePlayBatchText,
 } from '../../services/play-text';
 import {
+  getVisitorId,
+  rememberOwnedPlayId,
+  rememberRepoNickname,
+} from '../../services/browser-repo-history';
+import {
   clearAuthorHistory,
   clearSubmissionHistory,
   getAuthorHistory,
@@ -26,7 +31,6 @@ import {
   type Tag,
   type UploadMode,
 } from '../../types/play';
-import { rememberOwnedPlayId } from '../../services/browser-repo-history';
 import { showFloatingToast } from '../../components/floating-toast-store';
 
 const initialForm = {
@@ -43,8 +47,8 @@ export type UploadPrefill = Partial<{
   category: string;
   summary: string;
   content: string;
-  existingDerived: Array<{ summary: string; content: string }>;
-  appendDerived: boolean;
+  existingContinuation: Array<{ nickname?: string; summary: string; content: string }>;
+  appendContinuation: boolean;
   editOriginalId: string;
 }>;
 
@@ -110,21 +114,28 @@ const ClearableField = ({
   </div>
 );
 
-/* 衍生版本填写块:主表单是"原文",derivedVersions 是原文之下依次追加的衍生。
- * 提交时按顺序调用 uploadPlay(原文) → uploadPlay(版本1) → uploadPlay(版本2)…,
- * 每个版本共享主表单的作者/分类/标题,只维护自己的简介/内容。 */
-type DerivedVersionDraft = {
+/* 续写版本填写块:主表单是"原文",continuationVersions 是原文之下依次追加的续写。
+ * 每个续写块与详情页 continuation-panel 的 composer 字段一致:
+ *   - nickname(作者,可空,与原文作者一致时留空)
+ *   - summary(简介,必填)
+ *   - content(正文,必填)
+ * 提交时按顺序:
+ *   1) uploadPlay(原文, submissionType=original)
+ *   2) 对每个续写块 createContinuation({playId, nickname, summary, content, visitorId})
+ * 原文与每个续写共享同一个 playId,通过不同 submission_type 区分。 */
+type ContinuationVersionDraft = {
   id: string;
+  nickname: string;
   summary: string;
   content: string;
-  locked?: boolean;
 };
 
-const makeDerivedVersion = (): DerivedVersionDraft => ({
+const makeContinuationVersion = (): ContinuationVersionDraft => ({
   id:
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
-      : `derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      : `cont-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  nickname: '',
   summary: '',
   content: '',
 });
@@ -147,7 +158,17 @@ export function UploadPage() {
   const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(
     null,
   );
-  const [derivedVersions, setDerivedVersions] = useState<DerivedVersionDraft[]>([]);
+  /* 续写版本填写块：主表单是「原文」，continuationVersions 是原文之下依次追加的续写。
+   * 字段与详情页 continuation-panel 的 composer 完全一致：
+   *   - nickname（作者，可空，与原文作者为同一人时可留空）
+   *   - summary（简介，必填）
+   *   - content（正文，必填）
+   *
+   * 提交时：
+   *   1) uploadPlay(原文, submissionType=original)
+   *   2) 对每个续写块 createContinuation({ playId, nickname, summary, content, visitorId })
+   *      共享同一个原文 playId，作为同系列下挂载的续写版本。 */
+  const [continuationVersions, setContinuationVersions] = useState<ContinuationVersionDraft[]>([]);
   /* 「修改」模式下的初始快照：原文的 title / category / summary / content。
    * 提交时拿 form 与之对比,任意字段改动都允许提交,
    * 标题或分类的改动会通过审核后同步到同系列下所有版本。 */
@@ -160,10 +181,10 @@ export function UploadPage() {
 
   /* 从详情页跳转过来的预填：每次 prefill 变化时覆盖当前 form。
    * 用 JSON 字符串做依赖而不是对象引用，避免 React 浅比较认为未变。
-   * appendDerived 时：原文 + 已有衍生只用于展示，末尾追加一个空的新衍生。
+   * appendContinuation 时：原文 + 已有续写只用于展示，末尾追加一个空的新续写。
    * editOriginalId 时：只预填原文，提交即作为同一标题同分类的下一版。 */
   const prefillKey = JSON.stringify(prefill ?? null);
-  const appendDerived = Boolean(prefill?.appendDerived);
+  const appendContinuation = Boolean(prefill?.appendContinuation);
   const editOriginalId = prefill?.editOriginalId ?? '';
   const isEditOriginal = editOriginalId.length > 0;
   useEffect(() => {
@@ -178,17 +199,19 @@ export function UploadPage() {
       content: prefill.content ?? '',
     });
     setMode('single');
-    const existing = (prefill.existingDerived ?? []).map((item) => ({
-      ...makeDerivedVersion(),
+    const existing = (prefill.existingContinuation ?? []).map((item) => ({
+      ...makeContinuationVersion(),
+      nickname: item.nickname ?? '',
       summary: item.summary ?? '',
       content: item.content ?? '',
-      locked: true,
     }));
     if (isEditOriginal) {
-      /* 「修改」模式只展示原文,不预填任何已有版本,也不在末尾追加新衍生。 */
-      setDerivedVersions([]);
+      /* 「修改」模式只展示原文,不预填任何已有版本,也不在末尾追加新续写。 */
+      setContinuationVersions([]);
     } else {
-      setDerivedVersions(appendDerived ? [...existing, makeDerivedVersion()] : existing);
+      setContinuationVersions(
+        appendContinuation ? [...existing, makeContinuationVersion()] : existing,
+      );
     }
     setOriginalSnapshot(
       isEditOriginal
@@ -205,12 +228,6 @@ export function UploadPage() {
   }, [prefillKey]);
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
 
-  /* 新增的衍生版本（非 locked） */
-  const newDerivedVersions = useMemo(
-    () => derivedVersions.filter((version) => !version.locked),
-    [derivedVersions],
-  );
-
   /* 「修改」模式下,与快照对比,用于启用提交按钮与文案。
    * 任意字段(title / category / summary / content)改动都算修改。 */
   const originalChanged = useMemo(() => {
@@ -223,44 +240,34 @@ export function UploadPage() {
     );
   }, [isEditOriginal, originalSnapshot, form.summary, form.content, form.title, form.category]);
 
-  /* appendDerived 模式下,只校验末尾新增的衍生是否都填了内容;
-   * 「修改原文」模式不涉及衍生版本。 */
-  const derivedInvalid = useMemo(() => {
+  /* 续写块校验：summary 与 content 都必须非空（与详情页续写 composer 一致）。 */
+  const continuationInvalid = useMemo(() => {
     if (isEditOriginal) return false;
-    if (newDerivedVersions.some((version) => !version.content.trim())) {
-      return true;
-    }
-    return false;
-  }, [isEditOriginal, newDerivedVersions]);
+    if (continuationVersions.length === 0) return false;
+    return continuationVersions.some(
+      (version) => !version.summary.trim() || !version.content.trim(),
+    );
+  }, [continuationVersions, isEditOriginal]);
 
-  /* appendDerived 模式下,必须至少有一个末尾新增的衍生版本才会允许提交。 */
-  const appendHasSomethingToSubmit = !isEditOriginal && newDerivedVersions.length > 0;
-
-  /* 「修改」/「上传衍生」入口下,作者不允许编辑(作者不属于同系列聚合键);
-   * 「上传衍生」还要锁定原文与已有衍生版本,标题/分类保持只读;
+  /* 「修改」/「上传续写」入口下,作者不允许编辑(作者不属于同系列聚合键);
+   * 「上传续写」还要锁定原文与已有续写版本,标题/分类保持只读;
    * 「修改」开放标题/分类编辑,审核通过后同系列下所有作品会一起重写到新键。 */
-  const isLocked = isEditOriginal || appendDerived;
+  const isLocked = isEditOriginal || appendContinuation;
   const lockAuthor = isLocked;
-  const lockTitleAndCategory = appendDerived;
-  const lockOriginalContent = appendDerived;
+  const lockTitleAndCategory = appendContinuation;
+  const lockOriginalContent = appendContinuation;
 
   const singleDisabled = useMemo(
     () =>
       submitting ||
       !form.authorName.trim() ||
       !form.title.trim() ||
-      (isEditOriginal
-        ? !originalChanged
-        : appendDerived
-          ? !appendHasSomethingToSubmit
-          : !form.content.trim()) ||
-      derivedInvalid,
+      (isEditOriginal ? !originalChanged : !form.content.trim()) ||
+      continuationInvalid,
     [
-      appendDerived,
-      appendHasSomethingToSubmit,
       isEditOriginal,
       originalChanged,
-      derivedInvalid,
+      continuationInvalid,
       form.authorName,
       form.title,
       form.content,
@@ -335,13 +342,14 @@ export function UploadPage() {
   const resetEditingState = () => {
     setEditingHistoryId('');
     setForm(initialForm);
-    setDerivedVersions([]);
+    setContinuationVersions([]);
   };
 
   const handleSingleSubmit = async () => {
     const authorName = form.authorName.trim();
     const title = form.title.trim();
     const category = form.category.trim() || DEFAULT_CATEGORY;
+    const visitorId = getVisitorId();
 
     const originalDraft = {
       authorName,
@@ -351,13 +359,13 @@ export function UploadPage() {
       content: form.content.trim(),
     };
 
-    /* 三个模式:
+    /* 两个模式:
      * 1) isEditOriginal：详情页「修改」入口,调用 submitPlayEdit 创建一条
      *    submission_type='modify' 的待审核 play,parent_play_id 指向原 play。
      *    审核通过由 reviewPlay 合入原 play,拒绝/下线则原 play 不动。
-     * 2) appendDerived：详情页「上传衍生」入口,只追加末尾新增的衍生版本,
-     *    携带 submissionType=derived;原文与已有版本锁定为只读。
-     * 3) 普通模式:先投原文(submissionType=original),再按顺序投衍生。 */
+     * 2) 普通模式:先投原文(submissionType=original),再按顺序投续写(continuation)。
+     *    续写与原文共享 playId,通过 createContinuation 单独审核,
+     *    续写字段(作者/简介/正文)与小剧场详情页续写 composer 一致。 */
     if (isEditOriginal) {
       await playApi.submitPlayEdit(editOriginalId, originalDraft);
       /* 保存 submission 记录时,latestPlayId 记成原 play 的 id,
@@ -367,7 +375,7 @@ export function UploadPage() {
 
       syncLocalHistory(authorName);
       setForm(initialForm);
-      setDerivedVersions([]);
+      setContinuationVersions([]);
       setOriginalSnapshot(null);
       setEditingHistoryId('');
 
@@ -375,64 +383,46 @@ export function UploadPage() {
       return;
     }
 
-    if (!appendDerived) {
-      const createdOriginal = await playApi.uploadPlay({
-        ...originalDraft,
-        submissionType: 'original',
-      });
-      saveSubmissionRecord(originalDraft, {
-        historyId: editingHistoryId || undefined,
-        latestPlayId: createdOriginal.id,
-      });
-      rememberOwnedPlayId(createdOriginal.id);
+    const createdOriginal = await playApi.uploadPlay({
+      ...originalDraft,
+      submissionType: 'original',
+    });
+    saveSubmissionRecord(originalDraft, {
+      historyId: editingHistoryId || undefined,
+      latestPlayId: createdOriginal.id,
+    });
+    rememberOwnedPlayId(createdOriginal.id);
 
-      const derivedDrafts = derivedVersions.map((version) => ({
-        authorName,
-        title,
-        category,
-        summary: version.summary.trim(),
-        content: version.content.trim(),
-      }));
-      for (const draft of derivedDrafts) {
-        const created = await playApi.uploadPlay({ ...draft, submissionType: 'derived' });
-        saveSubmissionRecord(draft, { latestPlayId: created.id });
-        rememberOwnedPlayId(created.id);
+    /* 续写块:每块独立 createContinuation,共享同一个原文 playId。 */
+    for (const version of continuationVersions) {
+      const nickname = version.nickname.trim();
+      const summary = version.summary.trim();
+      const content = version.content.trim();
+      if (!summary || !content) {
+        continue;
       }
-
-      syncLocalHistory(authorName);
-      setForm(initialForm);
-      setDerivedVersions([]);
-      setEditingHistoryId('');
-
-      if (derivedDrafts.length > 0) {
-        showFloatingToast(`已提交原文和 ${derivedDrafts.length} 个衍生版本到待审核池。`);
-      } else {
-        showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
+      await playApi.createContinuation({
+        playId: createdOriginal.id,
+        nickname,
+        visitorId,
+        summary,
+        content,
+      });
+      if (nickname) {
+        rememberRepoNickname(nickname);
       }
-      return;
-    }
-
-    /* appendDerived 模式:只追加末尾新增的衍生版本。 */
-    for (const version of newDerivedVersions) {
-      const draft = {
-        authorName,
-        title,
-        category,
-        summary: version.summary.trim(),
-        content: version.content.trim(),
-      };
-      const created = await playApi.uploadPlay({ ...draft, submissionType: 'derived' });
-      saveSubmissionRecord(draft, { latestPlayId: created.id });
-      rememberOwnedPlayId(created.id);
     }
 
     syncLocalHistory(authorName);
     setForm(initialForm);
-    setDerivedVersions([]);
-    setOriginalSnapshot(null);
+    setContinuationVersions([]);
     setEditingHistoryId('');
 
-    showFloatingToast(`已提交 ${newDerivedVersions.length} 个新增衍生版本到待审核池。`);
+    if (continuationVersions.length > 0) {
+      showFloatingToast(`已提交原文和 ${continuationVersions.length} 条续写到待审核池。`);
+    } else {
+      showFloatingToast(editingHistoryId ? '已重新投稿，已再次进入审核。' : '已提交到待审核池。');
+    }
   };
 
   const handleBatchSubmit = async () => {
@@ -505,18 +495,16 @@ export function UploadPage() {
     }
   };
 
-  const addDerivedVersion = () => {
-    setDerivedVersions((current) => [...current, makeDerivedVersion()]);
+  const addContinuationVersion = () => {
+    setContinuationVersions((current) => [...current, makeContinuationVersion()]);
   };
 
-  const removeDerivedVersion = (id: string) => {
-    setDerivedVersions((current) =>
-      current.filter((version) => version.locked || version.id !== id),
-    );
+  const removeContinuationVersion = (id: string) => {
+    setContinuationVersions((current) => current.filter((version) => version.id !== id));
   };
 
-  const updateDerivedVersion = (id: string, patch: Partial<DerivedVersionDraft>) => {
-    setDerivedVersions((current) =>
+  const updateContinuationVersion = (id: string, patch: Partial<ContinuationVersionDraft>) => {
+    setContinuationVersions((current) =>
       current.map((version) => (version.id === id ? { ...version, ...patch } : version)),
     );
   };
@@ -577,9 +565,9 @@ export function UploadPage() {
     <section className="stack-gap-lg">
       <div className="upload-grid">
         <form className="form-panel stack-gap-lg" onSubmit={handleSubmit}>
-          {/* 「修改」/「上传衍生」入口下隐藏「单篇 / 批量」切换,
+          {/* 「修改」入口下隐藏「单篇 / 批量」切换,
            * 强制只能走 single,不能混进批量流程。 */}
-          {isEditOriginal || appendDerived ? null : (
+          {isEditOriginal ? null : (
             <div className="tab-list">
               <button
                 className={mode === 'single' ? 'tab-chip active' : 'tab-chip'}
@@ -605,13 +593,6 @@ export function UploadPage() {
                 作者已锁定,标题 / 分类 / 简介 /
                 正文可改,审核通过后该作品所属系列下的所有版本会跟着更新。
               </span>
-            </div>
-          ) : null}
-
-          {appendDerived ? (
-            <div className="callout callout-info upload-mode-banner">
-              <strong>「上传衍生」模式</strong>
-              <span>原文与已有衍生版本已锁定,仅能在末尾追加新的衍生版本</span>
             </div>
           ) : null}
 
@@ -790,79 +771,84 @@ export function UploadPage() {
                 </ClearableField>
               </label>
 
-              {/* 衍生版本块:每按一次"衍生"追加一版,可各自填简介 + 内容;
-               * 与原文共享 作者/标题/分类,列表页/详情页会按同标题+分类聚合展示。
-               * 「上传衍生」模式下,原文与已有版本都不允许改字;
-               * 「修改」模式不展示衍生块,不出现「衍生」按钮。 */}
-              {derivedVersions.map((version, index) => {
-                const headLabel = version.locked
-                  ? `已有版本 ${index + 1}`
-                  : `衍生版本 ${index + 1}${appendDerived ? '（新增）' : ''}`;
-                const versionReadOnly = version.locked;
-                return (
-                  <div className="upload-derived-block stack-gap-sm" key={version.id}>
-                    <div className="upload-derived-head">
-                      <strong>{headLabel}</strong>
-                      {version.locked ? null : (
-                        <button
-                          className="text-button"
-                          onClick={() => removeDerivedVersion(version.id)}
-                          type="button"
-                        >
-                          删除该版本
-                        </button>
-                      )}
-                    </div>
-                    <label>
-                      <span>简介（可空）</span>
-                      <ClearableField
-                        onClear={() => updateDerivedVersion(version.id, { summary: '' })}
-                        visible={Boolean(version.summary) && !versionReadOnly}
-                      >
-                        <input
-                          value={version.summary}
-                          readOnly={versionReadOnly}
-                          onChange={(event) =>
-                            updateDerivedVersion(version.id, { summary: event.target.value })
-                          }
-                          placeholder="不填也可以，列表卡片会直接隐藏简介"
-                        />
-                      </ClearableField>
-                    </label>
-                    <label>
-                      <span>内容</span>
-                      <ClearableField
-                        onClear={() => updateDerivedVersion(version.id, { content: '' })}
-                        visible={Boolean(version.content) && !versionReadOnly}
-                      >
-                        <textarea
-                          rows={10}
-                          value={version.content}
-                          readOnly={versionReadOnly}
-                          onChange={(event) =>
-                            updateDerivedVersion(version.id, { content: event.target.value })
-                          }
-                          placeholder="写下这一版本的正文，与原文共享作者、标题、分类"
-                        />
-                      </ClearableField>
-                    </label>
+              {/* 续写版本块:每按一次"续写"追加一版,可各自填作者/简介/正文;
+               * 字段、placeholder、要求与小剧场详情页 continuation-panel 的 composer 一致。
+               * 提交时按顺序 uploadPlay(原文) → createContinuation(续写 1) → createContinuation(续写 2)…
+               * 所有续写与原文共享同一个 playId。
+               * 「修改」模式不展示续写块,也不出现「续写」按钮。 */}
+              {continuationVersions.map((version, index) => (
+                <div className="upload-continuation-block stack-gap-sm" key={version.id}>
+                  <div className="upload-continuation-head">
+                    <strong>{`续写版本 ${index + 1}`}</strong>
+                    <button
+                      className="text-button"
+                      onClick={() => removeContinuationVersion(version.id)}
+                      type="button"
+                    >
+                      删除该续写
+                    </button>
                   </div>
-                );
-              })}
+                  <label>
+                    <span>作者（与原文作者为同一人可留空）</span>
+                    <ClearableField
+                      onClear={() => updateContinuationVersion(version.id, { nickname: '' })}
+                      visible={Boolean(version.nickname)}
+                    >
+                      <input
+                        value={version.nickname}
+                        onChange={(event) =>
+                          updateContinuationVersion(version.id, { nickname: event.target.value })
+                        }
+                        placeholder="写下你的笔名"
+                      />
+                    </ClearableField>
+                  </label>
+                  <label>
+                    <span>简介</span>
+                    <ClearableField
+                      onClear={() => updateContinuationVersion(version.id, { summary: '' })}
+                      visible={Boolean(version.summary)}
+                    >
+                      <input
+                        value={version.summary}
+                        onChange={(event) =>
+                          updateContinuationVersion(version.id, { summary: event.target.value })
+                        }
+                        placeholder="告诉大家这是哪个版本或者增加的什么类型的指令"
+                      />
+                    </ClearableField>
+                  </label>
+                  <label>
+                    <span>正文</span>
+                    <ClearableField
+                      onClear={() => updateContinuationVersion(version.id, { content: '' })}
+                      visible={Boolean(version.content)}
+                    >
+                      <textarea
+                        rows={10}
+                        value={version.content}
+                        onChange={(event) =>
+                          updateContinuationVersion(version.id, { content: event.target.value })
+                        }
+                        placeholder="把续写的正文填在这里"
+                      />
+                    </ClearableField>
+                  </label>
+                </div>
+              ))}
 
-              {/* 单篇模式的底部按钮区:衍生按钮 + 上传小剧场按钮
-               * 位置始终在最后一个版本框下方(动态追加时自动往下推)。
-               * 「修改」入口下隐藏「衍生」按钮,只允许提交修改;
-               * 「上传衍生」入口下保留「衍生」按钮,用于追加更多空版本。 */}
+              {/* 单篇模式的底部按钮区:续写按钮 + 上传小剧场按钮
+               * 位置始终在最后一个续写块下方(动态追加时自动往下推)。
+               * 「修改」入口下隐藏「续写」按钮,只允许提交修改。 */}
               <div className="inline-actions wrap-mobile upload-single-action-row">
                 {isEditOriginal ? null : (
                   <button
                     className="button secondary"
-                    onClick={addDerivedVersion}
+                    onClick={addContinuationVersion}
                     type="button"
                     disabled={submitting}
                   >
-                    衍生
+                    续写
                   </button>
                 )}
                 <button
@@ -876,11 +862,9 @@ export function UploadPage() {
                       ? '提交修改'
                       : editingHistoryId
                         ? '重新投稿'
-                        : appendDerived
-                          ? `上传衍生（${newDerivedVersions.length} 版）`
-                          : derivedVersions.length > 0
-                            ? `上传小剧场（原文 + ${derivedVersions.length} 个衍生）`
-                            : '上传小剧场'}
+                        : continuationVersions.length > 0
+                          ? `上传小剧场（原文 + ${continuationVersions.length} 条续写）`
+                          : '上传小剧场'}
                 </button>
               </div>
             </div>

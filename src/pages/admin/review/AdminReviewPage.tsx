@@ -2830,22 +2830,13 @@ export function AdminReviewPage() {
     }
   };
 
-  /* 续写更新:无论当前是 approved / pending / rejected,管理员编辑后都把状态重置为 pending,
-   * 与原作者 updateContinuationByAuthor 行为对齐,确保审核池始终能看到最新版本。
-   * 这样保存后会有可见的变化:从「已通过」列表里消失,出现在「待审核」列表里。 */
+  /* 续写更新:管理员编辑后保存,保留原状态。
+   * - 已通过的续写:管理员修改即视为发布,保持 approved,不再进入待审核池
+   *  (再让管理员审一遍没必要)。
+   * - 待审核 / 已拒绝的续写:保持原状态。 */
   const handleUpdateContinuation = async () => {
     if (!adminSelectedContinuation) return;
-    /* 原本「已通过/已拒绝」的续写保存后会回到待审核池。
-     * 提前弹一次确认,避免用户保存后看不到任何反馈/详情面板直接清空导致疑惑。 */
-    const wasApprovedOrRejected =
-      adminSelectedContinuation.status === 'approved' ||
-      adminSelectedContinuation.status === 'rejected';
-    if (
-      wasApprovedOrRejected &&
-      !window.confirm('保存后这条续写会重新进入「待审核」池，确认保存吗？')
-    ) {
-      return;
-    }
+    const originalStatus = adminSelectedContinuation.status;
     const savedId = adminSelectedContinuation.id;
     setContinuationBusyAction('update');
     setError('');
@@ -2857,35 +2848,49 @@ export function AdminReviewPage() {
         nickname: continuationEditDraft.nickname,
         note: continuationEditDraft.note,
       });
-      if (updated) {
-        /* 状态重置为 pending 后立即本地同步,确保切回「待审核」tab 看得到。 */
-        const nextItem: Continuation = {
-          ...updated,
-          status: 'pending',
-          reviewedAt: undefined,
-        };
+      const nextItem: Continuation | null = updated
+        ? {
+            ...updated,
+            status:
+              updated.status === 'approved' || updated.status === 'pending'
+                ? updated.status
+                : originalStatus,
+          }
+        : null;
+      if (nextItem) {
         setAllContinuations((current) =>
           current.map((item) => (item.id === nextItem.id ? nextItem : item)),
         );
         setContinuations((current) => {
           const exists = current.some((item) => item.id === nextItem.id);
           if (!exists) return current;
-          /* 若当前 tab 不是 pending,把这条从当前视图里清掉,避免重复展示。 */
+          /* 若当前 tab 状态与新状态不一致,把这条从当前视图里清掉,避免重复展示。 */
           if (selectedContinuationStatus && nextItem.status !== selectedContinuationStatus) {
             return current.filter((item) => item.id !== nextItem.id);
           }
           return current.map((item) => (item.id === nextItem.id ? nextItem : item));
         });
       }
-      /* 保存后强制切到「待审核」tab,这样用户能立即看到这条续写已经回到待审核池,
-       * 解决「点击保存按钮但详情面板直接清空,看不到任何反馈」的问题。 */
-      if (wasApprovedOrRejected || selectedContinuationStatus !== 'pending') {
-        setSelectedContinuationStatus('pending');
+      /* 保留选中状态,方便管理员继续微调;切到这条续写原本所在的状态 tab。 */
+      if (
+        selectedContinuationStatus &&
+        selectedContinuationStatus !== (nextItem?.status ?? originalStatus)
+      ) {
+        setSelectedContinuationStatus(nextItem?.status ?? originalStatus);
       }
-      setSelectedContinuationId(updated?.id ?? savedId);
-      await Promise.all([loadContinuations('pending'), loadAllContinuations()]);
-      setSuccessMessage('续写已更新,已重新进入待审核池。');
-      showFloatingToast('续写已重新进入待审核池');
+      setSelectedContinuationId(nextItem?.id ?? savedId);
+      await Promise.all([
+        loadContinuations(nextItem?.status ?? originalStatus),
+        loadAllContinuations(),
+      ]);
+      const successText =
+        nextItem?.status === 'approved'
+          ? '已通过的续写已直接发布,无需重新审核。'
+          : nextItem?.status === 'rejected'
+            ? '已拒绝的续写已保存,保持已拒绝状态。'
+            : '待审核续写已更新。';
+      setSuccessMessage(successText);
+      showFloatingToast('续写已更新');
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '续写更新失败');
     } finally {
@@ -4692,12 +4697,17 @@ export function AdminReviewPage() {
 
                 <label className="admin-bulk-review-search">
                   <span>关键词</span>
-                  <input
-                    className="admin-bulk-input"
-                    placeholder="搜索昵称 / 简介 / 正文 / 作者"
-                    value={continuationKeyword}
-                    onChange={(event) => setContinuationKeyword(event.target.value)}
-                  />
+                  <ClearableField
+                    onClear={() => setContinuationKeyword('')}
+                    visible={Boolean(continuationKeyword)}
+                  >
+                    <input
+                      className="admin-bulk-input"
+                      placeholder="搜索昵称 / 简介 / 正文 / 作者"
+                      value={continuationKeyword}
+                      onChange={(event) => setContinuationKeyword(event.target.value)}
+                    />
+                  </ClearableField>
                 </label>
 
                 <div className="inline-actions wrap-mobile admin-status-tabs">
