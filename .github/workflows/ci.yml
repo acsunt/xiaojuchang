@@ -79,7 +79,24 @@ jobs:
           EOF
 
       - name: Deploy preview
-        run: npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch test --commit-dirty=true
+        run: |
+          set -e
+          echo "=== deploy timing baseline ==="
+          START_NS=$(date +%s%N)
+          DU_BEFORE=$(du -sb dist 2>/dev/null | awk '{print $1}')
+          FILE_COUNT=$(find dist -type f | wc -l)
+          echo "dist bytes: ${DU_BEFORE:-unknown}"
+          echo "dist file count: ${FILE_COUNT}"
+
+          npx wrangler pages deploy dist \
+            --project-name mini-theater-review-loop \
+            --branch test \
+            --commit-dirty=true
+
+          END_NS=$(date +%s%N)
+          ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
+          echo "=== deploy finished ==="
+          echo "wrangler deploy total elapsed: ${ELAPSED_MS} ms ($(awk -v ms=$ELAPSED_MS 'BEGIN{printf "%.2f", ms/1000}') s)"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -119,7 +136,22 @@ jobs:
           EOF
 
       - name: Deploy to production
-        run: npx wrangler pages deploy dist --project-name mini-theater-review-loop --branch main --commit-dirty=true
+        run: |
+          set -e
+          START_NS=$(date +%s%N)
+          DU_BEFORE=$(du -sb dist 2>/dev/null | awk '{print $1}')
+          FILE_COUNT=$(find dist -type f | wc -l)
+          echo "dist bytes: ${DU_BEFORE:-unknown}"
+          echo "dist file count: ${FILE_COUNT}"
+
+          npx wrangler pages deploy dist \
+            --project-name mini-theater-review-loop \
+            --branch main \
+            --commit-dirty=true
+
+          END_NS=$(date +%s%N)
+          ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
+          echo "wrangler deploy total elapsed: ${ELAPSED_MS} ms ($(awk -v ms=$ELAPSED_MS 'BEGIN{printf "%.2f", ms/1000}') s)"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
