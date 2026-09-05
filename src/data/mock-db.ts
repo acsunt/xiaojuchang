@@ -1059,8 +1059,12 @@ export const mockDb = {
    * - 状态为 approved:正常展示主字段(nickname/summary/content)
    * - 状态为 pending/rejected 且有 lastApproved*:展示「旧版已通过」字段,
    *   把 nickname/summary/content 重定向到 lastApproved*(同时把 status 标记为「已隐藏修订」)
-   * - 否则(从未通过过的 pending/被删除):不展示
-   * 这样作者编辑 / 被拒绝时,详情页不会突然消失,而是继续展示原内容。 */
+   * - 否则(从未通过过的 pending):不展示
+   * 这样作者编辑 / 被拒绝时,详情页不会突然消失,而是继续展示原内容。
+   *
+   * 「后台删除」:走物理删除(deleteContinuation 直接从 store 移除),
+   * 与原文「修改」被拒绝的逻辑对齐——一旦删除,游客侧不再展示,
+   * 但被删除前的内容在 admin 后台仍可通过 review-logs 追溯。 */
   getContinuationsByPlayId(playId: string, order: 'asc' | 'desc') {
     return getContinuations()
       .filter((item) => {
@@ -1069,8 +1073,8 @@ export const mockDb = {
         /* pending/rejected 但有 lastApproved* 时也展示:
          * 把 lastApproved 内容作为「旧版已通过」留在原地,
          * 等下次重新审核通过再覆盖,避免读者看到突然消失。
-         * 软删除(deletedAt)同样保留展示:被删的是新版修订,
-         * 旧版内容作为「最后一份已通过」继续展示给游客。 */
+         * 软删除(被后台移除)从 store 抹掉,这里读不到,所以
+         * 不会出现「已删除但仍展示」的情况。 */
         if (
           (item.status === 'pending' || item.status === 'rejected') &&
           item.lastApprovedContent &&
@@ -1332,23 +1336,13 @@ export const mockDb = {
     if (!target) {
       return false;
     }
-    /* 软删除:不真删,而是打 deletedAt 标记。
-     * 详情页 getContinuationsByPlayId 在 lastApproved 存在时仍会展示旧版内容,
-     * admin 列表里看到 status=rejected + deletedAt,可以保留审核追溯。 */
-    const deletedAt = now();
-    setContinuations(
-      getContinuations().map((item) =>
-        item.id === continuationId
-          ? {
-              ...item,
-              status: 'rejected' as const,
-              deletedAt,
-              reviewedAt: deletedAt,
-              reviewNote: item.reviewNote ?? '后台删除续写',
-            }
-          : item,
-      ),
-    );
+    /* 「删除」=直接物理移除记录。
+     *
+     * 游客侧:详情页 getContinuationsByPlayId 在 lastApproved 存在时仍会展示旧版内容,
+     * 但被删除的记录已经不在 store 里,自然不会被读到。
+     * 这与原文「修改」的处理方式对齐(原文被后台拒绝时也不会软保留)。
+     *
+     * 审核追溯:删之前把 audit log 写一份,管理员仍可在后台 review-logs 看到这次删除。 */
     setContinuationReviewLogs([
       {
         id: makeId('cont_review'),
@@ -1357,12 +1351,13 @@ export const mockDb = {
         action: 'delete',
         operator: this.getSession()?.username ?? 'unknown',
         note: '后台删除续写',
-        createdAt: deletedAt,
+        createdAt: now(),
         playTitle: target.playTitle,
         nickname: target.nickname || undefined,
       },
       ...getContinuationReviewLogs(),
     ]);
+    setContinuations(getContinuations().filter((item) => item.id !== continuationId));
     emitPlaysUpdated();
     return true;
   },

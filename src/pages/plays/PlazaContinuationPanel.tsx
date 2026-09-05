@@ -25,6 +25,10 @@ const formatDate = (value: string) => {
  * 数据源:PlayListPage 已加载的 continuationCounts(playApi.getContinuationCounts),
  * 每条 RepoSummary 含 lastCreatedAt(该 play 最新续写的 createdAt),
  * 不再额外发请求。
+ *
+ * 卡片版式:与广场 play-card 同款(play-card-shell / play-card-clickable),
+ * 让用户能直接复用熟悉的列表布局;手机端把「续写 N」徽标和标题放在同一行,
+ * 标题占满剩余宽度,徽标贴在右侧,跟随主题风格显示。
  */
 export function PlazaContinuationPanel({
   plays,
@@ -65,33 +69,48 @@ export function PlazaContinuationPanel({
       {items.length ? (
         <div className="plaza-derived-group-list">
           {items.map(({ play, count, lastCreatedAt }) => (
-            <article className="plaza-derived-group" key={play.id}>
-              <button
-                className="plaza-calendar-play-item"
-                onClick={() => onOpenPlay(play)}
-                type="button"
-              >
-                <div className="card-topline wrap-mobile">
-                  {/* 标题上方的分类与下方 compact-meta-row 中带图标的分类重复,
-                   * 这里只保留「续写 N 条」徽标。 */}
-                  <span>续写 {count} 条</span>
-                </div>
-                <strong>{play.title}</strong>
-                {/* 分类 / 作者 / 简介 沿用小剧场列表 compact-meta-row 的图标:
-                 *  - 分类:◈
-                 *  - 作者:✎
-                 *  - 简介:✦(走 .plaza-card-summary 的 ::before) */}
-                <div className="compact-meta-row compact-meta-row-small plaza-derived-version-meta">
+            <article
+              className="play-card play-card-shell play-card-clickable plaza-continuation-card"
+              key={play.id}
+              onClick={() => onOpenPlay(play)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onOpenPlay(play);
+                }
+              }}
+              role="link"
+              tabIndex={0}
+            >
+              {/* 顶部细线:分类 + 续写徽标(同 play-card 的 card-topline 一致) */}
+              <div className="card-topline wrap-mobile align-start">
+                <div className="inline-actions wrap-mobile align-start">
                   <span className="compact-meta-item">
                     ◈ {play.category?.trim() || DEFAULT_CATEGORY}
                   </span>
                   <span className="compact-meta-item">✎ {play.authorName?.trim() || '匿名'}</span>
                 </div>
-                {play.summary ? <p className="summary plaza-card-summary">{play.summary}</p> : null}
-                {lastCreatedAt ? (
-                  <span className="sub-copy">最新续写：{formatDate(lastCreatedAt)}</span>
-                ) : null}
-              </button>
+              </div>
+
+              {/* 标题 + 续写 N 徽标:手机端同一行(标题占满,徽标贴右) */}
+              <div className="plaza-continuation-title-row">
+                <h3 className="plaza-continuation-title">{play.title}</h3>
+                <span
+                  className="derived-badge continuation-badge plaza-continuation-count"
+                  aria-label={`续写 ${count} 条`}
+                  title={`续写 ${count} 条`}
+                >
+                  续写 {count}
+                </span>
+              </div>
+
+              {play.summary ? <p className="summary plaza-card-summary">{play.summary}</p> : null}
+
+              {lastCreatedAt ? (
+                <span className="sub-copy plaza-continuation-date">
+                  最新续写：{formatDate(lastCreatedAt)}
+                </span>
+              ) : null}
             </article>
           ))}
         </div>

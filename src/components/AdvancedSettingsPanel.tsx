@@ -306,46 +306,27 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               {bgPreviewUrl ? '已设置自定义背景图' : '无自定义背景图'}
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <label
-              className="sp-btn advanced-bg-upload-button"
-              style={{
-                flex: 1,
-                position: 'relative',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                cursor: 'pointer',
-                overflow: 'hidden',
-              }}
-            >
+          <div className="advanced-bg-upload-row">
+            {/* 安卓端需要 file input 在视觉上覆盖按钮,
+             * 不能 display:none,也不能 width/height:1px 0 透明度,
+             * 否则部分 OEM 浏览器(三星/小米/华为)直接退化成「文件」入口,
+             * 找不到「从相册选择」。
+             * 解法:
+             *   1) label 设 position:relative + 显式 min-height(兜底 inline-flex
+             *      在某些 Android Chrome 下不撑开高度)
+             *   2) input 绝对覆盖整个 label,opacity:0 但保留布局
+             *   3) accept 仅保留「image/*」+ 常见 mime 列表,
+             *      显式 mime 让 Android 14+ 系统选择器主动走「图库」路径
+             *   4) onClick 拦截 + preventDefault,防止 label click 二次触发
+             *   5) onChange 在每次选择后清空 value,允许重选同一张图 */}
+            <label className="sp-btn advanced-bg-upload-button" htmlFor="advanced-bg-upload-input">
               <i className="fas fa-upload" />
               <span>上传图片</span>
-              {/* 把 file input 绝对覆盖在 label 整块区域上,而不是 display:none / 1x1:
-               *  - display:none 会让 iOS Safari 完全忽略这个 input,
-               *    弹出「文件」入口而不是「图库」。
-               *  - 1x1 0 透明度在 iOS 14+ 同样会被识别为「文件选择器」,
-               *    用户在手机端找不到「从相册选择」。
-               *  - 完全覆盖在按钮上让浏览器 100% 识别为图片选择器,
-               *    同时显式列出常见 image MIME + accept="image/*"
-               *    避免只支持 image/* 的浏览器退化为「文件」。 */}
               <input
+                id="advanced-bg-upload-input"
                 type="file"
-                accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml,image/*"
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  width: '100%',
-                  height: '100%',
-                  padding: 0,
-                  margin: 0,
-                  border: 0,
-                  opacity: 0,
-                  cursor: 'pointer',
-                  pointerEvents: 'auto',
-                  zIndex: 2,
-                }}
+                accept="image/*,image/png,image/jpeg,image/gif,image/webp,image/avif"
+                className="advanced-bg-upload-input"
                 onChange={handleBgUpload}
               />
             </label>
@@ -354,7 +335,6 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
             <button
               type="button"
               className="sp-btn"
-              style={{ flex: 1 }}
               onClick={onDownloadBackground}
               title="把当前自定义背景图下载到本地"
             >

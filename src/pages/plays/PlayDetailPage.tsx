@@ -908,11 +908,14 @@ export function PlayDetailPage() {
               const showAuthor = item.nickname && item.nickname.trim().length > 0;
               /* mock-db 在续写 status 不是 approved 但有 lastApproved* 时,
                * 会把主字段重定向到旧版本内容,并把真实 status 写到 _displayStatus。
-               * 展示给读者时给一个温和的小标签,告知"作者后续修订暂未发布" */
+               * 展示给读者时给一个温和的小标签,告知"作者后续修订暂未发布"。
+               *
+               * 删除现在走物理删除(mock-db.deleteContinuation 直接从 store 移除),
+               * 所以 detail page 看不到 deletedAt 的记录,这里只保留 pending/rejected
+               * 两种状态的提示文案。 */
               const hiddenRevision = item._displayStatus && item._displayStatus !== 'approved';
-              const hiddenLabel = item.deletedAt
-                ? '本条已被删除'
-                : item._displayStatus === 'pending'
+              const hiddenLabel =
+                item._displayStatus === 'pending'
                   ? '本条后续修订等待审核'
                   : item._displayStatus === 'rejected'
                     ? '本条后续修订已被拒绝'

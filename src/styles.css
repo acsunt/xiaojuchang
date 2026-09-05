@@ -428,6 +428,93 @@ select option {
   background: color-mix(in srgb, var(--panel) 92%, white 8%);
 }
 
+/* 续写面板专用:与 play-card 共享 play-card-shell / play-card-clickable,
+ * 但去掉广场卡片的 grid 多列限制,让单卡片撑满整行。 */
+.plaza-continuation-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.plaza-continuation-card h3 {
+  margin: 0;
+}
+
+/* 标题 + 续写徽标同一行(手机端重点):
+ *  - 标题 flex:1 1 auto 占满,允许换行但保持与徽标的视觉对齐
+ *  - 徽标 flex:0 0 auto 贴右,随主题走 derived-badge 风格
+ *  - 大屏(>720px)下徽标单独占一行,避免挤标题 */
+.plaza-continuation-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.plaza-continuation-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: calc(16px * var(--text-scale, 1));
+  font-weight: 600;
+  line-height: 1.4;
+  /* 长标题按词断行,避免单词溢出 */
+  overflow-wrap: anywhere;
+}
+
+.plaza-continuation-count {
+  flex: 0 0 auto;
+  font-size: calc(12px * var(--text-scale, 1));
+  padding: 2px 8px;
+  border-radius: 999px;
+  /* 主题色徽标:沿用 derived-badge / continuation-badge 风格 */
+  background: color-mix(in srgb, var(--accent, #6c8cff) 14%, transparent);
+  color: var(--accent, #6c8cff);
+  border: 1px solid color-mix(in srgb, var(--accent, #6c8cff) 32%, transparent);
+  white-space: nowrap;
+}
+
+.plaza-continuation-date {
+  display: block;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--text-soft);
+  margin-top: 2px;
+}
+
+/* 手机端(<=720px):标题 + 续写徽标严格同行,标题占满,徽标贴右。
+ * 这是广场「查看有续写的小剧场」面板的核心交互:
+ * 用户一眼看到这条 play 有几条续写,而不必读完整标题才知道。 */
+@media (max-width: 720px) {
+  .plaza-continuation-title-row {
+    flex-wrap: nowrap;
+    align-items: baseline;
+  }
+  .plaza-continuation-title {
+    font-size: calc(15px * var(--text-scale, 1));
+  }
+  .plaza-continuation-count {
+    font-size: calc(11px * var(--text-scale, 1));
+    padding: 2px 6px;
+  }
+}
+
+/* 桌面端(>720px):徽标换到第二行右对齐,避免长标题被徽标挤压 */
+@media (min-width: 721px) {
+  .plaza-continuation-title-row {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .plaza-continuation-title {
+    flex: 1 1 100%;
+    margin-bottom: 2px;
+  }
+  .plaza-continuation-count {
+    align-self: flex-end;
+  }
+}
+
 .plaza-derived-version-list {
   display: grid;
   gap: 10px;
@@ -2813,19 +2900,18 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 }
 
 /* 简介 + 简介复制按钮同一行(主要服务手机端);
- * 简介占满,按钮贴右,文本溢出时省略号。 */
+ * 简介占满,按钮贴右,简介完整展示不截断。 */
 .continuation-summary-row {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
+  gap: 4px;
   margin: 6px 0 4px;
+  flex-wrap: wrap;
 }
 
 .continuation-summary-row .continuation-summary {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .continuation-summary-row .continuation-copy-button {
@@ -6302,6 +6388,57 @@ input[type='range'] {
   align-items: center;
   justify-content: center;
   transition: border-color 0.3s;
+}
+
+/* 高级主题设置 - 背景图上传按钮组。
+ * 三个按钮(上传图片 / 下载 / 清空)横排,自适应 gap;
+ * 与背景图输入行分开,避免影响 URL 输入框的对齐。 */
+.advanced-bg-upload-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.advanced-bg-upload-row .sp-btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 上传图片按钮:
+ * 关键 - 让 file input 绝对覆盖整个 label 区域(opacity:0),
+ * iOS Safari / Android Chrome 才能识别为「图库」入口,
+ * 而不是退化成「文件」入口(后者需要走 Documents UI)。
+ * 用 flex 让按钮宽度跟随 row,min-height 兜底 Android Chrome
+ * inline-flex 偶尔不撑开高度的问题。 */
+.advanced-bg-upload-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  min-height: 38px;
+}
+
+.advanced-bg-upload-input {
+  /* 关键:让 input 在视觉上「消失」但布局上仍覆盖 label 整个可点击区域。
+   * - display:none / visibility:hidden 会让 iOS Safari 完全忽略 input,
+   *   弹出的就是「文件」入口。
+   * - position:absolute + inset:0 + opacity:0 让浏览器 100% 识别为
+   *   图片选择器,同时显式列出常见 image MIME 进一步让 Android 14+
+   *   系统选择器走「图库」路径。*/
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
 }
 #bgPreviewImage,
 #bgPreviewOverlay {
