@@ -311,32 +311,40 @@ export function AdvancedSettingsPanel(props: AdvancedSettingsPanelProps) {
               className="sp-btn advanced-bg-upload-button"
               style={{
                 flex: 1,
+                position: 'relative',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 6,
                 cursor: 'pointer',
+                overflow: 'hidden',
               }}
             >
-              <i className="fas fa-upload" /> 上传图片
-              {/* 绝对定位 + 0 透明度而不是 display:none:
-               *  - display:none 会让部分 Android/iOS 浏览器拒绝弹出图片选择器。
-               *  - 0 透明度 + 绝对定位 1x1 既保留交互又不占布局。 */}
+              <i className="fas fa-upload" />
+              <span>上传图片</span>
+              {/* 把 file input 绝对覆盖在 label 整块区域上,而不是 display:none / 1x1:
+               *  - display:none 会让 iOS Safari 完全忽略这个 input,
+               *    弹出「文件」入口而不是「图库」。
+               *  - 1x1 0 透明度在 iOS 14+ 同样会被识别为「文件选择器」,
+               *    用户在手机端找不到「从相册选择」。
+               *  - 完全覆盖在按钮上让浏览器 100% 识别为图片选择器,
+               *    同时显式列出常见 image MIME + accept="image/*"
+               *    避免只支持 image/* 的浏览器退化为「文件」。 */}
               <input
                 type="file"
-                accept="image/*"
-                capture={undefined}
+                accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml,image/*"
                 style={{
                   position: 'absolute',
-                  width: 1,
-                  height: 1,
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
                   padding: 0,
-                  margin: -1,
-                  overflow: 'hidden',
-                  clip: 'rect(0,0,0,0)',
-                  whiteSpace: 'nowrap',
+                  margin: 0,
                   border: 0,
                   opacity: 0,
+                  cursor: 'pointer',
+                  pointerEvents: 'auto',
+                  zIndex: 2,
                 }}
                 onChange={handleBgUpload}
               />

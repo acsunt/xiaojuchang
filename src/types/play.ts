@@ -138,6 +138,11 @@ export type Continuation = {
   lastApprovedSummary?: string;
   lastApprovedContent?: string;
   lastApprovedAt?: string;
+  /* 软删除标记:删除时不再真删,而是写一个时间戳。
+   * 详情页仍展示 lastApproved 旧版内容(因为被删的是新版修订),
+   * admin 后台可以继续看到这条记录并真实删除(目前未实现彻底硬删,
+   * 默认保留以便审核追溯)。 */
+  deletedAt?: string;
   /* mock-db 内部使用:详情页展示时,如果当前 status 不是 approved,
    * 会被 mock-db 重定向到 lastApproved*,同时把真实 status 写到这里,
    * 前端可以选择展示一个小标签(例如「本条后续修订暂未发布」)。 */

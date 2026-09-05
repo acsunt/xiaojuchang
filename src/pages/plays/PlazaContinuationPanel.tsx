@@ -72,7 +72,8 @@ export function PlazaContinuationPanel({
                 type="button"
               >
                 <div className="card-topline wrap-mobile">
-                  <span>{play.category?.trim() || DEFAULT_CATEGORY}</span>
+                  {/* 标题上方的分类与下方 compact-meta-row 中带图标的分类重复,
+                   * 这里只保留「续写 N 条」徽标。 */}
                   <span>续写 {count} 条</span>
                 </div>
                 <strong>{play.title}</strong>

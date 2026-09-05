@@ -2812,6 +2812,26 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   max-width: 100%;
 }
 
+/* 简介 + 简介复制按钮同一行(主要服务手机端);
+ * 简介占满,按钮贴右,文本溢出时省略号。 */
+.continuation-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+.continuation-summary-row .continuation-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.continuation-summary-row .continuation-copy-button {
+  flex: 0 0 auto;
+}
+
 .continuation-summary-text {
   font-size: calc(14px * var(--text-scale, 1));
   color: var(--text);
@@ -7088,7 +7108,9 @@ body:not([data-style='default']) .admin-card,
 body:not([data-style='default']) .tag-admin-card,
 body:not([data-style='default']) .inline-detail-block,
 body:not([data-style='default']) .upload-section,
-body:not([data-style='default']) .plaza-derived-panel {
+body:not([data-style='default']) .plaza-derived-panel,
+body:not([data-style='default']) .plaza-derived-group,
+body:not([data-style='default']) .plaza-calendar-play-item {
   background: var(--card-bg, var(--sp-panel-bg, #ffffff));
   color: var(--card-text, var(--sp-text, #1a1a1a));
   border: var(--card-border, 1px solid var(--sp-border, #e1e4e8));

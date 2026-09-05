@@ -910,8 +910,9 @@ export function PlayDetailPage() {
                * 会把主字段重定向到旧版本内容,并把真实 status 写到 _displayStatus。
                * 展示给读者时给一个温和的小标签,告知"作者后续修订暂未发布" */
               const hiddenRevision = item._displayStatus && item._displayStatus !== 'approved';
-              const hiddenLabel =
-                item._displayStatus === 'pending'
+              const hiddenLabel = item.deletedAt
+                ? '本条已被删除'
+                : item._displayStatus === 'pending'
                   ? '本条后续修订等待审核'
                   : item._displayStatus === 'rejected'
                     ? '本条后续修订已被拒绝'

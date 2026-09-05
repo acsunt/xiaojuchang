@@ -1068,7 +1068,9 @@ export const mockDb = {
         if (item.status === 'approved') return true;
         /* pending/rejected 但有 lastApproved* 时也展示:
          * 把 lastApproved 内容作为「旧版已通过」留在原地,
-         * 等下次重新审核通过再覆盖,避免读者看到突然消失。 */
+         * 等下次重新审核通过再覆盖,避免读者看到突然消失。
+         * 软删除(deletedAt)同样保留展示:被删的是新版修订,
+         * 旧版内容作为「最后一份已通过」继续展示给游客。 */
         if (
           (item.status === 'pending' || item.status === 'rejected') &&
           item.lastApprovedContent &&
@@ -1330,6 +1332,23 @@ export const mockDb = {
     if (!target) {
       return false;
     }
+    /* 软删除:不真删,而是打 deletedAt 标记。
+     * 详情页 getContinuationsByPlayId 在 lastApproved 存在时仍会展示旧版内容,
+     * admin 列表里看到 status=rejected + deletedAt,可以保留审核追溯。 */
+    const deletedAt = now();
+    setContinuations(
+      getContinuations().map((item) =>
+        item.id === continuationId
+          ? {
+              ...item,
+              status: 'rejected' as const,
+              deletedAt,
+              reviewedAt: deletedAt,
+              reviewNote: item.reviewNote ?? '后台删除续写',
+            }
+          : item,
+      ),
+    );
     setContinuationReviewLogs([
       {
         id: makeId('cont_review'),
@@ -1338,13 +1357,12 @@ export const mockDb = {
         action: 'delete',
         operator: this.getSession()?.username ?? 'unknown',
         note: '后台删除续写',
-        createdAt: now(),
+        createdAt: deletedAt,
         playTitle: target.playTitle,
         nickname: target.nickname || undefined,
       },
       ...getContinuationReviewLogs(),
     ]);
-    setContinuations(getContinuations().filter((item) => item.id !== continuationId));
     emitPlaysUpdated();
     return true;
   },
