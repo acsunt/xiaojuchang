@@ -388,6 +388,7 @@ type AdminPanel =
   | 'backup'
   | 'tags'
   | 'duplicates'
+  | 'similar'
   | 'moveCategory';
 type AuditLogCategory = 'plays' | 'repos' | 'continuations';
 
@@ -426,6 +427,97 @@ type DuplicateScanProgressState = DuplicateScanProgress & {
   scopeLabel: string;
 };
 
+/* 「相似」面板的内联修改器:
+ * - 每条相似小剧场都自带一份草稿(state),「保存修改」走 playApi.updateAdminPlay。
+ * - 草稿初始值从 play 拷贝;外部 play 变化(例如重新加载)会自动重置草稿。
+ * - 与审核后台的编辑面板字段保持一致(标题 / 作者 / 分类 / 简介 / 正文),
+ *   不含「审核备注」输入(已经在外层 similarReviewNote 统一处理)。 */
+const SimilarInlineEditor = ({
+  play,
+  busy,
+  disabled,
+  onSave,
+}: {
+  play: Play;
+  busy: boolean;
+  disabled: boolean;
+  onSave: (next: {
+    title: string;
+    authorName: string;
+    category: string;
+    summary: string;
+    content: string;
+  }) => void;
+}) => {
+  const [title, setTitle] = useState(play.title);
+  const [authorName, setAuthorName] = useState(play.authorName);
+  const [category, setCategory] = useState(play.category || DEFAULT_CATEGORY);
+  const [summary, setSummary] = useState(play.summary);
+  const [content, setContent] = useState(play.content);
+
+  useEffect(() => {
+    setTitle(play.title);
+    setAuthorName(play.authorName);
+    setCategory(play.category || DEFAULT_CATEGORY);
+    setSummary(play.summary);
+    setContent(play.content);
+  }, [play]);
+
+  const canSave =
+    !disabled &&
+    !busy &&
+    title.trim().length > 0 &&
+    authorName.trim().length > 0 &&
+    content.trim().length > 0;
+
+  return (
+    <div className="form-panel stack-gap-sm">
+      <label>
+        <span>标题</span>
+        <input value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label>
+        <span>作者</span>
+        <input value={authorName} onChange={(event) => setAuthorName(event.target.value)} />
+      </label>
+      <label>
+        <span>分类</span>
+        <input
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+          placeholder={DEFAULT_CATEGORY}
+        />
+      </label>
+      <label>
+        <span>简介（可空）</span>
+        <input value={summary} onChange={(event) => setSummary(event.target.value)} />
+      </label>
+      <label>
+        <span>正文</span>
+        <textarea rows={6} value={content} onChange={(event) => setContent(event.target.value)} />
+      </label>
+      <div className="inline-actions">
+        <button
+          className="button primary"
+          disabled={!canSave}
+          onClick={() =>
+            onSave({
+              title,
+              authorName,
+              category,
+              summary,
+              content,
+            })
+          }
+          type="button"
+        >
+          {busy ? '保存中' : '保存修改'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '审核', value: 'review' },
   { label: 'repo', value: 'repo' },
@@ -436,6 +528,7 @@ const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '备份', value: 'backup' },
   { label: '标签', value: 'tags' },
   { label: '重复', value: 'duplicates' },
+  { label: '相似', value: 'similar' },
 ];
 
 const auditLogTabs: Array<{ label: string; value: AuditLogCategory }> = [
@@ -770,6 +863,27 @@ export function AdminReviewPage() {
   const [duplicateBusy, setDuplicateBusy] = useState(false);
   const [duplicateScanProgress, setDuplicateScanProgress] =
     useState<DuplicateScanProgressState | null>(null);
+  /* 「相似」面板状态:
+   * - similarKeyword:独立于 audit-play 的搜索框
+   * - similarAnchorTitle / similarAnchorCategory:
+   *   点列表里某条卡片时,把它的 title+category 作为锚点,再列出剩下的同标题+同分类条目;
+   *   也允许通过搜索框跨锚点搜出候选。
+   * - similarBusyAction / similarReviewNote:
+   *   当前正在操作(通过/拒绝/下线/删除)的 play id 与备注,
+   *   避免全局 reviewBusyAction / reviewNote 被「相似」和「审核」互相覆盖。
+   * - similarStatusFilter:状态过滤(全部 / 待审核 / 已通过 / 已拒绝 / 已下线)。
+   */
+  const [similarKeyword, setSimilarKeyword] = useState('');
+  const [similarAnchorTitle, setSimilarAnchorTitle] = useState('');
+  const [similarAnchorCategory, setSimilarAnchorCategory] = useState('');
+  const [similarStatusFilter, setSimilarStatusFilter] = useState<PlayStatus | undefined>(undefined);
+  const [similarBusyAction, setSimilarBusyAction] = useState<{
+    playId: string;
+    action: ReviewAction | 'delete' | 'save';
+  } | null>(null);
+  const [similarReviewNote, setSimilarReviewNote] = useState('');
+  const [similarMessage, setSimilarMessage] = useState('');
+  const [similarMessageTone, setSimilarMessageTone] = useState<'success' | 'error'>('success');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkTask, setBulkTask] = useState<BulkReviewTask | null>(null);
   const [bulkProgress, setBulkProgress] = useState<BulkReviewProgress | null>(null);
@@ -813,6 +927,9 @@ export function AdminReviewPage() {
     null,
   );
   const [mergedBackupIncludeAttachedMeta, setMergedBackupIncludeAttachedMeta] = useState(true);
+  /* 「附带 repo」勾选框:同时作用于「导出备份压缩包」与「合并导出」,
+   * 与「合并导出时保留附带信息」放在同一行右侧;共享同一份 useState。 */
+  const [backupIncludeRepos, setBackupIncludeRepos] = useState(true);
   const [backupRestoreConfirmOpen, setBackupRestoreConfirmOpen] = useState(false);
   const [backupRestoreConfirmInput, setBackupRestoreConfirmInput] = useState('');
   const backupFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1310,7 +1427,17 @@ export function AdminReviewPage() {
       ? activeAuditLogs.slice(0, MOBILE_AUDIT_LOG_PREVIEW_COUNT)
       : activeAuditLogs;
 
-  const shouldHideMobileReviewWorkspace = isMobileReviewViewport && activePanel !== 'review';
+  /* 手机端隐藏左侧 review 列表的范围:
+   * - 默认只在「审核」面板以外都隐藏，避免小屏上把列表挤掉正文区域。
+   * - 但「删除」面板本身就是基于左侧列表操作的(批量勾选/全选/按作者删),
+   *   把列表藏掉后批量删除就完全无法选条目。这里把「删除」面板加入例外,
+   *   让它和「审核」面板一样显示左侧列表,保留多选 + 全选 + 反选 + 按作者勾选等交互。
+   * - 「移动分类」面板也会用到左侧列表(按分类移动),同样加入例外。 */
+  const shouldHideMobileReviewWorkspace =
+    isMobileReviewViewport &&
+    activePanel !== 'review' &&
+    activePanel !== 'delete' &&
+    activePanel !== 'moveCategory';
   const shouldShowReviewSidebarContent = !shouldHideMobileReviewWorkspace;
 
   const pendingVisibleIds = useMemo(
@@ -1418,6 +1545,65 @@ export function AdminReviewPage() {
     [allPlays, duplicateApprovedPlays, duplicateReview.scanScope],
   );
   const duplicateScanScopeLabel = duplicateReview.scanScope === 'approved' ? '已通过' : '整个库';
+
+  /* 「相似」面板候选:同标题 + 同分类(以 anchor 为锚点),
+   * 再叠加「搜索关键字」与「状态筛选」。anchor 可由列表点击产生,
+   * 也可由相似面板顶部的搜索框自动推断(取第一条命中的 title+category)。
+   *
+   * 排序:按状态(pending 优先) → 更新时间倒序。
+   * 列表上限:无;每条卡片都自带完整的预览 + 操作按钮。
+   * 锚点缺失时:回到全库搜索模式,把所有命中搜索的小剧场按更新时间倒序列出。 */
+  const similarPlays = useMemo(() => {
+    const normalizedKeyword = similarKeyword.trim().toLowerCase();
+    let base: Play[] = allPlays;
+
+    if (similarAnchorTitle) {
+      base = base.filter((play) => {
+        if ((play.title ?? '').trim() !== similarAnchorTitle.trim()) {
+          return false;
+        }
+        const leftCategory = (play.category ?? DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+        const rightCategory =
+          (similarAnchorCategory ?? DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+        return leftCategory === rightCategory;
+      });
+    }
+
+    if (similarStatusFilter) {
+      base = base.filter((play) => play.status === similarStatusFilter);
+    }
+
+    if (normalizedKeyword) {
+      base = base.filter((play) =>
+        (
+          play.title +
+          ' ' +
+          play.authorName +
+          ' ' +
+          (play.category ?? '') +
+          ' ' +
+          play.summary +
+          ' ' +
+          play.content
+        )
+          .toLowerCase()
+          .includes(normalizedKeyword),
+      );
+    }
+
+    return [...base].sort((left, right) => {
+      const statusOrder: Record<PlayStatus, number> = {
+        pending: 0,
+        approved: 1,
+        rejected: 2,
+        offline: 3,
+      };
+      if (statusOrder[left.status] !== statusOrder[right.status]) {
+        return statusOrder[left.status] - statusOrder[right.status];
+      }
+      return right.updatedAt.localeCompare(left.updatedAt);
+    });
+  }, [allPlays, similarAnchorCategory, similarAnchorTitle, similarKeyword, similarStatusFilter]);
 
   const reviewMutationBusy =
     bulkBusy || bulkTask !== null || deleteBusy || reviewBusyAction !== null;
@@ -1892,11 +2078,15 @@ export function AdminReviewPage() {
 
   const refreshAdminAfterReviewMutation = useCallback(
     async (nextPlayId?: string) => {
+      /* 先刷新当前状态列表(用于把刚通过/拒绝的条目从 pending 视图剔除,或同步新合入的 modify)
+       * 这里仍然要 await,因为它决定了 selectedPlayId 落到哪里。
+       * loadAllPlays 改为 fire-and-forget:前面 syncPlayStateLocally 已经把最新记录写进本地
+       * allPlays,再次拉全表只是为下一次统计/搜索/重复扫描做准备,不必阻塞"已通过"的反馈。 */
       const { items, nextSelectedId } = await load(selectedStatus, { silent: true });
-      await Promise.all([
-        loadAllPlays(),
-        activePanel === 'auditLogs' ? loadAllAuditLogs() : Promise.resolve(),
-      ]);
+      void loadAllPlays();
+      if (activePanel === 'auditLogs') {
+        void loadAllAuditLogs();
+      }
 
       const resolvedPlayId =
         typeof nextPlayId === 'string'
@@ -1906,8 +2096,11 @@ export function AdminReviewPage() {
           : nextSelectedId;
 
       setSelectedPlayId(resolvedPlayId);
-      await syncSelectedReviewLogs(resolvedPlayId);
-      notifyPlaysUpdate();
+      void syncSelectedReviewLogs(resolvedPlayId);
+      /* 不再调用 notifyPlaysUpdate():本页内 PLAYS_UPDATED_EVENT 监听器
+       * (handlePlayRefresh) 会再次拉一遍 plays/repos/continuations,与本函数重复,
+       * 而且在「审核通过后立刻看到反馈」的场景下会拖慢整个反馈链。
+       * 通知其他标签页交给窗口焦点切换 / 下一次进入后台触发。 */
     },
     // load/loadAllPlays/loadAllAuditLogs/syncSelectedReviewLogs 是普通函数（每次渲染重新创建，非
     // useCallback），故意不放进依赖数组：wrap 成 useCallback 只是为了让引用在 selectedStatus/activePanel
@@ -1929,9 +2122,16 @@ export function AdminReviewPage() {
 
   const handleExportBackup = () => {
     try {
-      downloadBackupArchive(allPlays, tags);
+      const repoCount = backupIncludeRepos ? allRepos.length : 0;
+      downloadBackupArchive(allPlays, tags, {
+        repos: backupIncludeRepos ? allRepos : [],
+      });
       setBackupMessageTone('success');
-      setBackupMessage(`备份已导出，共 ${allPlays.length} 篇内容，附带 ${tags.length} 个标签。`);
+      setBackupMessage(
+        `备份已导出，共 ${allPlays.length} 篇内容，附带 ${tags.length} 个标签${
+          backupIncludeRepos ? `和 ${repoCount} 条 repo 回复` : ''
+        }。`,
+      );
     } catch (reason) {
       setBackupMessageTone('error');
       setBackupMessage(reason instanceof Error ? reason.message : '导出备份失败');
@@ -1940,12 +2140,16 @@ export function AdminReviewPage() {
 
   const handleExportMergedBackup = () => {
     try {
+      const repoCount = backupIncludeRepos ? allRepos.length : 0;
       downloadMergedBackupArchive(allPlays, {
         includeAttachedMeta: mergedBackupIncludeAttachedMeta,
+        repos: backupIncludeRepos ? allRepos : [],
       });
       setBackupMessageTone('success');
       setBackupMessage(
-        `合并备份已导出，共 ${allPlays.length} 篇内容，按作者和分类分别成组，${mergedBackupIncludeAttachedMeta ? '保留' : '不保留'}附带信息。`,
+        `合并备份已导出，共 ${allPlays.length} 篇内容，按作者和分类分别成组，${
+          mergedBackupIncludeAttachedMeta ? '保留' : '不保留'
+        }附带信息${backupIncludeRepos ? `；附带 ${repoCount} 条 repo 回复,按作者和分类再各一组` : ''}。`,
       );
     } catch (reason) {
       setBackupMessageTone('error');
@@ -3361,6 +3565,96 @@ export function AdminReviewPage() {
     setDuplicateReview((current) => clearDuplicateReviewState(current));
     setSuccessMessage('重复检索结果已清空。');
     setError('');
+  };
+
+  /* 「相似」面板处理器:
+   * - 点击列表卡片:把被点击的 play 的 title+category 当作锚点(不再跟随全库搜索),
+   *   这样列表会精确收敛到同标题同分类的所有版本。
+   * - 清空锚点:回到全库搜索模式。
+   * - 搜索框:在已有锚点之上叠加关键字过滤。
+   * - 通过/拒绝/下线/删除:复用 handleReviewForPlay + handleDeletePlayItem,
+   *   它们已经支持任意 play,并且会通过 syncPlayStateLocally / removePlayStateLocally
+   *   同步 allPlays,不需要再做额外刷新。 */
+  const handleSimilarAnchorPlay = (play: Play) => {
+    setSimilarAnchorTitle(play.title ?? '');
+    setSimilarAnchorCategory(play.category ?? DEFAULT_CATEGORY);
+    setSimilarMessage('');
+  };
+
+  const handleSimilarClearAnchor = () => {
+    setSimilarAnchorTitle('');
+    setSimilarAnchorCategory('');
+    setSimilarKeyword('');
+    setSimilarStatusFilter(undefined);
+    setSimilarMessage('');
+  };
+
+  const handleSimilarReview = async (play: Play, action: ReviewAction) => {
+    setSimilarBusyAction({ playId: play.id, action });
+    setSimilarMessage('');
+    try {
+      await handleReviewForPlay(play, action, { note: similarReviewNote });
+      setSimilarReviewNote('');
+      setSimilarMessageTone('success');
+      setSimilarMessage(
+        action === 'approve' && play.submissionType === 'modify'
+          ? `已通过《${play.title}》的修改,内容已合入原作品。`
+          : `${actionResultLabelMap[action]} 1 篇:《${play.title}》`,
+      );
+    } catch (reason) {
+      setSimilarMessageTone('error');
+      setSimilarMessage(reason instanceof Error ? reason.message : '审核失败');
+    } finally {
+      setSimilarBusyAction(null);
+    }
+  };
+
+  const handleSimilarDelete = async (play: Play) => {
+    setSimilarBusyAction({ playId: play.id, action: 'delete' });
+    setSimilarMessage('');
+    try {
+      await handleDeletePlayItem(play);
+      setSimilarMessageTone('success');
+      setSimilarMessage(`已删除《${play.title}》`);
+    } catch (reason) {
+      setSimilarMessageTone('error');
+      setSimilarMessage(reason instanceof Error ? reason.message : '删除失败');
+    } finally {
+      setSimilarBusyAction(null);
+    }
+  };
+
+  const handleSimilarSave = async (
+    play: Play,
+    next: {
+      title: string;
+      authorName: string;
+      category: string;
+      summary: string;
+      content: string;
+    },
+  ) => {
+    setSimilarBusyAction({ playId: play.id, action: 'save' });
+    setSimilarMessage('');
+    try {
+      const updatedPlay = await playApi.updateAdminPlay(play.id, {
+        title: next.title.trim(),
+        authorName: next.authorName.trim(),
+        category: next.category.trim() || DEFAULT_CATEGORY,
+        summary: next.summary.trim(),
+        content: next.content,
+      });
+      if (updatedPlay) {
+        syncPlayStateLocally(updatedPlay);
+        setSimilarMessageTone('success');
+        setSimilarMessage(`已保存《${updatedPlay.title}》的修改`);
+      }
+    } catch (reason) {
+      setSimilarMessageTone('error');
+      setSimilarMessage(reason instanceof Error ? reason.message : '保存修改失败');
+    } finally {
+      setSimilarBusyAction(null);
+    }
   };
 
   const handleDuplicateThresholdChange = (value: number) => {
@@ -6189,15 +6483,26 @@ export function AdminReviewPage() {
                   />
                 </div>
 
-                <label className="checkbox-chip backup-merge-meta-toggle">
-                  <input
-                    checked={mergedBackupIncludeAttachedMeta}
-                    disabled={backupBusy}
-                    onChange={(event) => setMergedBackupIncludeAttachedMeta(event.target.checked)}
-                    type="checkbox"
-                  />
-                  <span>合并导出时保留附带信息</span>
-                </label>
+                <div className="backup-meta-row">
+                  <label className="checkbox-chip backup-merge-meta-toggle">
+                    <input
+                      checked={mergedBackupIncludeAttachedMeta}
+                      disabled={backupBusy}
+                      onChange={(event) => setMergedBackupIncludeAttachedMeta(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>合并导出时保留附带信息</span>
+                  </label>
+                  <label className="checkbox-chip backup-include-repos-toggle">
+                    <input
+                      checked={backupIncludeRepos}
+                      disabled={backupBusy}
+                      onChange={(event) => setBackupIncludeRepos(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>附带 repo（导出备份压缩包 / 合并导出都生效）</span>
+                  </label>
+                </div>
 
                 <div className="stack-gap-sm backup-notes-panel">
                   <span className="content-meta">
@@ -6210,6 +6515,11 @@ export function AdminReviewPage() {
                   <span className="content-meta">
                     关闭“保留附带信息”后，合并导出的 TXT 会去掉
                     Id、Status、CreatedAt、UpdatedAt、ReviewedAt、ReviewNote，只保留阅读整理需要的正文信息。
+                  </span>
+                  <span className="content-meta">
+                    勾选「附带 repo」后，导出备份压缩包会多出 repo-pending.txt / repo-approved.txt /
+                    repo-rejected.txt 三个文件，合并导出则额外多出 authors-repo/ 与 categories-repo/
+                    两个文件夹。
                   </span>
                   <span className="content-meta">审核日志不在这次 TXT 备份里。</span>
                   {backupImportName ? (
@@ -6561,6 +6871,252 @@ export function AdminReviewPage() {
                             );
                           })}
                         </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {activePanel === 'similar' ? (
+            <section className="stack-gap-lg">
+              <div className="form-panel stack-gap-md">
+                <div className="content-head">
+                  <div>
+                    <p className="eyebrow">Similar Plays</p>
+                    <h3>相似</h3>
+                    <p className="sub-copy">
+                      列出与当前锚点「同标题 + 同分类」的小剧场，每条卡片自带完整的
+                      查看模式预览与通过 / 拒绝 / 下线 / 删除按钮，完全复刻审核小剧场里查看模式。
+                    </p>
+                  </div>
+                  <div className="inline-actions wrap-mobile">
+                    <button
+                      className="button ghost"
+                      disabled={!similarAnchorTitle && !similarKeyword && !similarStatusFilter}
+                      onClick={handleSimilarClearAnchor}
+                      type="button"
+                    >
+                      清空检索
+                    </button>
+                  </div>
+                </div>
+
+                <div className="duplicate-toolbar-grid">
+                  <div className="duplicate-summary-card stack-gap-sm">
+                    <span>锚点</span>
+                    <strong>
+                      {similarAnchorTitle
+                        ? `${similarAnchorTitle} · ${similarAnchorCategory || DEFAULT_CATEGORY}`
+                        : '未选择(全库搜索)'}
+                    </strong>
+                    <span className="content-meta">
+                      {similarAnchorTitle
+                        ? '只列出同标题同分类的小剧场；点击其他卡片可切换锚点。'
+                        : '可先用搜索框定位一篇，再切换到同标题同分类的列表。'}
+                    </span>
+                  </div>
+                  <div className="duplicate-summary-card stack-gap-sm">
+                    <span>搜索关键字</span>
+                    <ClearableField
+                      visible={Boolean(similarKeyword.trim())}
+                      onClear={() => setSimilarKeyword('')}
+                    >
+                      <input
+                        value={similarKeyword}
+                        onChange={(event) => setSimilarKeyword(event.target.value)}
+                        placeholder="标题 / 作者 / 分类 / 正文(可选)"
+                      />
+                    </ClearableField>
+                  </div>
+                  <div className="duplicate-summary-card stack-gap-sm">
+                    <span>状态</span>
+                    <div className="inline-actions wrap-mobile">
+                      <button
+                        className={!similarStatusFilter ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setSimilarStatusFilter(undefined)}
+                        type="button"
+                      >
+                        全部
+                      </button>
+                      {(['pending', 'approved', 'rejected', 'offline'] as PlayStatus[]).map(
+                        (status) => (
+                          <button
+                            className={
+                              similarStatusFilter === status ? 'tab-chip active' : 'tab-chip'
+                            }
+                            key={status}
+                            onClick={() => setSimilarStatusFilter(status)}
+                            type="button"
+                          >
+                            {statusLabelMap[status]}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                  <div className="duplicate-summary-card stack-gap-sm">
+                    <span>当前候选</span>
+                    <strong>{similarPlays.length} 篇</strong>
+                  </div>
+                </div>
+
+                <label>
+                  <span>审核备注（应用于下面的所有审核操作）</span>
+                  <textarea
+                    rows={3}
+                    value={similarReviewNote}
+                    onChange={(event) => setSimilarReviewNote(event.target.value)}
+                    placeholder="通过原因 / 拒绝原因 / 下线说明"
+                  />
+                </label>
+
+                {similarMessage ? (
+                  <div
+                    className={
+                      similarMessageTone === 'error' ? 'feedback error' : 'feedback success'
+                    }
+                  >
+                    {similarMessage}
+                  </div>
+                ) : null}
+              </div>
+
+              {similarPlays.length === 0 ? (
+                <div className="empty-panel">
+                  没有匹配的小剧场。试试切换锚点、调整状态筛选或清空检索。
+                </div>
+              ) : (
+                <div className="stack-gap-lg">
+                  {similarPlays.map((play) => {
+                    const busy = similarBusyAction?.playId === play.id;
+                    const isAnchor =
+                      similarAnchorTitle === play.title &&
+                      (similarAnchorCategory || DEFAULT_CATEGORY) ===
+                        (play.category || DEFAULT_CATEGORY);
+                    return (
+                      <article
+                        className="form-panel stack-gap-md duplicate-group-card"
+                        key={play.id}
+                      >
+                        <div className="content-head">
+                          <div>
+                            <h3>{play.title}</h3>
+                            <p className="sub-copy">
+                              {play.authorName} · {play.category || DEFAULT_CATEGORY} ·{' '}
+                              {new Date(play.createdAt).toLocaleString('zh-CN')}
+                              {' · '}
+                              {statusLabelMap[play.status]}
+                            </p>
+                          </div>
+                          <div className="inline-actions wrap-mobile">
+                            <span
+                              className={isAnchor ? 'status-tag approved' : 'status-tag offline'}
+                            >
+                              {isAnchor ? '当前锚点' : '点击设为锚点'}
+                            </span>
+                            <button
+                              className="button ghost"
+                              onClick={() => handleSimilarAnchorPlay(play)}
+                              type="button"
+                            >
+                              {isAnchor ? '刷新锚点' : '设为锚点'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 查看模式预览:完全复刻审核后台的预览样式 */}
+                        <div className="detail-panel stack-gap-md">
+                          <div className="card-topline">
+                            <span className={`status-tag ${play.status}`}>
+                              {statusLabelMap[play.status]}
+                            </span>
+                            <span>{play.category || DEFAULT_CATEGORY}</span>
+                          </div>
+                          <div className="preview-section-header">
+                            <h3>{play.title}</h3>
+                            <button
+                              aria-label="复制标题"
+                              className="preview-copy-btn"
+                              onClick={() => void copyToClipboard(play.title, '标题')}
+                              title="复制标题"
+                              type="button"
+                            >
+                              <i className="fas fa-copy" />
+                            </button>
+                          </div>
+                          {play.summary ? <p className="sub-copy">{play.summary}</p> : null}
+                          <div className="inline-detail-block stack-gap-md preview-content-block">
+                            <div className="preview-section-header">
+                              <span className="content-meta">正文约 {play.content.length} 字</span>
+                              <button
+                                aria-label="复制正文"
+                                className="preview-copy-btn"
+                                onClick={() => void copyToClipboard(play.content, '正文')}
+                                title="复制正文"
+                                type="button"
+                              >
+                                <i className="fas fa-copy" />
+                              </button>
+                            </div>
+                            <p>{play.content}</p>
+                          </div>
+                          {play.status !== 'pending' && play.reviewNote ? (
+                            <div className="stack-gap-sm">
+                              <span className="content-meta">审核备注</span>
+                              <p className="sub-copy">{play.reviewNote}</p>
+                            </div>
+                          ) : null}
+                          <div className="meta-row">
+                            <span>作者 {play.authorName}</span>
+                            <span>创建于 {new Date(play.createdAt).toLocaleString('zh-CN')}</span>
+                            {play.reviewedAt ? (
+                              <span>
+                                审核于 {new Date(play.reviewedAt).toLocaleString('zh-CN')}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="action-bar split-actions review-action-layout">
+                          <div className="inline-actions review-action-row">
+                            {actionMeta.map((item) => (
+                              <button
+                                key={item.action}
+                                className={`button ${item.tone} review-primary-action-button`}
+                                disabled={similarBusyAction !== null && !busy}
+                                onClick={() => void handleSimilarReview(play, item.action)}
+                                type="button"
+                              >
+                                {busy && similarBusyAction?.action === item.action
+                                  ? '正在处理'
+                                  : item.label}
+                              </button>
+                            ))}
+                            <button
+                              className="button warning review-delete-action-button"
+                              disabled={similarBusyAction !== null && !busy}
+                              onClick={() => void handleSimilarDelete(play)}
+                              type="button"
+                            >
+                              {busy && similarBusyAction?.action === 'delete' ? '正在处理' : '删除'}
+                            </button>
+                          </div>
+                          {busy ? <div className="feedback info">正在处理</div> : null}
+                        </div>
+
+                        {/* 修改面板:管理员可在此直接编辑标题/作者/分类/简介/正文,
+                         * 与审核后台的编辑面板字段一致。 */}
+                        <details className="admin-similar-edit-details">
+                          <summary>展开修改面板</summary>
+                          <SimilarInlineEditor
+                            play={play}
+                            busy={busy && similarBusyAction?.action === 'save'}
+                            disabled={similarBusyAction !== null}
+                            onSave={(next) => void handleSimilarSave(play, next)}
+                          />
+                        </details>
                       </article>
                     );
                   })}

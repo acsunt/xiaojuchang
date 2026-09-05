@@ -31,8 +31,6 @@ export const writePlazaNotificationSince = (iso: string): void => {
 
 const PLAZA_TOOLBAR_UPDATED_EVENT = 'mini-theater:plaza-toolbar-updated';
 
-const DETAIL_FLAT_VIEW_KEY = 'mini-theater:detail-flat-view';
-const DETAIL_VERSION_SELECTION_KEY = 'mini-theater:detail-version-selection';
 const ADMIN_REVIEW_DIFF_FLAT_KEY = 'mini-theater:admin-review-diff-flat';
 const ADMIN_REVIEW_DIFF_RANGE_KEY = 'mini-theater:admin-review-diff-range';
 const PLAZA_NAVIGATION_SNAPSHOT_TTL = 30 * 60 * 1000;
@@ -237,61 +235,6 @@ export const updatePlazaNavigationSnapshot = (patch: Partial<PlazaNavigationSnap
 
 export const clearPlazaNavigationSnapshot = () => {
   clearSessionStore(PLAZA_NAVIGATION_SNAPSHOT_KEY);
-};
-
-/* ---------- 详情页衍生版本"平铺"开关 ----------
- * 默认关闭：保持原来的 tab-chip 切换。
- * 开启后：版本以 checkbox 列表形式平铺，可多选。 */
-export const getDetailFlatView = () => {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.localStorage.getItem(DETAIL_FLAT_VIEW_KEY) === 'true';
-};
-
-export const setDetailFlatView = (enabled: boolean) => {
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(DETAIL_FLAT_VIEW_KEY, String(enabled));
-  }
-  return enabled;
-};
-
-/* ---------- 详情页平铺模式下，勾选显示的版本 id 集合 ----------
- * 按 getPlayVersionKey 键存一组「该版本组里被勾选显示的 play id」。
- * 默认全选：读取时用传入的 candidateIds 补齐缺失项；
- * 永远把当前 url 指向的版本保留在勾选里（避免分享链接打开看不到正文）。 */
-export const getDetailVersionSelection = (
-  groupKey: string,
-  currentPlayId: string,
-  candidateIds: string[],
-): string[] => {
-  if (!groupKey || candidateIds.length === 0) {
-    return [];
-  }
-
-  const raw = readStore<Record<string, string[]>>(DETAIL_VERSION_SELECTION_KEY, {});
-  const stored = Array.isArray(raw[groupKey]) ? raw[groupKey] : null;
-  const candidateSet = new Set(candidateIds);
-
-  if (!stored || stored.length === 0) {
-    return Array.from(new Set([currentPlayId, ...candidateIds]));
-  }
-
-  const filtered = stored.filter((id) => candidateSet.has(id));
-  if (!filtered.includes(currentPlayId)) {
-    filtered.unshift(currentPlayId);
-  }
-  return filtered;
-};
-
-export const setDetailVersionSelection = (groupKey: string, selectedIds: string[]) => {
-  if (!groupKey) {
-    return;
-  }
-  const raw = readStore<Record<string, string[]>>(DETAIL_VERSION_SELECTION_KEY, {});
-  const next = { ...raw, [groupKey]: uniq(selectedIds) };
-  writeStore(DETAIL_VERSION_SELECTION_KEY, next);
-  return next[groupKey];
 };
 
 /* ---------- 审核后台差异对照：依次排开 / 展示范围 ----------

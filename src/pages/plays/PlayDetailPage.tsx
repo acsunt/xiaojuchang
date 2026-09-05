@@ -3,11 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import {
-  getDetailFlatView,
-  getDetailVersionSelection,
   getPlazaNavigationSnapshot,
-  setDetailFlatView,
-  setDetailVersionSelection,
   updatePlazaNavigationSnapshot,
 } from '../../services/browser-play-preferences';
 
@@ -119,49 +115,6 @@ export function PlayDetailPage() {
   );
 
   const [repoSubmitting, setRepoSubmitting] = useState(false);
-
-  /* 详情页正文/续写"平铺"开关（持久化到 localStorage）
-   * - 默认关闭：保持原来的 tab-chip 单选切换
-   * - 开启后：以 checkbox 列表平铺,可多选同时查看多个续写
-   * 同步状态被勾选的续写 id 集合。
-   *
-   * 列表命名:
-   * - 不平铺(tab-chip):"原文 / 续写 1 / 续写 2"
-   * - 平铺(checkbox):"原文 / [每条续写的简介]" */
-  const [flatView, setFlatView] = useState(() => getDetailFlatView());
-  const [selectedContinuationIds, setSelectedContinuationIds] = useState<string[]>([]);
-  /* tab-chip 模式下当前选中的 tab 索引,0 = 原文,1..N = 续写列表顺序 */
-  const [activeTabIndex, setActiveTabIndex] = useState(0);
-  const continuationGroupKey = play ? `cont-${play.id}` : '';
-
-  useEffect(() => {
-    if (!continuationGroupKey || continuations.length === 0) {
-      return;
-    }
-    const candidateIds = continuations.map((item) => item.id);
-    const stored = getDetailVersionSelection(continuationGroupKey, id, candidateIds);
-    setSelectedContinuationIds(stored);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [continuationGroupKey, continuations.map((item) => item.id).join('|')]);
-
-  const toggleFlatView = () => {
-    setFlatView((current) => {
-      const next = !current;
-      setDetailFlatView(next);
-      return next;
-    });
-  };
-
-  const toggleContinuationSelection = (continuationId: string) => {
-    if (!continuationGroupKey) {
-      return;
-    }
-    const next = selectedContinuationIds.includes(continuationId)
-      ? selectedContinuationIds.filter((item) => item !== continuationId)
-      : [...selectedContinuationIds, continuationId];
-    setSelectedContinuationIds(next);
-    setDetailVersionSelection(continuationGroupKey, next);
-  };
 
   const visitorId = useMemo(() => getVisitorId(), []);
 
@@ -297,18 +250,6 @@ export function PlayDetailPage() {
           }
         : undefined,
     });
-  };
-
-  /* tab-chip 模式下点击"原文 / 续写 N"标签切换主正文区域显示的内容。
-   * - 索引 0 表示原文,1..N 表示 continuations 顺序对应的续写。
-   * - 平铺模式下由 checkbox 控制,不调用本函数。 */
-  const selectTab = (index: number) => {
-    setActiveTabIndex(Math.max(0, index));
-    if (typeof window !== 'undefined') {
-      window.requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, behavior: 'auto' });
-      });
-    }
   };
 
   /* 续写 composer:打开/关闭 helper,跟 repoComposerOpen 行为对齐 */
@@ -483,38 +424,6 @@ export function PlayDetailPage() {
    * - 索引 0 = 原文 play(永远存在)
    * - 索引 1..N = 当前 play 的续写列表(按当前排序的 continuations 顺序)
    * 用统一类型让 tab-chip 切换 / 平铺 checkbox 共享同一份数据。 */
-  type DetailSlot =
-    | { kind: 'original'; index: 0; play: Play; continuation?: undefined }
-    | {
-        kind: 'continuation';
-        index: number;
-        continuation: Continuation;
-        play?: undefined;
-      };
-
-  const slots: DetailSlot[] = play
-    ? [
-        { kind: 'original', index: 0, play },
-        ...continuations.map((continuation, idx): DetailSlot => ({
-          kind: 'continuation',
-          index: idx + 1,
-          continuation,
-        })),
-      ]
-    : [];
-
-  const isMultiSlot = slots.length > 1;
-  /* tab-chip 模式下:渲染 activeTabIndex 对应那条;
-   * 平铺模式下:始终渲染原文 + 勾选的续写(原文不可取消)。 */
-  const activeSlot = slots[Math.min(activeTabIndex, Math.max(0, slots.length - 1))];
-  const flatVisibleSlots =
-    isMultiSlot && flatView
-      ? slots.filter((slot) => {
-          if (slot.kind === 'original') return true;
-          return selectedContinuationIds.includes(slot.continuation.id);
-        })
-      : slots;
-
   /* 上传衍生：跳到 /upload 单篇模式。
    * - 原文填进主表单；已有衍生版本按顺序回填到衍生块；
    * - 末尾再追加一个空的新衍生，提交时只上传新增的那几版。
@@ -592,89 +501,6 @@ export function PlayDetailPage() {
               </span>
             </div>
 
-            {isMultiSlot ? (
-              <div className="detail-version-panel">
-                <div className="detail-version-head">
-                  <span className="content-meta">原文 / 续写</span>
-                  <label className="detail-version-flat-toggle">
-                    <input checked={flatView} onChange={toggleFlatView} type="checkbox" />
-                    <span>平铺</span>
-                  </label>
-                </div>
-
-                {flatView ? (
-                  <ul className="detail-version-list">
-                    {slots.map((slot) => {
-                      const isOriginal = slot.kind === 'original';
-                      const checked = isOriginal
-                        ? true
-                        : selectedContinuationIds.includes(slot.continuation.id);
-                      const labelText = isOriginal
-                        ? '原文'
-                        : `✦ ${slot.continuation.summary || '无简介'}`;
-                      const labelKey = isOriginal ? 'original' : slot.continuation.id;
-                      const dateText = isOriginal
-                        ? formatDate(play.updatedAt)
-                        : formatDate(slot.continuation.updatedAt);
-                      return (
-                        <li className="detail-version-item" key={labelKey}>
-                          <label
-                            className={
-                              checked
-                                ? 'detail-version-row-label checked'
-                                : 'detail-version-row-label'
-                            }
-                            title={labelText}
-                          >
-                            <input
-                              checked={checked}
-                              disabled={isOriginal}
-                              onChange={() =>
-                                !isOriginal && toggleContinuationSelection(slot.continuation.id)
-                              }
-                              type="checkbox"
-                            />
-                            <span className="detail-version-label-text">{labelText}</span>
-                            <span
-                              aria-hidden="true"
-                              className="detail-version-checkmark"
-                              role="presentation"
-                            >
-                              ✓
-                            </span>
-                            <span className="detail-version-meta">{dateText}</span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="inline-actions wrap-mobile detail-version-row">
-                    {slots.map((slot) => {
-                      const isOriginal = slot.kind === 'original';
-                      const label = isOriginal ? '原文' : `续写 ${slot.index}`;
-                      const active = activeTabIndex === slot.index;
-                      return (
-                        <button
-                          className={active ? 'tab-chip active' : 'tab-chip'}
-                          key={isOriginal ? 'original' : slot.continuation.id}
-                          onClick={() => selectTab(slot.index)}
-                          type="button"
-                          title={
-                            isOriginal
-                              ? play.title
-                              : slot.continuation.summary || `续写 ${slot.index}`
-                          }
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : null}
-
             <div className="inline-actions wrap-mobile detail-switch-row">
               <button
                 className="button secondary"
@@ -704,129 +530,36 @@ export function PlayDetailPage() {
         </div>
       </div>
 
-      {isMultiSlot && flatView ? (
-        <section className="stack-gap-md detail-version-content-stack">
-          {flatVisibleSlots.map((slot) => {
-            const isOriginal = slot.kind === 'original';
-            const content = isOriginal ? slot.play.content : slot.continuation.content;
-            const summary = isOriginal ? slot.play.summary : slot.continuation.summary;
-            const heading = isOriginal ? '原文' : `续写 ${slot.index}`;
-            return (
-              <article
-                className="content-panel stack-gap-md detail-version-block current"
-                key={isOriginal ? 'original' : slot.continuation.id}
-              >
-                <div className="content-head wrap-mobile detail-content-head-with-derived">
-                  <div className="detail-content-head-title">
-                    <h3>{heading}</h3>
-                    {isOriginal ? (
-                      <button
-                        className="button secondary detail-edit-version-button"
-                        onClick={() => handleEditVersion(slot.play)}
-                        type="button"
-                      >
-                        修改
-                      </button>
-                    ) : (
-                      <button
-                        className="button secondary detail-edit-version-button"
-                        onClick={() => handleEditContinuation(slot.continuation)}
-                        type="button"
-                      >
-                        修改
-                      </button>
-                    )}
-                  </div>
-                  <div className="inline-actions">
-                    <span className="content-meta">约 {content.length} 字</span>
-                    <button
-                      aria-label="复制正文"
-                      className="icon-button"
-                      onClick={() => void handleCopy(content, '正文')}
-                      type="button"
-                      title="复制正文"
-                    >
-                      ⧉
-                    </button>
-                  </div>
-                </div>
-                {summary ? <p className="sub-copy plaza-card-summary">{summary}</p> : null}
-                <p className="play-detail-copy">{content}</p>
-              </article>
-            );
-          })}
-        </section>
-      ) : (
-        <article className="content-panel stack-gap-md">
-          <div className="content-head wrap-mobile detail-content-head-with-derived">
-            <div className="detail-content-head-title">
-              <h3>
-                {activeSlot && activeSlot.kind === 'continuation'
-                  ? `续写 ${activeSlot.index}`
-                  : '小剧场正文'}
-              </h3>
-              {activeSlot && activeSlot.kind === 'continuation' ? (
-                <button
-                  className="button secondary detail-edit-version-button"
-                  onClick={() => handleEditContinuation(activeSlot.continuation)}
-                  type="button"
-                >
-                  修改
-                </button>
-              ) : (
-                <button
-                  className="button secondary detail-edit-version-button"
-                  onClick={() => handleEditVersion(play)}
-                  type="button"
-                >
-                  修改
-                </button>
-              )}
-            </div>
-            <div className="inline-actions">
-              <span className="content-meta">
-                约{' '}
-                {activeSlot
-                  ? activeSlot.kind === 'continuation'
-                    ? activeSlot.continuation.content.length
-                    : activeSlot.play.content.length
-                  : play.content.length}{' '}
-                字
-              </span>
-              <button
-                aria-label="复制正文"
-                className="icon-button"
-                onClick={() =>
-                  void handleCopy(
-                    activeSlot
-                      ? activeSlot.kind === 'continuation'
-                        ? activeSlot.continuation.content
-                        : activeSlot.play.content
-                      : play.content,
-                    '正文',
-                  )
-                }
-                type="button"
-                title="复制正文"
-              >
-                ⧉
-              </button>
-            </div>
+      <article className="content-panel stack-gap-md">
+        <div className="content-head wrap-mobile detail-content-head-with-derived">
+          <div className="detail-content-head-title">
+            <h3>小剧场正文</h3>
+            <button
+              className="button secondary detail-edit-version-button"
+              onClick={() => handleEditVersion(play)}
+              type="button"
+            >
+              修改
+            </button>
           </div>
+          <div className="inline-actions">
+            <span className="content-meta">约 {play.content.length} 字</span>
+            <button
+              aria-label="复制正文"
+              className="icon-button"
+              onClick={() => void handleCopy(play.content, '正文')}
+              type="button"
+              title="复制正文"
+            >
+              ⧉
+            </button>
+          </div>
+        </div>
 
-          {activeSlot && activeSlot.kind === 'continuation' && activeSlot.continuation.summary ? (
-            <p className="sub-copy plaza-card-summary">{activeSlot.continuation.summary}</p>
-          ) : null}
+        {play.summary ? <p className="sub-copy plaza-card-summary">{play.summary}</p> : null}
 
-          <p className="play-detail-copy">
-            {activeSlot
-              ? activeSlot.kind === 'continuation'
-                ? activeSlot.continuation.content
-                : activeSlot.play.content
-              : play.content}
-          </p>
-        </article>
-      )}
+        <p className="play-detail-copy">{play.content}</p>
+      </article>
 
       {/* 续写区:与 repo 区平级,挂在小剧场正文下、repo 区之下。
        * 续写是扁平结构(没有回复链),只展示已通过条目,

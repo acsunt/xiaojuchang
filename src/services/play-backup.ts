@@ -1,4 +1,11 @@
-import { DEFAULT_CATEGORY, type Play, type PlayStatus, type Tag } from '../types/play';
+import {
+  DEFAULT_CATEGORY,
+  type Play,
+  type PlayStatus,
+  type Repo,
+  type RepoStatus,
+  type Tag,
+} from '../types/play';
 import { normalizeImportedSummary } from './play-text';
 import { createZipFromTextFiles, readZipTextFiles, type ZipTextFile } from './simple-zip';
 
@@ -28,6 +35,17 @@ const backupFileNameMap: Record<PlayStatus, string> = {
   rejected: 'rejected.txt',
   offline: 'offline.txt',
 };
+
+/* repo 备份文件:挂在压缩包根目录,与 4 个 play 状态文件平级。
+ * repo 自身只有 pending/approved/rejected 三种状态,
+ * 不存在 offline,这里沿用 plays 的 backupStatusOrder 做排序锚点。 */
+const REPO_FILE_PREFIX = 'repo-';
+const repoFileNameMap: Record<RepoStatus, string> = {
+  pending: `${REPO_FILE_PREFIX}pending.txt`,
+  approved: `${REPO_FILE_PREFIX}approved.txt`,
+  rejected: `${REPO_FILE_PREFIX}rejected.txt`,
+};
+const repoStatusOrder: RepoStatus[] = ['pending', 'approved', 'rejected'];
 
 const DEFAULT_BACKUP_ARCHIVE_NAME = '小剧场备份.zip';
 const DEFAULT_MERGED_BACKUP_ARCHIVE_NAME = '导出作者和分类.zip';
@@ -114,6 +132,51 @@ const makeBackupRecordText = (play: Play, options: BackupRecordTextOptions = {})
   ].join('\n');
 };
 
+/* repo 的标记头:与 plays 共享 ###,首行写「昵称 · 所属 playId」。
+ * 内容块跟 plays 完全一致的格式,以便后续若做导入也能复用 parseBackupText 流程。
+ * (注意:目前不做 repo 的导入解析,只负责导出。) */
+type RepoBackupRecordTextOptions = {
+  includeAttachedMeta?: boolean;
+};
+
+const makeRepoRecordText = (repo: Repo, options: RepoBackupRecordTextOptions = {}) => {
+  const { includeAttachedMeta = true } = options;
+  const reviewedAt = repo.reviewedAt?.trim() ?? '';
+  const reviewNote = repo.reviewNote?.trim() ?? '';
+  const status = repo.status;
+  const headerNickname = repo.nickname?.trim() || '匿名';
+
+  return [
+    `${MARKER_PREFIX}${headerNickname} · ${repo.playId}`,
+    ...(includeAttachedMeta
+      ? [
+          `${ID_PREFIX} ${escapeInlineValue(repo.id)}`,
+          `${STATUS_PREFIX} ${status}`,
+          `${CREATED_AT_PREFIX} ${escapeInlineValue(repo.createdAt)}`,
+          `${UPDATED_AT_PREFIX} ${escapeInlineValue(repo.updatedAt)}`,
+          `${REVIEWED_AT_PREFIX} ${escapeInlineValue(reviewedAt)}`,
+          `${REVIEW_NOTE_PREFIX} ${escapeInlineValue(reviewNote)}`,
+        ]
+      : []),
+    `${TITLE_PREFIX} ${escapeInlineValue(repo.playTitle ?? '')}`,
+    `${AUTHOR_PREFIX} ${escapeInlineValue(repo.playAuthorName ?? '')}`,
+    `${CATEGORY_PREFIX} ${escapeInlineValue(repo.playId)}`,
+    `${SUMMARY_PREFIX} ${escapeInlineValue(repo.replyToNickname ?? '')}`,
+    CONTENT_PREFIX,
+    repo.content,
+  ].join('\n');
+};
+
+const makeRepoFileText = (
+  status: RepoStatus,
+  repos: Repo[],
+  options: RepoBackupRecordTextOptions = {},
+) =>
+  repos
+    .filter((repo) => repo.status === status)
+    .map((repo) => makeRepoRecordText(repo, options))
+    .join('\n\n');
+
 const makeBackupFileText = (status: PlayStatus, plays: Play[]) =>
   plays
     .filter((play) => play.status === status)
@@ -135,7 +198,12 @@ const makeTagsFileText = (tags: Tag[]) =>
     )
     .join('\n\n');
 
-export const createBackupArchive = (plays: Play[], tags: Tag[] = []) => {
+export const createBackupArchive = (
+  plays: Play[],
+  tags: Tag[] = [],
+  options: { repos?: Repo[]; includeAttachedMeta?: boolean } = {},
+) => {
+  const { repos = [], includeAttachedMeta = true } = options;
   const files: ZipTextFile[] = [
     ...backupStatusOrder.map((status) => ({
       name: backupFileNameMap[status],
@@ -145,6 +213,12 @@ export const createBackupArchive = (plays: Play[], tags: Tag[] = []) => {
       name: TAGS_FILE_NAME,
       text: makeTagsFileText(tags),
     },
+    ...(repos.length > 0
+      ? repoStatusOrder.map((status) => ({
+          name: repoFileNameMap[status],
+          text: makeRepoFileText(status, repos, { includeAttachedMeta }),
+        }))
+      : []),
   ];
 
   return createZipFromTextFiles(files);
@@ -177,13 +251,62 @@ const makeGroupedTextFiles = (
       .join('\n\n'),
   }));
 
-export const createMergedBackupArchive = (plays: Play[], options: BackupRecordTextOptions = {}) => {
+const makeGroupedRepoTextFiles = (
+  folderName: string,
+  groups: Array<[string, Repo[]]>,
+  fallbackName: string,
+  options: RepoBackupRecordTextOptions = {},
+) =>
+  groups.map(([name, items]) => ({
+    name: `${folderName}/${safeBackupPathSegment(name, fallbackName)}.txt`,
+    text: [...items]
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+      .map((repo) => makeRepoRecordText(repo, options))
+      .join('\n\n'),
+  }));
+
+const groupReposBy = (repos: Repo[], getKey: (repo: Repo) => string) => {
+  const groups = new Map<string, Repo[]>();
+
+  repos.forEach((repo) => {
+    const key = getKey(repo);
+    groups.set(key, [...(groups.get(key) ?? []), repo]);
+  });
+
+  return [...groups.entries()].sort(([leftName], [rightName]) =>
+    leftName.localeCompare(rightName, 'zh-CN'),
+  );
+};
+
+export const createMergedBackupArchive = (
+  plays: Play[],
+  options: BackupRecordTextOptions & { repos?: Repo[] } = {},
+) => {
+  const { repos = [], includeAttachedMeta = true } = options;
   const authorGroups = groupPlaysBy(plays, (play) => play.authorName.trim() || '匿名');
   const categoryGroups = groupPlaysBy(plays, (play) => play.category?.trim() || DEFAULT_CATEGORY);
+
+  /* 「附带 repo」开启时,合并导出额外生成 authors/ + categories/ 两个 repo 文件夹。
+   * - authors/:按作者名分组(取所属 play 的作者),便于按人整理对应小剧场的所有回复;
+   * - categories/:按所属 play 的分类分组,便于按主题查看所有相关讨论。
+   * 注意:repo 的 authors/ 与 plays 的 authors/ 命名重叠,但内容是两份不同的 TXT,
+   * 所以把 repo 文件夹改名为 authors-repo/ 和 categories-repo/ 避免解压时互相覆盖。 */
+  const repoAuthorGroups = groupReposBy(repos, (repo) => repo.playAuthorName?.trim() || '匿名');
+  const repoCategoryGroups = groupReposBy(repos, (repo) => repo.playId || '未关联');
 
   return createZipFromTextFiles([
     ...makeGroupedTextFiles('authors', authorGroups, '匿名', options),
     ...makeGroupedTextFiles('categories', categoryGroups, DEFAULT_CATEGORY, options),
+    ...(repos.length > 0
+      ? [
+          ...makeGroupedRepoTextFiles('authors-repo', repoAuthorGroups, '匿名', {
+            includeAttachedMeta,
+          }),
+          ...makeGroupedRepoTextFiles('categories-repo', repoCategoryGroups, '未关联', {
+            includeAttachedMeta,
+          }),
+        ]
+      : []),
   ]);
 };
 
@@ -334,8 +457,12 @@ export const parseBackupArchive = async (file: Blob) => {
 export const flattenBackupArchive = (archive: Record<PlayStatus, Play[]>) =>
   backupStatusOrder.flatMap((status) => archive[status]);
 
-export const downloadBackupArchive = (plays: Play[], tags: Tag[] = []) => {
-  const archive = createBackupArchive(plays, tags);
+export const downloadBackupArchive = (
+  plays: Play[],
+  tags: Tag[] = [],
+  options: { repos?: Repo[]; includeAttachedMeta?: boolean } = {},
+) => {
+  const archive = createBackupArchive(plays, tags, options);
   const url = URL.createObjectURL(archive);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -346,7 +473,7 @@ export const downloadBackupArchive = (plays: Play[], tags: Tag[] = []) => {
 
 export const downloadMergedBackupArchive = (
   plays: Play[],
-  options: BackupRecordTextOptions = {},
+  options: BackupRecordTextOptions & { repos?: Repo[] } = {},
 ) => {
   const archive = createMergedBackupArchive(plays, options);
   const url = URL.createObjectURL(archive);
