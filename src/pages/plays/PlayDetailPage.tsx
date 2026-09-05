@@ -30,13 +30,6 @@ import {
 
 import { RepoMarkdown } from '../repos/RepoMarkdown';
 
-import {
-  buildPlayVersionGroups,
-  getPlayVersionKey,
-  getPlayVersionLabel,
-  sortPlayVersions,
-} from './play-versions';
-
 import { showFloatingToast } from '../../components/floating-toast-store';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
@@ -84,8 +77,6 @@ export function PlayDetailPage() {
 
   const [play, setPlay] = useState<Play | null>(null);
 
-  const [versionPlays, setVersionPlays] = useState<Play[]>([]);
-
   const [loading, setLoading] = useState(true);
 
   const [error, setError] = useState('');
@@ -129,24 +120,29 @@ export function PlayDetailPage() {
 
   const [repoSubmitting, setRepoSubmitting] = useState(false);
 
-  /* 详情页衍生版本"平铺"开关（持久化到 localStorage）
+  /* 详情页正文/续写"平铺"开关（持久化到 localStorage）
    * - 默认关闭：保持原来的 tab-chip 单选切换
-   * - 开启后：版本以 checkbox 列表平铺，可多选显示
-   * 同步状态被勾选的版本 id 集合（按 getPlayVersionKey 分组） */
+   * - 开启后：以 checkbox 列表平铺,可多选同时查看多个续写
+   * 同步状态被勾选的续写 id 集合。
+   *
+   * 列表命名:
+   * - 不平铺(tab-chip):"原文 / 续写 1 / 续写 2"
+   * - 平铺(checkbox):"原文 / [每条续写的简介]" */
   const [flatView, setFlatView] = useState(() => getDetailFlatView());
-  const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
-  const versionGroupKey = play ? getPlayVersionKey(play) : '';
+  const [selectedContinuationIds, setSelectedContinuationIds] = useState<string[]>([]);
+  /* tab-chip 模式下当前选中的 tab 索引,0 = 原文,1..N = 续写列表顺序 */
+  const [activeTabIndex, setActiveTabIndex] = useState(0);
+  const continuationGroupKey = play ? `cont-${play.id}` : '';
 
   useEffect(() => {
-    if (!versionGroupKey || versionPlays.length === 0) {
+    if (!continuationGroupKey || continuations.length === 0) {
       return;
     }
-    const candidateIds = versionPlays.map((item) => item.id);
-    const stored = getDetailVersionSelection(versionGroupKey, id, candidateIds);
-    setSelectedVersionIds(stored);
-    // 只在版本组/候选集变化时重新读一次，避免勾选时循环
+    const candidateIds = continuations.map((item) => item.id);
+    const stored = getDetailVersionSelection(continuationGroupKey, id, candidateIds);
+    setSelectedContinuationIds(stored);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [versionGroupKey, versionPlays.map((item) => item.id).join('|')]);
+  }, [continuationGroupKey, continuations.map((item) => item.id).join('|')]);
 
   const toggleFlatView = () => {
     setFlatView((current) => {
@@ -156,19 +152,15 @@ export function PlayDetailPage() {
     });
   };
 
-  const toggleVersionSelection = (versionId: string) => {
-    if (!versionGroupKey) {
+  const toggleContinuationSelection = (continuationId: string) => {
+    if (!continuationGroupKey) {
       return;
     }
-    const next = selectedVersionIds.includes(versionId)
-      ? selectedVersionIds.filter((item) => item !== versionId)
-      : [...selectedVersionIds, versionId];
-    // 当前 url 指向的版本不能被取消（避免分享链接打开看不到正文）
-    if (versionId === id && next.length === 0) {
-      return;
-    }
-    setSelectedVersionIds(next);
-    setDetailVersionSelection(versionGroupKey, next);
+    const next = selectedContinuationIds.includes(continuationId)
+      ? selectedContinuationIds.filter((item) => item !== continuationId)
+      : [...selectedContinuationIds, continuationId];
+    setSelectedContinuationIds(next);
+    setDetailVersionSelection(continuationGroupKey, next);
   };
 
   const visitorId = useMemo(() => getVisitorId(), []);
@@ -203,21 +195,12 @@ export function PlayDetailPage() {
 
       const source = filteredSource.length > 0 ? filteredSource : cachedPlays;
 
-      const groups = buildPlayVersionGroups(source);
-
-      const currentKey = getPlayVersionKey(play);
-
-      const currentGroupIndex = groups.findIndex((group) => group.id === currentKey);
-
-      const representativeIds = groups.map((group, index) =>
-        index === currentGroupIndex ? play.id : group.plays[0].id,
-      );
-
-      if (currentGroupIndex >= 0) {
-        return representativeIds;
+      /* 同标题/分类版本不再合并:导航直接按播放顺序在所有 plays 间切换。 */
+      const allIds = source.map((item) => item.id);
+      if (allIds.includes(play.id)) {
+        return allIds;
       }
-
-      return [play.id, ...representativeIds];
+      return [play.id, ...allIds];
     }
 
     if (plazaSnapshot?.filteredPlayIds?.length) {
@@ -248,8 +231,6 @@ export function PlayDetailPage() {
 
     setPlay(cachedPlay ?? null);
 
-    setVersionPlays(cachedPlay ? [cachedPlay] : []);
-
     setLoading(!cachedPlay);
 
     setError('');
@@ -264,20 +245,6 @@ export function PlayDetailPage() {
         }
 
         setPlay(item);
-
-        const cachedVersions = getCachedPublicPlays().filter(
-          (target) => getPlayVersionKey(target) === getPlayVersionKey(item),
-        );
-
-        setVersionPlays(sortPlayVersions(cachedVersions.length > 0 ? cachedVersions : [item]));
-
-        return playApi.getPublicPlays().then((items) => {
-          setVersionPlays(
-            sortPlayVersions(
-              items.filter((target) => getPlayVersionKey(target) === getPlayVersionKey(item)),
-            ),
-          );
-        });
       })
 
       .catch((reason) => setError(reason instanceof Error ? reason.message : '加载失败'))
@@ -332,16 +299,16 @@ export function PlayDetailPage() {
     });
   };
 
-  const openVersionPlay = (target: Play) => {
-    updatePlazaNavigationSnapshot({ anchorPlayId: target.id });
-
-    const preservedSearch = plazaPanel === 'continuations' ? '?panel=continuations' : '';
-
-    navigate(`/plays/${target.id}${preservedSearch}`, {
-      state: {
-        playSnapshot: target,
-      },
-    });
+  /* tab-chip 模式下点击"原文 / 续写 N"标签切换主正文区域显示的内容。
+   * - 索引 0 表示原文,1..N 表示 continuations 顺序对应的续写。
+   * - 平铺模式下由 checkbox 控制,不调用本函数。 */
+  const selectTab = (index: number) => {
+    setActiveTabIndex(Math.max(0, index));
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      });
+    }
   };
 
   /* 续写 composer:打开/关闭 helper,跟 repoComposerOpen 行为对齐 */
@@ -512,13 +479,41 @@ export function PlayDetailPage() {
     };
   }, [repoComposerOpen]);
 
-  const versionItems = versionPlays.length > 0 ? versionPlays : play ? [play] : [];
-  const isMultiVersion = versionItems.length > 1;
-  /* 平铺开启时：按勾选集合渲染（当前 url 指向的版本永远保留）。 */
-  const visibleVersionItems =
-    isMultiVersion && flatView
-      ? versionItems.filter((item) => selectedVersionIds.includes(item.id) || item.id === id)
-      : versionItems;
+  /* 详情页正文区域按"原文 + 续写"组合:
+   * - 索引 0 = 原文 play(永远存在)
+   * - 索引 1..N = 当前 play 的续写列表(按当前排序的 continuations 顺序)
+   * 用统一类型让 tab-chip 切换 / 平铺 checkbox 共享同一份数据。 */
+  type DetailSlot =
+    | { kind: 'original'; index: 0; play: Play; continuation?: undefined }
+    | {
+        kind: 'continuation';
+        index: number;
+        continuation: Continuation;
+        play?: undefined;
+      };
+
+  const slots: DetailSlot[] = play
+    ? [
+        { kind: 'original', index: 0, play },
+        ...continuations.map((continuation, idx): DetailSlot => ({
+          kind: 'continuation',
+          index: idx + 1,
+          continuation,
+        })),
+      ]
+    : [];
+
+  const isMultiSlot = slots.length > 1;
+  /* tab-chip 模式下:渲染 activeTabIndex 对应那条;
+   * 平铺模式下:始终渲染原文 + 勾选的续写(原文不可取消)。 */
+  const activeSlot = slots[Math.min(activeTabIndex, Math.max(0, slots.length - 1))];
+  const flatVisibleSlots =
+    isMultiSlot && flatView
+      ? slots.filter((slot) => {
+          if (slot.kind === 'original') return true;
+          return selectedContinuationIds.includes(slot.continuation.id);
+        })
+      : slots;
 
   /* 上传衍生：跳到 /upload 单篇模式。
    * - 原文填进主表单；已有衍生版本按顺序回填到衍生块；
@@ -562,8 +557,10 @@ export function PlayDetailPage() {
     <section className="stack-gap-lg">
       <div className="detail-panel detail-hero-grid">
         <div className="stack-gap-md">
-          <div className="card-topline wrap-mobile">
-            <span>{play.category || DEFAULT_CATEGORY}</span>
+          {/* 第一行:分类 + 作者同行,均带小剧场列表风格图标(◈ 分类 / ✎ 作者) */}
+          <div className="card-topline wrap-mobile align-start detail-meta-first-row">
+            <span className="compact-meta-item">◈ {play.category || DEFAULT_CATEGORY}</span>
+            <span className="compact-meta-item">✎ {play.authorName}</span>
           </div>
 
           <div className="title-row detail-title-row">
@@ -588,8 +585,6 @@ export function PlayDetailPage() {
 
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
-              <span className="meta-row-author">✎ {play.authorName}</span>
-
               <span>
                 {plazaSnapshot?.activeTimeField === 'createdAt'
                   ? `上传时间 ${formatDate(play.createdAt)}`
@@ -597,10 +592,10 @@ export function PlayDetailPage() {
               </span>
             </div>
 
-            {versionItems.length > 1 ? (
+            {isMultiSlot ? (
               <div className="detail-version-panel">
                 <div className="detail-version-head">
-                  <span className="content-meta">同标题/分类版本</span>
+                  <span className="content-meta">原文 / 续写</span>
                   <label className="detail-version-flat-toggle">
                     <input checked={flatView} onChange={toggleFlatView} type="checkbox" />
                     <span>平铺</span>
@@ -609,30 +604,45 @@ export function PlayDetailPage() {
 
                 {flatView ? (
                   <ul className="detail-version-list">
-                    {versionItems.map((item, index) => {
-                      const checked = selectedVersionIds.includes(item.id) || item.id === id;
-                      const isCurrent = item.id === id;
+                    {slots.map((slot) => {
+                      const isOriginal = slot.kind === 'original';
+                      const checked = isOriginal
+                        ? true
+                        : selectedContinuationIds.includes(slot.continuation.id);
+                      const labelText = isOriginal
+                        ? '原文'
+                        : `✦ ${slot.continuation.summary || '无简介'}`;
+                      const labelKey = isOriginal ? 'original' : slot.continuation.id;
+                      const dateText = isOriginal
+                        ? formatDate(play.updatedAt)
+                        : formatDate(slot.continuation.updatedAt);
                       return (
-                        <li className="detail-version-item" key={item.id}>
+                        <li className="detail-version-item" key={labelKey}>
                           <label
                             className={
                               checked
                                 ? 'detail-version-row-label checked'
                                 : 'detail-version-row-label'
                             }
+                            title={labelText}
                           >
                             <input
                               checked={checked}
-                              disabled={isCurrent}
-                              onChange={() => toggleVersionSelection(item.id)}
+                              disabled={isOriginal}
+                              onChange={() =>
+                                !isOriginal && toggleContinuationSelection(slot.continuation.id)
+                              }
                               type="checkbox"
                             />
-                            <span className="detail-version-label-text">
-                              {getPlayVersionLabel(index)}
+                            <span className="detail-version-label-text">{labelText}</span>
+                            <span
+                              aria-hidden="true"
+                              className="detail-version-checkmark"
+                              role="presentation"
+                            >
+                              ✓
                             </span>
-                            <span className="detail-version-meta">
-                              {formatDate(item.updatedAt)}
-                            </span>
+                            <span className="detail-version-meta">{dateText}</span>
                           </label>
                         </li>
                       );
@@ -640,16 +650,26 @@ export function PlayDetailPage() {
                   </ul>
                 ) : (
                   <div className="inline-actions wrap-mobile detail-version-row">
-                    {versionItems.map((item, index) => (
-                      <button
-                        className={item.id === play.id ? 'tab-chip active' : 'tab-chip'}
-                        key={item.id}
-                        onClick={() => openVersionPlay(item)}
-                        type="button"
-                      >
-                        {getPlayVersionLabel(index)}
-                      </button>
-                    ))}
+                    {slots.map((slot) => {
+                      const isOriginal = slot.kind === 'original';
+                      const label = isOriginal ? '原文' : `续写 ${slot.index}`;
+                      const active = activeTabIndex === slot.index;
+                      return (
+                        <button
+                          className={active ? 'tab-chip active' : 'tab-chip'}
+                          key={isOriginal ? 'original' : slot.continuation.id}
+                          onClick={() => selectTab(slot.index)}
+                          type="button"
+                          title={
+                            isOriginal
+                              ? play.title
+                              : slot.continuation.summary || `续写 ${slot.index}`
+                          }
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -684,40 +704,45 @@ export function PlayDetailPage() {
         </div>
       </div>
 
-      {isMultiVersion && flatView ? (
+      {isMultiSlot && flatView ? (
         <section className="stack-gap-md detail-version-content-stack">
-          {visibleVersionItems.map((item) => {
-            const versionIndex = versionItems.findIndex((row) => row.id === item.id);
-            const isCurrent = item.id === id;
+          {flatVisibleSlots.map((slot) => {
+            const isOriginal = slot.kind === 'original';
+            const content = isOriginal ? slot.play.content : slot.continuation.content;
+            const summary = isOriginal ? slot.play.summary : slot.continuation.summary;
+            const heading = isOriginal ? '原文' : `续写 ${slot.index}`;
             return (
               <article
-                className={
-                  isCurrent
-                    ? 'content-panel stack-gap-md detail-version-block current'
-                    : 'content-panel stack-gap-md detail-version-block'
-                }
-                key={item.id}
+                className="content-panel stack-gap-md detail-version-block current"
+                key={isOriginal ? 'original' : slot.continuation.id}
               >
                 <div className="content-head wrap-mobile detail-content-head-with-derived">
                   <div className="detail-content-head-title">
-                    <h3>
-                      {getPlayVersionLabel(versionIndex >= 0 ? versionIndex : 0)}
-                      {isCurrent ? '（当前查看）' : ''}
-                    </h3>
-                    <button
-                      className="button secondary detail-edit-version-button"
-                      onClick={() => handleEditVersion(item)}
-                      type="button"
-                    >
-                      修改
-                    </button>
+                    <h3>{heading}</h3>
+                    {isOriginal ? (
+                      <button
+                        className="button secondary detail-edit-version-button"
+                        onClick={() => handleEditVersion(slot.play)}
+                        type="button"
+                      >
+                        修改
+                      </button>
+                    ) : (
+                      <button
+                        className="button secondary detail-edit-version-button"
+                        onClick={() => handleEditContinuation(slot.continuation)}
+                        type="button"
+                      >
+                        修改
+                      </button>
+                    )}
                   </div>
                   <div className="inline-actions">
-                    <span className="content-meta">约 {item.content.length} 字</span>
+                    <span className="content-meta">约 {content.length} 字</span>
                     <button
                       aria-label="复制正文"
                       className="icon-button"
-                      onClick={() => void handleCopy(item.content, '正文')}
+                      onClick={() => void handleCopy(content, '正文')}
                       type="button"
                       title="复制正文"
                     >
@@ -725,7 +750,8 @@ export function PlayDetailPage() {
                     </button>
                   </div>
                 </div>
-                <p className="play-detail-copy">{item.content}</p>
+                {summary ? <p className="sub-copy plaza-card-summary">{summary}</p> : null}
+                <p className="play-detail-copy">{content}</p>
               </article>
             );
           })}
@@ -734,21 +760,52 @@ export function PlayDetailPage() {
         <article className="content-panel stack-gap-md">
           <div className="content-head wrap-mobile detail-content-head-with-derived">
             <div className="detail-content-head-title">
-              <h3>小剧场正文</h3>
-              <button
-                className="button secondary detail-edit-version-button"
-                onClick={() => handleEditVersion(play)}
-                type="button"
-              >
-                修改
-              </button>
+              <h3>
+                {activeSlot && activeSlot.kind === 'continuation'
+                  ? `续写 ${activeSlot.index}`
+                  : '小剧场正文'}
+              </h3>
+              {activeSlot && activeSlot.kind === 'continuation' ? (
+                <button
+                  className="button secondary detail-edit-version-button"
+                  onClick={() => handleEditContinuation(activeSlot.continuation)}
+                  type="button"
+                >
+                  修改
+                </button>
+              ) : (
+                <button
+                  className="button secondary detail-edit-version-button"
+                  onClick={() => handleEditVersion(play)}
+                  type="button"
+                >
+                  修改
+                </button>
+              )}
             </div>
             <div className="inline-actions">
-              <span className="content-meta">约 {play.content.length} 字</span>
+              <span className="content-meta">
+                约{' '}
+                {activeSlot
+                  ? activeSlot.kind === 'continuation'
+                    ? activeSlot.continuation.content.length
+                    : activeSlot.play.content.length
+                  : play.content.length}{' '}
+                字
+              </span>
               <button
                 aria-label="复制正文"
                 className="icon-button"
-                onClick={() => void handleCopy(play.content, '正文')}
+                onClick={() =>
+                  void handleCopy(
+                    activeSlot
+                      ? activeSlot.kind === 'continuation'
+                        ? activeSlot.continuation.content
+                        : activeSlot.play.content
+                      : play.content,
+                    '正文',
+                  )
+                }
                 type="button"
                 title="复制正文"
               >
@@ -757,7 +814,17 @@ export function PlayDetailPage() {
             </div>
           </div>
 
-          <p className="play-detail-copy">{play.content}</p>
+          {activeSlot && activeSlot.kind === 'continuation' && activeSlot.continuation.summary ? (
+            <p className="sub-copy plaza-card-summary">{activeSlot.continuation.summary}</p>
+          ) : null}
+
+          <p className="play-detail-copy">
+            {activeSlot
+              ? activeSlot.kind === 'continuation'
+                ? activeSlot.continuation.content
+                : activeSlot.play.content
+              : play.content}
+          </p>
         </article>
       )}
 

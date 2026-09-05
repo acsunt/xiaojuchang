@@ -1509,13 +1509,28 @@ export function AdminReviewPage() {
   useEffect(() => {
     setSelectedContinuationId('');
   }, [activePanel, selectedContinuationStatus]);
-  /* 选中条目变化时把编辑草稿初始化为它的当前内容/简介/作者/备注。 */
+  /* 选中条目变化时把编辑草稿初始化为它的当前内容/简介/作者/备注。
+   *
+   * 当这条续写有 pending_draft_*(作者最近修改过,待审核)时,
+   * 把草稿初始化到 draft 字段(管理员审核的目标就是 draft),
+   * 游客看到的「原内容」则保留在主字段 / lastApproved_*,详情页继续展示。
+   * 这样管理员进入这条卡片后,所见即所审;通过 / 拒绝按 draft 进行。 */
   useEffect(() => {
     if (adminSelectedContinuation) {
+      const hasDraft =
+        (adminSelectedContinuation.pendingDraftContent ?? '').trim().length > 0 ||
+        (adminSelectedContinuation.pendingDraftSummary ?? '').trim().length > 0 ||
+        (adminSelectedContinuation.pendingDraftNickname ?? '').trim().length > 0;
       setContinuationEditDraft({
-        summary: adminSelectedContinuation.summary,
-        content: adminSelectedContinuation.content,
-        nickname: adminSelectedContinuation.nickname,
+        summary: hasDraft
+          ? (adminSelectedContinuation.pendingDraftSummary ?? adminSelectedContinuation.summary)
+          : adminSelectedContinuation.summary,
+        content: hasDraft
+          ? (adminSelectedContinuation.pendingDraftContent ?? adminSelectedContinuation.content)
+          : adminSelectedContinuation.content,
+        nickname: hasDraft
+          ? (adminSelectedContinuation.pendingDraftNickname ?? adminSelectedContinuation.nickname)
+          : adminSelectedContinuation.nickname,
         note: '',
       });
       /* 切换到另一条续写时清空「本次审核备注」,避免上一条备注混到新一条。 */
@@ -4840,33 +4855,111 @@ export function AdminReviewPage() {
                   >
                     {adminViewMode !== 'edit' ? (
                       <div className="detail-panel stack-gap-md admin-review-detail-preview">
-                        <div className="card-topline">
-                          <span className={`status-tag ${adminSelectedContinuation.status}`}>
-                            {continuationStatusLabelMap[adminSelectedContinuation.status]}
-                          </span>
-                          <span>
-                            《
-                            {adminSelectedContinuation.playTitle ??
-                              adminSelectedContinuation.playId}
-                            》
-                          </span>
-                        </div>
-                        <div className="preview-section-header">
-                          <strong>{adminSelectedContinuation.nickname?.trim() || '匿名'}</strong>
-                          <span className="content-meta">
-                            {new Date(adminSelectedContinuation.createdAt).toLocaleString('zh-CN')}
-                          </span>
-                        </div>
-                        <div className="inline-detail-block stack-gap-md preview-content-block">
-                          <div className="preview-section-header">
-                            <span className="content-meta plaza-card-summary continuation-preview-summary">
-                              {adminSelectedContinuation.summary}
-                            </span>
-                          </div>
-                          <p className="admin-review-detail-content">
-                            {adminSelectedContinuation.content}
-                          </p>
-                        </div>
+                        {adminSelectedContinuation.status === 'approved' &&
+                        adminSelectedContinuation.pendingDraftContent ? (
+                          /* 作者编辑后的修订:主区域展示「待审核修订」内容,
+                           * 下面追加「原已通过版本」对照,让管理员清楚改了什么 */
+                          <>
+                            <div className="card-topline">
+                              <span className="status-tag pending">待审核</span>
+                              <span>
+                                《
+                                {adminSelectedContinuation.playTitle ??
+                                  adminSelectedContinuation.playId}
+                                》
+                              </span>
+                            </div>
+                            <div className="preview-section-header">
+                              <strong>
+                                {adminSelectedContinuation.pendingDraftNickname?.trim() ||
+                                  adminSelectedContinuation.nickname?.trim() ||
+                                  '匿名'}
+                              </strong>
+                              <span className="content-meta">
+                                待审核修订 ·{' '}
+                                {adminSelectedContinuation.pendingDraftUpdatedAt
+                                  ? new Date(
+                                      adminSelectedContinuation.pendingDraftUpdatedAt,
+                                    ).toLocaleString('zh-CN')
+                                  : ''}
+                              </span>
+                            </div>
+                            <div className="inline-detail-block stack-gap-md preview-content-block">
+                              <div className="preview-section-header">
+                                <span className="content-meta plaza-card-summary continuation-preview-summary">
+                                  {adminSelectedContinuation.pendingDraftSummary}
+                                </span>
+                              </div>
+                              <p className="admin-review-detail-content">
+                                {adminSelectedContinuation.pendingDraftContent}
+                              </p>
+                            </div>
+                            <div className="continuation-revision-banner" role="note">
+                              作者后续修订,待你审核。原已通过版本继续对游客可见,本面板按你的选择覆盖或保留。
+                            </div>
+                            {adminSelectedContinuation.lastApprovedContent ? (
+                              <details className="continuation-prev-approved">
+                                <summary>查看原已通过版本</summary>
+                                <div className="preview-section-header">
+                                  <strong>
+                                    {adminSelectedContinuation.lastApprovedNickname?.trim() ||
+                                      '匿名'}
+                                  </strong>
+                                  <span className="content-meta">
+                                    原已通过 ·{' '}
+                                    {adminSelectedContinuation.lastApprovedAt
+                                      ? new Date(
+                                          adminSelectedContinuation.lastApprovedAt,
+                                        ).toLocaleString('zh-CN')
+                                      : ''}
+                                  </span>
+                                </div>
+                                <div className="inline-detail-block stack-gap-md preview-content-block">
+                                  <span className="content-meta plaza-card-summary continuation-preview-summary">
+                                    {adminSelectedContinuation.lastApprovedSummary}
+                                  </span>
+                                  <p className="admin-review-detail-content">
+                                    {adminSelectedContinuation.lastApprovedContent}
+                                  </p>
+                                </div>
+                              </details>
+                            ) : null}
+                          </>
+                        ) : (
+                          <>
+                            <div className="card-topline">
+                              <span className={`status-tag ${adminSelectedContinuation.status}`}>
+                                {continuationStatusLabelMap[adminSelectedContinuation.status]}
+                              </span>
+                              <span>
+                                《
+                                {adminSelectedContinuation.playTitle ??
+                                  adminSelectedContinuation.playId}
+                                》
+                              </span>
+                            </div>
+                            <div className="preview-section-header">
+                              <strong>
+                                {adminSelectedContinuation.nickname?.trim() || '匿名'}
+                              </strong>
+                              <span className="content-meta">
+                                {new Date(adminSelectedContinuation.createdAt).toLocaleString(
+                                  'zh-CN',
+                                )}
+                              </span>
+                            </div>
+                            <div className="inline-detail-block stack-gap-md preview-content-block">
+                              <div className="preview-section-header">
+                                <span className="content-meta plaza-card-summary continuation-preview-summary">
+                                  {adminSelectedContinuation.summary}
+                                </span>
+                              </div>
+                              <p className="admin-review-detail-content">
+                                {adminSelectedContinuation.content}
+                              </p>
+                            </div>
+                          </>
+                        )}
                         {adminSelectedContinuation.reviewNote ? (
                           <p className="sub-copy">
                             审核备注：{adminSelectedContinuation.reviewNote}

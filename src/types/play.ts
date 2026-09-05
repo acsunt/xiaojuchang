@@ -131,21 +131,28 @@ export type Continuation = {
   reviewNote?: string;
   playTitle?: string;
   playAuthorName?: string;
-  /* 作者最近一次编辑前已通过的版本快照。
-   * 用户编辑后,状态回到 pending/rejected,详情页继续展示这一份「旧版已通过」内容,
-   * 等下次重新审核通过再覆盖回主字段。 */
+  /* 上一次通过时的主字段快照(被作者编辑走 pending_draft 流程,
+   * 旧值留在这里,审核通过时再覆盖回主字段)。 */
   lastApprovedNickname?: string;
   lastApprovedSummary?: string;
   lastApprovedContent?: string;
   lastApprovedAt?: string;
-  /* 软删除标记:删除时不再真删,而是写一个时间戳。
-   * 详情页仍展示 lastApproved 旧版内容(因为被删的是新版修订),
-   * admin 后台可以继续看到这条记录并真实删除(目前未实现彻底硬删,
-   * 默认保留以便审核追溯)。 */
+  /* 作者最近一次编辑后还没通过的内容。状态字段(status)经过
+   * normalize 会被转换为 'pending'(实际数据库里仍是 'approved'),
+   * 详情页主字段展示原内容并加「本条后续修订等待审核」标签。 */
+  pendingDraftNickname?: string;
+  pendingDraftSummary?: string;
+  pendingDraftContent?: string;
+  pendingDraftUpdatedAt?: string;
+  /* 软删除标记:删除时不再真删,而是写一个时间戳,
+   * 详情页 listApprovedContinuationsByPlayId 已过滤 deleted_at IS NULL,
+   * 管理员后台仍可继续看到这条记录并真实删除(目前仅软删除)。 */
   deletedAt?: string;
-  /* mock-db 内部使用:详情页展示时,如果当前 status 不是 approved,
-   * 会被 mock-db 重定向到 lastApproved*,同时把真实 status 写到这里,
-   * 前端可以选择展示一个小标签(例如「本条后续修订暂未发布」)。 */
+  /* mock-db / 后端 normalize 计算结果:详情页展示用的 status。
+   * 与数据库 status 字段不同的点:
+   * - 数据库 status='approved' 但有 pending_draft_* 时,这里显示 'pending',
+   *   提示读者「本条后续修订暂未发布」,主字段仍是原 approved 内容。
+   * 其它情况下与数据库 status 一致。 */
   _displayStatus?: ContinuationStatus;
 };
 

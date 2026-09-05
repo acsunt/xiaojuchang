@@ -113,6 +113,23 @@ export type ContinuationRecord = {
   reviewNote?: string;
   playTitle?: string;
   playAuthorName?: string;
+  /* 上一次通过时的主字段备份(被作者编辑走 pending_draft 流程,
+   * 旧值会留在这里;admin review 通过时再覆盖为新值)。 */
+  lastApprovedNickname?: string;
+  lastApprovedSummary?: string;
+  lastApprovedContent?: string;
+  lastApprovedAt?: string;
+  /* 作者最近一次编辑还没通过的内容;非空时 status 仍是 approved,
+   * 详情页继续展示主字段,前端根据 status 字段(经过 normalize 转换)
+   * 给出「本条后续修订等待审核」提示。 */
+  pendingDraftNickname?: string;
+  pendingDraftSummary?: string;
+  pendingDraftContent?: string;
+  pendingDraftUpdatedAt?: string;
+  /* 软删除:管理员删除续写时不再真删,只写一个时间戳,
+   * 游客侧 listApprovedContinuationsByPlayId 会过滤掉,
+   * 管理员后台仍可看到。 */
+  deletedAt?: string;
 };
 
 /* 续写审核日志,结构与 RepoAuditLogRecord 对齐但只支持 approve/reject/edit/delete
@@ -264,24 +281,78 @@ export const parseContinuationReviewAction = (value: unknown): ContinuationRevie
     : null;
 };
 
-export const normalizeContinuation = (row: Record<string, unknown>): ContinuationRecord => ({
-  id: String(row.id),
-  playId: String(row.play_id),
-  /* nickname 在落库时统一写为「空字符串 = 匿名」,这里直接返回字符串,
-   * 前端按是否非空决定是否展示署名。后台管理员视图统一把空字符串
-   * 渲染为「匿名」。 */
-  nickname: row.nickname ? String(row.nickname) : '',
-  visitorId: String(row.visitor_id),
-  summary: String(row.summary ?? ''),
-  content: String(row.content),
-  status: String(row.status) as ContinuationStatus,
-  createdAt: String(row.created_at),
-  updatedAt: String(row.updated_at),
-  reviewedAt: row.reviewed_at ? String(row.reviewed_at) : undefined,
-  reviewNote: row.review_note ? String(row.review_note) : undefined,
-  playTitle: row.play_title ? String(row.play_title) : undefined,
-  playAuthorName: row.play_author_name ? String(row.play_author_name) : undefined,
-});
+export const normalizeContinuation = (row: Record<string, unknown>): ContinuationRecord => {
+  const id = String(row.id);
+  const nickname = row.nickname ? String(row.nickname) : '';
+  const summary = String(row.summary ?? '');
+  const content = String(row.content);
+  const status = String(row.status) as ContinuationStatus;
+  const lastApprovedContent = row.last_approved_content
+    ? String(row.last_approved_content)
+    : undefined;
+  const lastApprovedSummary = row.last_approved_summary
+    ? String(row.last_approved_summary)
+    : undefined;
+  const lastApprovedNickname =
+    row.last_approved_nickname !== undefined && row.last_approved_nickname !== null
+      ? String(row.last_approved_nickname)
+      : undefined;
+  const lastApprovedAt = row.last_approved_at ? String(row.last_approved_at) : undefined;
+  const pendingDraftNickname =
+    row.pending_draft_nickname !== undefined && row.pending_draft_nickname !== null
+      ? String(row.pending_draft_nickname)
+      : undefined;
+  const pendingDraftSummary = row.pending_draft_summary
+    ? String(row.pending_draft_summary)
+    : undefined;
+  const pendingDraftContent = row.pending_draft_content
+    ? String(row.pending_draft_content)
+    : undefined;
+  const pendingDraftUpdatedAt = row.pending_draft_updated_at
+    ? String(row.pending_draft_updated_at)
+    : undefined;
+  const deletedAt = row.deleted_at ? String(row.deleted_at) : undefined;
+
+  /* _displayStatus:详情页需要知道「这条记录现在对外展示,但内部
+   * 有一条待审核修订」。约定:
+   * - status='approved' 且 pending_draft_content 非空 → 'pending'
+   *   (主字段继续展示,前端渲染「本条后续修订等待审核」)
+   * - 否则:与 status 保持一致
+   *
+   * 这里把 _displayStatus 设为可索引的字段,值与 ContinuationStatus 同型,
+   * 前端按 _displayStatus === 'pending' / 'rejected' 给提示。 */
+  const hasPendingDraft =
+    (pendingDraftContent ?? '').trim().length > 0 ||
+    (pendingDraftSummary ?? '').trim().length > 0 ||
+    (pendingDraftNickname ?? '').trim().length > 0;
+  const displayStatus: ContinuationStatus =
+    status === 'approved' && hasPendingDraft ? 'pending' : status;
+
+  return {
+    id,
+    playId: String(row.play_id),
+    nickname,
+    visitorId: String(row.visitor_id),
+    summary,
+    content,
+    status: displayStatus,
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : undefined,
+    reviewNote: row.review_note ? String(row.review_note) : undefined,
+    playTitle: row.play_title ? String(row.play_title) : undefined,
+    playAuthorName: row.play_author_name ? String(row.play_author_name) : undefined,
+    lastApprovedNickname,
+    lastApprovedSummary,
+    lastApprovedContent,
+    lastApprovedAt,
+    pendingDraftNickname,
+    pendingDraftSummary,
+    pendingDraftContent,
+    pendingDraftUpdatedAt,
+    deletedAt,
+  };
+};
 
 export const normalizeContinuationAuditLog = (
   row: Record<string, unknown>,

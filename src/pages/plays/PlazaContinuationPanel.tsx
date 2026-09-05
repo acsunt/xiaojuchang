@@ -82,19 +82,15 @@ export function PlazaContinuationPanel({
               role="link"
               tabIndex={0}
             >
-              {/* 顶部细线:分类 + 续写徽标(同 play-card 的 card-topline 一致) */}
-              <div className="card-topline wrap-mobile align-start">
-                <div className="inline-actions wrap-mobile align-start">
+              {/* 顶部细线:分类 + 作者 + 续写 N 徽标(同 play-card 的 card-topline 一致,
+               * 手机端把「续写 N」徽标放分类/作者同行右侧) */}
+              <div className="card-topline wrap-mobile align-start plaza-continuation-topline">
+                <div className="inline-actions wrap-mobile align-start plaza-continuation-meta">
                   <span className="compact-meta-item">
                     ◈ {play.category?.trim() || DEFAULT_CATEGORY}
                   </span>
                   <span className="compact-meta-item">✎ {play.authorName?.trim() || '匿名'}</span>
                 </div>
-              </div>
-
-              {/* 标题 + 续写 N 徽标:手机端同一行(标题占满,徽标贴右) */}
-              <div className="plaza-continuation-title-row">
-                <h3 className="plaza-continuation-title">{play.title}</h3>
                 <span
                   className="derived-badge continuation-badge plaza-continuation-count"
                   aria-label={`续写 ${count} 条`}
@@ -104,6 +100,10 @@ export function PlazaContinuationPanel({
                 </span>
               </div>
 
+              {/* 标题:占据整行,徽标已挪到顶部同行右侧,这里只留标题 */}
+              <h3 className="plaza-continuation-title">{play.title}</h3>
+
+              {/* 简介:沿用小剧场列表的 plaza-card-summary 风格 */}
               {play.summary ? <p className="summary plaza-card-summary">{play.summary}</p> : null}
 
               {lastCreatedAt ? (

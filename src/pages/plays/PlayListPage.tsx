@@ -56,12 +56,7 @@ import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaContinuationPanel } from './PlazaContinuationPanel';
-import {
-  collapsePlaysToLatest,
-  getPlayVersionKey,
-  sortPlayVersions,
-  type CollapsedPlayRow,
-} from './play-versions';
+import { getPlayVersionKey, sortPlayVersions } from './play-versions';
 import {
   DEFAULT_CATEGORY,
   PLAYS_UPDATED_EVENT,
@@ -1245,11 +1240,15 @@ export function PlayListPage() {
     );
   }, [exportCategoryOptions]);
 
-  /* 广场列表按"同标题+同分类"合并成一行,只展示每组最新版本。
-   * filteredPlays 保持扁平结构,用于筛选/搜索/统计;
-   * 页面渲染/分页则走 collapsedFilteredRows。*/
-  const collapsedFilteredRows = useMemo<CollapsedPlayRow[]>(
-    () => collapsePlaysToLatest(filteredPlays),
+  /* 广场列表不再按"同标题+同分类"折叠合并,每条 play 单独成行展示
+   * (历史遗留的同 title+category 数据自然保留在 filteredPlays 里,
+   * 但不再合并,作者/导出时仍是独立的 plays)。
+   * - filteredPlays 保持扁平结构,用于筛选/搜索/统计;
+   * - 页面渲染/分页直接走 filteredPlays,不再走折叠后的 CollapsedPlayRow。
+   * 兼容旧变量名(collapsedFilteredRows / collapsedLatestIds):
+   * 它们现在是 filteredPlays 的一对一映射,后续清理时可以一并删除。 */
+  const collapsedFilteredRows = useMemo<Array<{ key: string; latest: Play; versions: Play[] }>>(
+    () => filteredPlays.map((play) => ({ key: play.id, latest: play, versions: [play] })),
     [filteredPlays],
   );
 
@@ -1258,7 +1257,7 @@ export function PlayListPage() {
     [collapsedFilteredRows],
   );
 
-  /* 分页/展示条目数按"折叠后的行数"算,一行代表一组同标题分类的最新版本。 */
+  /* 分页/展示条目数按 filteredPlays 行数算,每行代表一篇独立小剧场。 */
   const totalPages = Math.max(1, Math.ceil(collapsedFilteredRows.length / pageSize));
   const displayedRowCount = collapsedFilteredRows.length;
 

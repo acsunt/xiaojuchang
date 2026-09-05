@@ -1055,48 +1055,43 @@ export const mockDb = {
    * 管理员 approve/reject 后出现在详情页(approved)或被拒绝(rejected)。
    * nickname 可空字符串(空表示「匿名 / 原作者本人续写」,详情页不展示)。
    *
-   * 详情页展示规则:
-   * - 状态为 approved:正常展示主字段(nickname/summary/content)
-   * - 状态为 pending/rejected 且有 lastApproved*:展示「旧版已通过」字段,
-   *   把 nickname/summary/content 重定向到 lastApproved*(同时把 status 标记为「已隐藏修订」)
+   * 详情页展示规则(与后端 _displayStatus 一致):
+   * - status='approved' 且没有 pending_draft_*:正常展示主字段
+   * - status='approved' 但有 pending_draft_*:主字段不变(status 通过
+   *   _displayStatus 标为 'pending'),详情页给「本条后续修订等待审核」提示
+   * - status='rejected' 但有 last_approved_content:主字段保持
+   *   (status='approved' + _displayStatus='rejected'),给「本条后续修订已被拒绝」提示
    * - 否则(从未通过过的 pending):不展示
-   * 这样作者编辑 / 被拒绝时,详情页不会突然消失,而是继续展示原内容。
    *
-   * 「后台删除」:走物理删除(deleteContinuation 直接从 store 移除),
-   * 与原文「修改」被拒绝的逻辑对齐——一旦删除,游客侧不再展示,
-   * 但被删除前的内容在 admin 后台仍可通过 review-logs 追溯。 */
+   * 作者编辑 = 「原内容不动,新内容进 pending_draft_*」,等管理员
+   * 决定通过(把 draft 拷回主字段并清空)或拒绝(只清空 draft,
+   * 主字段保持)。这样保证了「修改-待审核-期间原内容继续展示」的
+   * 行为,即使管理员不处理,游客侧也不会突然看不到这条续写。
+   *
+   * 「后台删除」:走软删除(写 deleted_at),与后端对齐,
+   * 游客侧 listApproved 已经过滤 deleted_at。 */
   getContinuationsByPlayId(playId: string, order: 'asc' | 'desc') {
     return getContinuations()
       .filter((item) => {
         if (item.playId !== playId) return false;
+        if (item.deletedAt) return false;
         if (item.status === 'approved') return true;
-        /* pending/rejected 但有 lastApproved* 时也展示:
-         * 把 lastApproved 内容作为「旧版已通过」留在原地,
-         * 等下次重新审核通过再覆盖,避免读者看到突然消失。
-         * 软删除(被后台移除)从 store 抹掉,这里读不到,所以
-         * 不会出现「已删除但仍展示」的情况。 */
-        if (
-          (item.status === 'pending' || item.status === 'rejected') &&
-          item.lastApprovedContent &&
-          item.lastApprovedContent.trim().length > 0
-        ) {
-          return true;
-        }
+        if (item.status === 'rejected' && item.lastApprovedContent) return true;
         return false;
       })
       .map((item) => {
-        if (item.status === 'approved') return item;
-        /* 非 approved 但有 lastApproved 时,把展示字段替换为已通过的版本,
-         * 详情页仍按 approved 渲染,但前端能拿到 status 标记「已隐藏修订」。 */
-        return {
-          ...item,
-          nickname: item.lastApprovedNickname ?? item.nickname,
-          summary: item.lastApprovedSummary ?? item.summary,
-          content: item.lastApprovedContent ?? item.content,
-          /* 标记:这一条续写在管理后台实际是 pending/rejected,
-           * 详情页可以选择提示「本条后续修订暂未发布」之类的小标签。 */
-          _displayStatus: item.status,
-        };
+        /* approved + 有 draft:把 status 标记为 pending,告诉前端展示「后续修订」提示 */
+        const hasDraft =
+          (item.pendingDraftContent ?? '').trim().length > 0 ||
+          (item.pendingDraftSummary ?? '').trim().length > 0 ||
+          (item.pendingDraftNickname ?? '').trim().length > 0;
+        if (item.status === 'approved' && hasDraft) {
+          return { ...item, _displayStatus: 'pending' as ContinuationStatus };
+        }
+        if (item.status === 'rejected' && item.lastApprovedContent) {
+          return { ...item, _displayStatus: 'rejected' as ContinuationStatus };
+        }
+        return item;
       })
       .sort((left, right) =>
         order === 'desc'
@@ -1168,32 +1163,22 @@ export const mockDb = {
       throw new Error('只有原作者才能修改这条续写');
     }
     const updatedAt = now();
-    /* 原状态为「已通过」时,把当前内容备份到 lastApproved* 字段,
-     * 等用户重新提交后被审核拒绝/被删除,详情页仍可展示这一份「旧版已通过」内容。 */
-    const lastApprovedSnapshot =
-      target.status === 'approved'
-        ? {
-            lastApprovedNickname: target.nickname,
-            lastApprovedSummary: target.summary,
-            lastApprovedContent: target.content,
-            lastApprovedAt: target.reviewedAt ?? updatedAt,
-          }
-        : {
-            lastApprovedNickname: target.lastApprovedNickname,
-            lastApprovedSummary: target.lastApprovedSummary,
-            lastApprovedContent: target.lastApprovedContent,
-            lastApprovedAt: target.lastApprovedAt,
-          };
+    /* 与后端 _lib/continuations.ts updateContinuationByAuthor 行为一致:
+     * 主字段保持不动,把新内容写到 pending_draft_* 字段,
+     * 等管理员审核通过再覆盖主字段;拒绝 / 不处理 → 主字段保持原状。
+     *
+     * 这样保证「修改-提交-进入待审核」期间,原内容继续在详情页展示,
+     * 不会再发生「编辑完就消失」的重大 bug。 */
     const next: Continuation = {
       ...target,
-      nickname: patch.nickname !== undefined ? patch.nickname.trim() : target.nickname,
-      summary: patch.summary !== undefined ? patch.summary.trim() : target.summary,
-      content: patch.content !== undefined ? patch.content.trim() : target.content,
-      status: 'pending',
-      reviewedAt: undefined,
-      reviewNote: undefined,
+      pendingDraftNickname:
+        patch.nickname !== undefined ? patch.nickname.trim() : target.pendingDraftNickname,
+      pendingDraftSummary:
+        patch.summary !== undefined ? patch.summary.trim() : target.pendingDraftSummary,
+      pendingDraftContent:
+        patch.content !== undefined ? patch.content.trim() : target.pendingDraftContent,
+      pendingDraftUpdatedAt: updatedAt,
       updatedAt,
-      ...lastApprovedSnapshot,
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
     emitPlaysUpdated();
@@ -1233,9 +1218,28 @@ export const mockDb = {
 
   getAdminContinuations(status?: ContinuationStatus) {
     const items = getContinuations().sort((left, right) =>
-      right.createdAt.localeCompare(left.createdAt),
+      right.updatedAt.localeCompare(left.updatedAt),
     );
-    return status ? items.filter((item) => item.status === status) : items;
+    /* 与后端 _lib/continuations.ts listAdminContinuations 对齐:
+     * status='pending' 包含「真正 status='pending'」+ 「status='approved'
+     * 但有 pending_draft_* 的修订行」,这样管理员能看到作者编辑过的待审稿。 */
+    if (status === 'pending') {
+      return items.filter((item) => {
+        if (item.deletedAt) return false;
+        if (item.status === 'pending') return true;
+        if (
+          item.status === 'approved' &&
+          item.pendingDraftContent &&
+          item.pendingDraftContent.trim().length > 0
+        ) {
+          return true;
+        }
+        return false;
+      });
+    }
+    return items.filter((item) =>
+      status ? item.status === status && !item.deletedAt : !item.deletedAt,
+    );
   },
 
   reviewContinuation(
@@ -1249,28 +1253,60 @@ export const mockDb = {
     }
     const status: ContinuationStatus = action === 'approve' ? 'approved' : 'rejected';
     const updatedAt = now();
-    /* 通过时把当前的 nickname/summary/content 备份到 lastApproved*,
-     * 等再次被作者编辑走 updateContinuationByAuthor 时覆盖回主字段;
-     * 拒绝时不清,以便详情页能继续展示「旧版已通过」内容。 */
+
+    /* 与后端逻辑对齐:
+     * - 通过 + 有 pending_draft → 把 draft 拷到主字段并清空,
+     *   主字段的「旧值」落到 last_approved_*;
+     * - 通过 + 无 draft → 仅刷新时间戳,主字段不动;
+     * - 拒绝 + 有 draft → 仅清空 draft,主字段保持原状;
+     * - 拒绝 + 无 draft → 主字段不动。
+     *
+     * 关键不变量:拒绝时主字段不会被覆盖,所以「拒绝后原内容继续展示」依然成立。 */
+    const hasDraft =
+      (target.pendingDraftContent ?? '').trim().length > 0 ||
+      (target.pendingDraftSummary ?? '').trim().length > 0 ||
+      (target.pendingDraftNickname ?? '').trim().length > 0;
+
+    const wasApproved = target.status === 'approved';
+    const newNickname =
+      action === 'approve' && hasDraft
+        ? (target.pendingDraftNickname ?? target.nickname)
+        : target.nickname;
+    const newSummary =
+      action === 'approve' && hasDraft
+        ? (target.pendingDraftSummary ?? target.summary)
+        : target.summary;
+    const newContent =
+      action === 'approve' && hasDraft
+        ? (target.pendingDraftContent ?? target.content)
+        : target.content;
+
+    /* 通过时:如果主字段原本就是 approved,last_approved_* 已经是当前值,
+     * 这里无变化;只有「主字段在非 approved 状态下被通过」时
+     * 才需要更新 last_approved_*。
+     * 简单做法:统一刷新 last_approved_* 为「通过之前的主字段」,
+     * 这样后续再次修改时旧值还在。 */
     const next: Continuation = {
       ...target,
       status,
       reviewNote: note.trim() || '无备注',
       reviewedAt: updatedAt,
       updatedAt,
-      ...(action === 'approve'
-        ? {
+      nickname: newNickname,
+      summary: newSummary,
+      content: newContent,
+      ...(wasApproved && action === 'approve'
+        ? {}
+        : {
             lastApprovedNickname: target.nickname,
             lastApprovedSummary: target.summary,
             lastApprovedContent: target.content,
-            lastApprovedAt: updatedAt,
-          }
-        : {
-            lastApprovedNickname: target.lastApprovedNickname,
-            lastApprovedSummary: target.lastApprovedSummary,
-            lastApprovedContent: target.lastApprovedContent,
-            lastApprovedAt: target.lastApprovedAt,
+            lastApprovedAt: target.reviewedAt ?? updatedAt,
           }),
+      pendingDraftNickname: undefined,
+      pendingDraftSummary: undefined,
+      pendingDraftContent: undefined,
+      pendingDraftUpdatedAt: undefined,
     };
     setContinuations(getContinuations().map((item) => (item.id === continuationId ? next : item)));
     setContinuationReviewLogs([
@@ -1336,13 +1372,11 @@ export const mockDb = {
     if (!target) {
       return false;
     }
-    /* 「删除」=直接物理移除记录。
-     *
-     * 游客侧:详情页 getContinuationsByPlayId 在 lastApproved 存在时仍会展示旧版内容,
-     * 但被删除的记录已经不在 store 里,自然不会被读到。
-     * 这与原文「修改」的处理方式对齐(原文被后台拒绝时也不会软保留)。
-     *
+    /* 软删除:写 deleted_at 时间戳,与后端 _lib/continuations.ts 对齐。
+     * 游客侧 listApproved 会过滤 deleted_at;
+     * 管理员后台 getContinuationById / getAdminContinuations 仍可访问,
      * 审核追溯:删之前把 audit log 写一份,管理员仍可在后台 review-logs 看到这次删除。 */
+    const deletedAt = now();
     setContinuationReviewLogs([
       {
         id: makeId('cont_review'),
@@ -1351,13 +1385,17 @@ export const mockDb = {
         action: 'delete',
         operator: this.getSession()?.username ?? 'unknown',
         note: '后台删除续写',
-        createdAt: now(),
+        createdAt: deletedAt,
         playTitle: target.playTitle,
         nickname: target.nickname || undefined,
       },
       ...getContinuationReviewLogs(),
     ]);
-    setContinuations(getContinuations().filter((item) => item.id !== continuationId));
+    setContinuations(
+      getContinuations().map((item) =>
+        item.id === continuationId ? { ...item, deletedAt, updatedAt: deletedAt } : item,
+      ),
+    );
     emitPlaysUpdated();
     return true;
   },

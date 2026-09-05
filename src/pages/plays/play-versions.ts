@@ -1,5 +1,17 @@
 import { DEFAULT_CATEGORY, type Play } from '../../types/play';
 
+/**
+ * 广场列表不再按"同标题+同分类"折叠合并:每条 play 单独成行展示
+ * (历史遗留的同 title+category 数据自然保留在数据源里,
+ * 但前台不再做合并,导出时按 flat 列表走)。
+ *
+ * `play-versions.ts` 现在只剩下版本键 / 排序工具函数,
+ * 真正的折叠/分组(`collapsePlaysToLatest` / `buildPlayVersionGroups`)
+ * 已经下线,本文件原本的辅助函数也被一同清理掉。
+ *
+ * 保留 `getPlayVersionKey` 是为了:评论筛选、统计、repo 等逻辑
+ * 里仍可能按相同键引用同系列的小剧场,直接复用同一规范化逻辑。 */
+
 export type PlayVersionGroup = {
   id: string;
   title: string;
@@ -25,80 +37,3 @@ export const sortPlayVersions = (items: Play[]) => {
 };
 
 export const getPlayVersionLabel = (index: number) => (index === 0 ? '原文' : `版本${index}`);
-
-export const buildPlayVersionGroups = (plays: Play[]) => {
-  const grouped = new Map<string, Play[]>();
-
-  plays.forEach((play) => {
-    const current = grouped.get(getPlayVersionKey(play)) ?? [];
-    current.push(play);
-    grouped.set(getPlayVersionKey(play), current);
-  });
-
-  return [...grouped.entries()]
-    .map(([id, groupPlays]) => {
-      const sortedPlays = sortPlayVersions(groupPlays);
-      const originalPlay = sortedPlays[0];
-      return {
-        id,
-        title: originalPlay.title,
-        category: originalPlay.category || DEFAULT_CATEGORY,
-        plays: sortedPlays,
-      } satisfies PlayVersionGroup;
-    })
-    .filter((group) => group.plays.length > 1)
-    .sort((left, right) => {
-      const leftLatest = left.plays[left.plays.length - 1];
-      const rightLatest = right.plays[right.plays.length - 1];
-      return (
-        rightLatest.createdAt.localeCompare(leftLatest.createdAt) ||
-        left.title.localeCompare(right.title, 'zh-CN')
-      );
-    });
-};
-
-/**
- * 广场列表折叠：把同 title+category 的多篇合并到"最新版本"这一行,
- * 保留全组用于导出/详情侧栏展示。
- * - 保持来源顺序:按"每组最新版本首次在 items 中出现的位置"排列。
- * - 每组返回 latest = sortPlayVersions 后的最后一项。
- */
-export type CollapsedPlayRow = {
-  key: string;
-  latest: Play;
-  versions: Play[];
-};
-
-export const collapsePlaysToLatest = (items: Play[]): CollapsedPlayRow[] => {
-  const grouped = new Map<string, Play[]>();
-  const firstSeenOrder = new Map<string, number>();
-
-  items.forEach((play, index) => {
-    const key = getPlayVersionKey(play);
-    const current = grouped.get(key);
-    if (current) {
-      current.push(play);
-    } else {
-      grouped.set(key, [play]);
-      firstSeenOrder.set(key, index);
-    }
-  });
-
-  /* 用每组"最新版本"在 items 中最早出现的位置作为该行的排序锚点,
-   * 保证广场列表按 filteredPlays 的原顺序稳定折叠(排序/筛选逻辑不受破坏)。 */
-  const rows = [...grouped.entries()].map(([key, groupPlays]) => {
-    const sortedVersions = sortPlayVersions(groupPlays);
-    const latest = sortedVersions[sortedVersions.length - 1];
-    const latestIndex = items.findIndex((item) => item.id === latest.id);
-    return {
-      key,
-      latest,
-      versions: sortedVersions,
-      anchor: latestIndex >= 0 ? latestIndex : (firstSeenOrder.get(key) ?? 0),
-    };
-  });
-
-  return rows
-    .sort((left, right) => left.anchor - right.anchor)
-    .map(({ key, latest, versions }) => ({ key, latest, versions }));
-};
