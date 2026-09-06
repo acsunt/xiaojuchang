@@ -23,6 +23,11 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 
+# Cursor 工具的个人配置（不同机器/工具不一定读这个，留在用户级 ~/.cursorignore）
+.cursorignore
+.cursor/
+.cursor/argv.json
+
 # 本地环境与密钥（保留 .example 模板）
 .env
 .env.*
