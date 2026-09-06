@@ -1,0 +1,32 @@
+# 行尾统一：所有文本文件 LF 提交、LF checkout。
+# 这是项目铁律，跟 .editorconfig / .prettierrc / .vscode/settings.json 同步。
+# 装 Prettier 插件、editorconfig 后理论上不该再出现 CRLF，但保险起见在 git 层兜底。
+* text=auto eol=lf
+
+# 二进制文件：明确标记，避免 git 误判行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.mp3 binary
+*.mp4 binary
+*.webm binary
+*.zip binary
+*.gz binary
+*.br binary
+*.pdf binary
+
+# Windows 可执行文件
+*.exe binary
+*.dll binary
+*.pdb binary
+
+# 已知 CRLF 不变的文件：SQL schema 等历史遗留，暂时不动；
+# 如果未来想完全统一，把它们也改成 LF 即可。
+# schema.sql text eol=lf
