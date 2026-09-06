@@ -789,6 +789,9 @@ export const playApi = {
     return Promise.resolve(item);
   },
 
+  /* RESTful 路由：与 functions/api/continuations/[id].ts 的 onRequestDelete 配套。
+   * URL 形如 /api/continuations/<id>，不要改回 ?id=xxx 之类的查询串风格。
+   * 改这里之前先确认后端 _lib/continuations 的 deleteContinuation 仍按 id 走。 */
   async deleteContinuation(continuationId: string): Promise<boolean> {
     if (apiMode === 'remote') {
       await jsonRequest<{ ok: boolean }>(

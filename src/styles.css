@@ -442,6 +442,34 @@ select option {
   margin: 0;
 }
 
+/* 「同源」面板头部一行：清空检索 + 单同源 / 多同源 / 全部。
+ * 桌面端强制同一行(右半部分固定),手机端允许折行但按钮仍可点。 */
+.admin-similar-head-actions {
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-similar-source-scope-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  /* 手机端让「单同源/多同源/全部」三按钮强制同一行(每按钮等分),
+   * 与桌面端右半部分视觉一致,避免窄屏纵向堆叠影响操作。 */
+  .admin-similar-source-scope-group {
+    flex-wrap: nowrap;
+  }
+
+  .admin-similar-source-scope-group > .tab-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    white-space: nowrap;
+  }
+}
+
 /* 「同源」面板专用:同源组的卡片头部按钮外观,让它和广场续写卡片的
  * 视觉风格保持一致(顶部 meta + 徽标 + 标题 + 最后同源时间)。 */
 .admin-same-source-group {

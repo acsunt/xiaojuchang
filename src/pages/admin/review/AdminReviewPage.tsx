@@ -800,6 +800,12 @@ export function AdminReviewPage() {
   >('pending');
   const [continuationKeyword, setContinuationKeyword] = useState('');
   const [continuationReviewNote, setContinuationReviewNote] = useState('');
+  /* busy 状态独立包含 review action + update + delete：
+   * - review action 走 handleReviewContinuation（通过/拒绝）
+   * - 'update' 走 PATCH（管理员编辑）
+   * - 'delete' 走 DELETE
+   * 'delete' 故意作为独立字符串值，不要复用 review action 的字符串，
+   * 否则并发触发 review+delete 时 loading 状态会互相覆盖。 */
   const [continuationBusyAction, setContinuationBusyAction] = useState<
     ContinuationReviewAction | 'update' | 'delete' | null
   >(null);
@@ -971,8 +977,8 @@ export function AdminReviewPage() {
   /* 「相似」面板状态:
    * - similarKeyword:独立于 audit-play 的搜索框
    * - similarAnchorTitle / similarAnchorCategory:
-   *   点列表里某条卡片时,把它的 title+category 作为锚点,再列出剩下的同标题+同分类条目;
-   *   也允许通过搜索框跨锚点搜出候选。
+   *   点列表里某条卡片时,把它的 title+category 作为影子,再列出剩下的同标题+同分类条目;
+   *   也允许通过搜索框跨影子搜出候选。
    * - similarBusyAction / similarReviewNote:
    *   当前正在操作(通过/拒绝/下线/删除)的 play id 与备注,
    *   避免全局 reviewBusyAction / reviewNote 被「相似」和「审核」互相覆盖。
@@ -982,6 +988,29 @@ export function AdminReviewPage() {
   const [similarAnchorTitle, setSimilarAnchorTitle] = useState('');
   const [similarAnchorCategory, setSimilarAnchorCategory] = useState('');
   const [similarStatusFilter, setSimilarStatusFilter] = useState<PlayStatus | undefined>(undefined);
+  /* 「同源」面板列表范围:
+   * - 'single':仅显示组内只有 1 篇的组(没有真正的同源,只是被影子 + 搜索拉进来)
+   * - 'multi' :仅显示组内 ≥ 2 篇的组(真正的同源,默认)
+   * - 'all'   :两种都显示
+   * 选择会持久化到 localStorage(键 'mini-theater:admin-similar-source-scope'),
+   * 切换 / 刷新后保持一致。 */
+  type SimilarSourceScope = 'single' | 'multi' | 'all';
+  const SIMILAR_SOURCE_SCOPE_STORAGE_KEY = 'mini-theater:admin-similar-source-scope';
+  const readSimilarSourceScope = (): SimilarSourceScope => {
+    if (typeof window === 'undefined') {
+      return 'multi';
+    }
+    const saved = window.localStorage.getItem(SIMILAR_SOURCE_SCOPE_STORAGE_KEY);
+    return saved === 'single' || saved === 'multi' || saved === 'all' ? saved : 'multi';
+  };
+  const [similarSourceScope, setSimilarSourceScopeState] =
+    useState<SimilarSourceScope>(readSimilarSourceScope);
+  const setSimilarSourceScope = (next: SimilarSourceScope) => {
+    setSimilarSourceScopeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SIMILAR_SOURCE_SCOPE_STORAGE_KEY, next);
+    }
+  };
   const [similarBusyAction, setSimilarBusyAction] = useState<{
     playId: string;
     action: ReviewAction | 'delete' | 'save';
@@ -1653,13 +1682,13 @@ export function AdminReviewPage() {
   );
   const duplicateScanScopeLabel = duplicateReview.scanScope === 'approved' ? '已通过' : '整个库';
 
-  /* 「相似」面板候选:同标题 + 同分类(以 anchor 为锚点),
+  /* 「相似」面板候选:同标题 + 同分类(以 anchor 为影子),
    * 再叠加「搜索关键字」与「状态筛选」。anchor 可由列表点击产生,
    * 也可由相似面板顶部的搜索框自动推断(取第一条命中的 title+category)。
    *
    * 排序:按状态(pending 优先) → 更新时间倒序。
    * 列表上限:无;每条卡片都自带完整的预览 + 操作按钮。
-   * 锚点缺失时:回到全库搜索模式,把所有命中搜索的小剧场按更新时间倒序列出。 */
+   * 影子缺失时:回到全库搜索模式,把所有命中搜索的小剧场按更新时间倒序列出。 */
   const similarPlays = useMemo(() => {
     const normalizedKeyword = similarKeyword.trim().toLowerCase();
     let base: Play[] = allPlays;
@@ -1750,10 +1779,22 @@ export function AdminReviewPage() {
       }
     });
 
-    return Array.from(groupMap.values()).sort((left, right) =>
-      right.latestUpdatedAt.localeCompare(left.latestUpdatedAt),
-    );
-  }, [similarPlays]);
+    /* 按 single / multi / all 过滤组:
+     * - single:组内 plays.length === 1(实际上没有同源,被影子 + 搜索带进来)
+     * - multi :组内 plays.length >= 2(真正的同源组,默认)
+     * - all   :不过滤 */
+    const scoped = (() => {
+      if (similarSourceScope === 'single') {
+        return Array.from(groupMap.values()).filter((group) => group.plays.length === 1);
+      }
+      if (similarSourceScope === 'multi') {
+        return Array.from(groupMap.values()).filter((group) => group.plays.length >= 2);
+      }
+      return Array.from(groupMap.values());
+    })();
+
+    return scoped.sort((left, right) => right.latestUpdatedAt.localeCompare(left.latestUpdatedAt));
+  }, [similarPlays, similarSourceScope]);
 
   const reviewMutationBusy =
     bulkBusy || bulkTask !== null || deleteBusy || reviewBusyAction !== null;
@@ -3718,8 +3759,8 @@ export function AdminReviewPage() {
   };
 
   /* 「相似」面板处理器:
-   * - 清空锚点:回到全库搜索模式。
-   * - 搜索框:在已有锚点之上叠加关键字过滤。
+   * - 清空影子:回到全库搜索模式。
+   * - 搜索框:在已有影子之上叠加关键字过滤。
    * - 通过/拒绝/下线/删除:复用 handleReviewForPlay + handleDeletePlayItem,
    *   它们已经支持任意 play,并且会通过 syncPlayStateLocally / removePlayStateLocally
    * 同步 allPlays,不需要再做额外刷新。 */
@@ -6392,17 +6433,12 @@ export function AdminReviewPage() {
                 <div className="field-grid two-columns admin-bulk-review-grid">
                   <label>
                     <span>按作者删除</span>
-                    <select
+                    <SearchableAuthorSelect
+                      options={deleteAuthorOptions}
+                      placeholder="先选作者或直接输入"
                       value={deleteAuthorName}
-                      onChange={(event) => setDeleteAuthorName(event.target.value)}
-                    >
-                      <option value="">先选作者</option>
-                      {deleteAuthorOptions.map((authorName) => (
-                        <option key={authorName} value={authorName}>
-                          {authorName}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setDeleteAuthorName}
+                    />
                   </label>
                   <div className="stack-gap-sm admin-bulk-review-actions">
                     <button
@@ -7031,7 +7067,7 @@ export function AdminReviewPage() {
                       点开一组后，可对该组里的每条小剧场单独通过 / 拒绝 / 下线 / 删除 / 修改。
                     </p>
                   </div>
-                  <div className="inline-actions wrap-mobile">
+                  <div className="inline-actions wrap-mobile admin-similar-head-actions">
                     <button
                       className="button ghost"
                       disabled={!similarAnchorTitle && !similarKeyword && !similarStatusFilter}
@@ -7040,12 +7076,46 @@ export function AdminReviewPage() {
                     >
                       清空检索
                     </button>
+                    {/* 单同源 / 多同源 / 全部:
+                     * - 仅影响同源组的展示过滤(分组后的二次过滤)
+                     * - 默认 'multi',与「同源」语义一致
+                     * - 选择写入 localStorage,跨会话保留 */}
+                    <div
+                      className="inline-actions admin-similar-source-scope-group"
+                      role="group"
+                      aria-label="同源范围"
+                    >
+                      <button
+                        aria-pressed={similarSourceScope === 'single'}
+                        className={similarSourceScope === 'single' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setSimilarSourceScope('single')}
+                        type="button"
+                      >
+                        单同源
+                      </button>
+                      <button
+                        aria-pressed={similarSourceScope === 'multi'}
+                        className={similarSourceScope === 'multi' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setSimilarSourceScope('multi')}
+                        type="button"
+                      >
+                        多同源
+                      </button>
+                      <button
+                        aria-pressed={similarSourceScope === 'all'}
+                        className={similarSourceScope === 'all' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setSimilarSourceScope('all')}
+                        type="button"
+                      >
+                        全部
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 <div className="duplicate-toolbar-grid">
                   <div className="duplicate-summary-card stack-gap-sm">
-                    <span>锚点</span>
+                    <span>影子</span>
                     <strong>
                       {similarAnchorTitle
                         ? `${similarAnchorTitle} · ${similarAnchorCategory || DEFAULT_CATEGORY}`
@@ -7053,8 +7123,8 @@ export function AdminReviewPage() {
                     </strong>
                     <span className="content-meta">
                       {similarAnchorTitle
-                        ? '只列出与锚点同标题同分类的小剧场（构成若干同源组）。'
-                        : '可先用搜索框定位一篇，再把对应同源组设为锚点。'}
+                        ? '只列出与影子同标题同分类的小剧场（构成若干同源组）。'
+                        : '可先用搜索框定位一篇，再把对应同源组设为影子。'}
                     </span>
                   </div>
                   <div className="duplicate-summary-card stack-gap-sm">
@@ -7127,7 +7197,7 @@ export function AdminReviewPage() {
 
               {similarGroups.length === 0 ? (
                 <div className="empty-panel">
-                  没有匹配的小剧场。试试切换锚点、调整状态筛选或清空检索。
+                  没有匹配的小剧场。试试切换影子、调整状态筛选或清空检索。
                 </div>
               ) : (
                 <div className="plaza-derived-group-list stack-gap-lg">
@@ -7177,7 +7247,7 @@ export function AdminReviewPage() {
                           <span className="sub-copy plaza-continuation-date">
                             最后同源：
                             {new Date(group.latestUpdatedAt).toLocaleString('zh-CN')}
-                            {isAnchor ? ' · 当前锚点' : ''}
+                            {isAnchor ? ' · 当前影子' : ''}
                           </span>
                           <span className="content-meta admin-same-source-toggle-hint">
                             {isExpanded ? '收起该组' : '展开操作'}
@@ -7200,7 +7270,7 @@ export function AdminReviewPage() {
                                 }}
                                 type="button"
                               >
-                                {isAnchor ? '清除锚点' : '把这一组设为锚点'}
+                                {isAnchor ? '清除影子' : '把这一组设为影子'}
                               </button>
                             </div>
                             {group.plays.map((play) => {
