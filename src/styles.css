@@ -442,6 +442,62 @@ select option {
   margin: 0;
 }
 
+/* 「同源」面板专用:同源组的卡片头部按钮外观,让它和广场续写卡片的
+ * 视觉风格保持一致(顶部 meta + 徽标 + 标题 + 最后同源时间)。 */
+.admin-same-source-group {
+  padding: 0;
+}
+
+.admin-same-source-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 18px;
+}
+
+.admin-same-source-group-header:hover {
+  background: color-mix(in srgb, var(--accent, #6c8cff) 6%, transparent);
+}
+
+.admin-same-source-topline {
+  width: 100%;
+}
+
+.admin-same-source-count {
+  font-weight: 600;
+}
+
+.admin-same-source-title {
+  width: 100%;
+}
+
+.admin-same-source-toggle-hint {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--text-soft);
+  margin-top: 2px;
+}
+
+.admin-same-source-group-body {
+  padding: 0 14px 14px 14px;
+}
+
+.admin-same-source-group-actions {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.admin-same-source-item {
+  margin-top: 12px;
+}
+
 /* 顶部细线:分类 + 作者 + 「续写 N」徽标。
  * - 桌面端:左 meta + 右徽标,两端对齐。
  * - 手机端(<=720px):分类 / 作者同行右侧,徽标紧贴最后一个 meta 后面 */

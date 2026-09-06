@@ -254,6 +254,111 @@ function SearchableCategorySelect({
   );
 }
 
+/* 「按作者」下拉的可搜索版（与 SearchableCategorySelect 同款交互）。
+ * 选项是作者字符串列表；输入即按子串过滤，回车保留当前输入。
+ * 用途：替换审核后台一键通过面板里的「按作者」原生 <select>，作者多了之后
+ * 也能快速搜索定位。 */
+function SearchableAuthorSelect({
+  options,
+  placeholder,
+  value,
+  onChange,
+}: {
+  options: string[];
+  placeholder: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        inputRef.current?.blur();
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
+
+  const trimmed = value.trim().toLowerCase();
+  const filtered = trimmed
+    ? options.filter((option) => option.toLowerCase().includes(trimmed))
+    : options;
+
+  return (
+    <div
+      className={
+        open
+          ? 'custom-select open searchable-category-select searchable-author-select'
+          : 'custom-select searchable-category-select searchable-author-select'
+      }
+      ref={rootRef}
+    >
+      <input
+        ref={inputRef}
+        className="searchable-category-input"
+        onChange={(event) => {
+          onChange(event.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder={placeholder}
+        value={value}
+      />
+      {open ? (
+        <div
+          className="custom-select-menu searchable-category-menu"
+          role="listbox"
+          aria-label="选择作者"
+        >
+          {filtered.length > 0 ? (
+            filtered.map((option) => (
+              <button
+                aria-selected={option === value}
+                className={
+                  option === value ? 'custom-select-option active' : 'custom-select-option'
+                }
+                key={option}
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+                role="option"
+                type="button"
+              >
+                {option}
+              </button>
+            ))
+          ) : (
+            <div className="searchable-category-empty">
+              {value.trim() ? '没有匹配的作者' : '暂无作者'}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const actionResultLabelMap: Record<ReviewAction, string> = {
   approve: '已通过',
   reject: '已拒绝',
@@ -528,7 +633,7 @@ const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '备份', value: 'backup' },
   { label: '标签', value: 'tags' },
   { label: '重复', value: 'duplicates' },
-  { label: '相似', value: 'similar' },
+  { label: '同源', value: 'similar' },
 ];
 
 const auditLogTabs: Array<{ label: string; value: AuditLogCategory }> = [
@@ -884,6 +989,8 @@ export function AdminReviewPage() {
   const [similarReviewNote, setSimilarReviewNote] = useState('');
   const [similarMessage, setSimilarMessage] = useState('');
   const [similarMessageTone, setSimilarMessageTone] = useState<'success' | 'error'>('success');
+  /* 「同源」面板列表里展开的组 key（"标题||分类"）。空集合表示全部折叠。 */
+  const [similarExpandedGroups, setSimilarExpandedGroups] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkTask, setBulkTask] = useState<BulkReviewTask | null>(null);
   const [bulkProgress, setBulkProgress] = useState<BulkReviewProgress | null>(null);
@@ -1604,6 +1711,49 @@ export function AdminReviewPage() {
       return right.updatedAt.localeCompare(left.updatedAt);
     });
   }, [allPlays, similarAnchorCategory, similarAnchorTitle, similarKeyword, similarStatusFilter]);
+
+  /* 「同源」面板分组:把 similarPlays 按「同标题 + 同分类」聚合,
+   * 每组包含一组内部小剧场 + 该组的元信息(显示用的标题/作者/分类 + 同源数量 + 最后同源时间)。
+   * 排序:按组内最新一条小剧场时间倒序,最近活跃的组在前。 */
+  const similarGroups = useMemo(() => {
+    const groupMap = new Map<
+      string,
+      {
+        key: string;
+        title: string;
+        authorName: string;
+        category: string;
+        plays: Play[];
+        latestUpdatedAt: string;
+      }
+    >();
+
+    similarPlays.forEach((play) => {
+      const title = (play.title ?? '').trim();
+      const category = (play.category ?? DEFAULT_CATEGORY).trim() || DEFAULT_CATEGORY;
+      const key = `${title}||${category}`;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.plays.push(play);
+        if (play.updatedAt.localeCompare(existing.latestUpdatedAt) > 0) {
+          existing.latestUpdatedAt = play.updatedAt;
+        }
+      } else {
+        groupMap.set(key, {
+          key,
+          title,
+          authorName: play.authorName,
+          category,
+          plays: [play],
+          latestUpdatedAt: play.updatedAt,
+        });
+      }
+    });
+
+    return Array.from(groupMap.values()).sort((left, right) =>
+      right.latestUpdatedAt.localeCompare(left.latestUpdatedAt),
+    );
+  }, [similarPlays]);
 
   const reviewMutationBusy =
     bulkBusy || bulkTask !== null || deleteBusy || reviewBusyAction !== null;
@@ -3568,18 +3718,11 @@ export function AdminReviewPage() {
   };
 
   /* 「相似」面板处理器:
-   * - 点击列表卡片:把被点击的 play 的 title+category 当作锚点(不再跟随全库搜索),
-   *   这样列表会精确收敛到同标题同分类的所有版本。
    * - 清空锚点:回到全库搜索模式。
    * - 搜索框:在已有锚点之上叠加关键字过滤。
    * - 通过/拒绝/下线/删除:复用 handleReviewForPlay + handleDeletePlayItem,
    *   它们已经支持任意 play,并且会通过 syncPlayStateLocally / removePlayStateLocally
-   *   同步 allPlays,不需要再做额外刷新。 */
-  const handleSimilarAnchorPlay = (play: Play) => {
-    setSimilarAnchorTitle(play.title ?? '');
-    setSimilarAnchorCategory(play.category ?? DEFAULT_CATEGORY);
-    setSimilarMessage('');
-  };
+   * 同步 allPlays,不需要再做额外刷新。 */
 
   const handleSimilarClearAnchor = () => {
     setSimilarAnchorTitle('');
@@ -3906,230 +4049,227 @@ export function AdminReviewPage() {
                 </div>
               ) : null}
 
-              <div className="form-panel stack-gap-md admin-bulk-review-panel">
-                <div className="content-head admin-bulk-review-head">
-                  <div>
-                    <strong>一键通过</strong>
-                    <span className="content-meta">
-                      当前列表待审核 {pendingVisiblePlays.length} 篇，已选 {bulkSelectedIds.length}{' '}
-                      篇
-                    </span>
-                  </div>
-                  <div className="inline-actions admin-bulk-review-head-actions">
-                    {/* 全选 / 取消全选：把「展开/折叠」左侧同行的操作抽出来，
-                     * 已经全选（当前待审核 == 已选，且非空）时按钮变成「取消全选」，
-                     * 再点一下相当于走 handleClearBulkSelection 清空。 */}
-                    <button
-                      className="button secondary admin-bulk-review-head-select-all-button"
-                      disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
-                      onClick={
-                        isAllPendingVisibleSelected
-                          ? handleClearBulkSelection
-                          : handleSelectAllPendingVisible
-                      }
-                      type="button"
-                    >
-                      {isAllPendingVisibleSelected ? '取消全选' : '全选'}
-                    </button>
-                    <button
-                      className="button ghost"
-                      onClick={() => setIsBulkApproveCollapsed((current) => !current)}
-                      type="button"
-                    >
-                      {isBulkApproveCollapsed ? '展开' : '折叠'}
-                    </button>
-                  </div>
-                </div>
-
-                {!isBulkApproveCollapsed ? (
-                  <>
-                    <div className="stack-gap-sm admin-bulk-review-progress-block">
-                      {bulkProgress ? (
-                        <div className="admin-bulk-review-progress" role="status">
-                          <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
-                            <strong>{bulkProgress.label}</strong>
-                            <span className="content-meta">
-                              已完成 {bulkProgress.completed} / {bulkProgress.total}
-                              {bulkTaskStatus === 'paused' ? ' · 已暂停' : ''}
-                              {bulkTaskStatus === 'stopping' ? ' · 正在停止' : ''}
-                            </span>
-                          </div>
-                          <div aria-hidden="true" className="admin-bulk-review-progress-track">
-                            <div
-                              className="admin-bulk-review-progress-fill"
-                              style={{
-                                width: `${bulkProgress.total === 0 ? 0 : (bulkProgress.completed / bulkProgress.total) * 100}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ) : null}
-                      {feedbackScope === 'bulk' && processingMessage ? (
-                        <div className="feedback info">{processingMessage}</div>
-                      ) : null}
-                      {feedbackScope === 'bulk' && successMessage ? (
-                        <div className="feedback success">{successMessage}</div>
-                      ) : null}
-                      {feedbackScope === 'bulk' && error ? (
-                        <div className="feedback error">{error}</div>
-                      ) : null}
+              {activePanel === 'review' ? (
+                <div className="form-panel stack-gap-md admin-bulk-review-panel">
+                  <div className="content-head admin-bulk-review-head">
+                    <div>
+                      <strong>一键通过</strong>
+                      <span className="content-meta">
+                        当前列表待审核 {pendingVisiblePlays.length} 篇，已选{' '}
+                        {bulkSelectedIds.length} 篇
+                      </span>
                     </div>
-
-                    <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-toggle-row">
+                    <div className="inline-actions admin-bulk-review-head-actions">
+                      {/* 全选 / 取消全选：把「展开/折叠」左侧同行的操作抽出来，
+                       * 已经全选（当前待审核 == 已选，且非空）时按钮变成「取消全选」，
+                       * 再点一下相当于走 handleClearBulkSelection 清空。 */}
                       <button
-                        className="button secondary"
+                        className="button secondary admin-bulk-review-head-select-all-button"
                         disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
-                        onClick={handleSelectAllPendingVisible}
+                        onClick={
+                          isAllPendingVisibleSelected
+                            ? handleClearBulkSelection
+                            : handleSelectAllPendingVisible
+                        }
                         type="button"
                       >
-                        全选
-                      </button>
-                      <button
-                        className="button secondary"
-                        disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
-                        onClick={handleInvertBulkSelection}
-                        type="button"
-                      >
-                        反选
-                      </button>
-                    </div>
-
-                    <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-top-row">
-                      <div
-                        className="admin-bulk-review-top-count"
-                        role="group"
-                        aria-label="选中前几条待审核"
-                      >
-                        <button
-                          className="button secondary admin-bulk-review-top-count-button"
-                          disabled={
-                            reviewMutationBusy ||
-                            bulkSelectCount <= 0 ||
-                            pendingVisibleIds.length === 0
-                          }
-                          onClick={handleSelectTopPendingVisible}
-                          type="button"
-                        >
-                          选中
-                        </button>
-                        <span>前</span>
-                        <input
-                          aria-label="选中前几条"
-                          inputMode="numeric"
-                          min="1"
-                          onChange={(event) =>
-                            setBulkSelectCountInput(event.target.value.replace(/\D+/g, ''))
-                          }
-                          placeholder="x"
-                          value={bulkSelectCountInput}
-                        />
-                        <span>条</span>
-                      </div>
-                      <button
-                        className="button ghost admin-bulk-review-clear-button"
-                        disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
-                        onClick={handleClearBulkSelection}
-                        type="button"
-                      >
-                        清空已选
-                      </button>
-                    </div>
-
-                    <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-row-compact">
-                      <button
-                        className="button secondary"
-                        disabled={!bulkTask || bulkTask.status !== 'running'}
-                        onClick={handlePauseBulkApprove}
-                        type="button"
-                      >
-                        暂停
-                      </button>
-                      <button
-                        className="button secondary"
-                        disabled={!bulkTask || bulkTask.status !== 'paused'}
-                        onClick={handleContinueBulkApprove}
-                        type="button"
-                      >
-                        继续
+                        {isAllPendingVisibleSelected ? '取消全选' : '全选'}
                       </button>
                       <button
                         className="button ghost"
-                        disabled={!bulkTask || bulkTask.status === 'stopping'}
-                        onClick={() => void handleStopBulkApprove()}
+                        onClick={() => setIsBulkApproveCollapsed((current) => !current)}
                         type="button"
                       >
-                        {bulkTaskStatus === 'stopping' ? '正在停止' : '停止'}
+                        {isBulkApproveCollapsed ? '展开' : '折叠'}
                       </button>
                     </div>
+                  </div>
 
-                    <div className="field-grid two-columns admin-bulk-review-grid">
-                      <label>
-                        <span>按作者一键通过</span>
-                        <select
-                          value={bulkAuthorName}
-                          onChange={(event) => setBulkAuthorName(event.target.value)}
-                        >
-                          <option value="">先选作者</option>
-                          {pendingAuthorOptions.map((authorName) => (
-                            <option key={authorName} value={authorName}>
-                              {authorName}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="stack-gap-sm admin-bulk-review-actions">
+                  {!isBulkApproveCollapsed ? (
+                    <>
+                      <div className="stack-gap-sm admin-bulk-review-progress-block">
+                        {bulkProgress ? (
+                          <div className="admin-bulk-review-progress" role="status">
+                            <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                              <strong>{bulkProgress.label}</strong>
+                              <span className="content-meta">
+                                已完成 {bulkProgress.completed} / {bulkProgress.total}
+                                {bulkTaskStatus === 'paused' ? ' · 已暂停' : ''}
+                                {bulkTaskStatus === 'stopping' ? ' · 正在停止' : ''}
+                              </span>
+                            </div>
+                            <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                              <div
+                                className="admin-bulk-review-progress-fill"
+                                style={{
+                                  width: `${bulkProgress.total === 0 ? 0 : (bulkProgress.completed / bulkProgress.total) * 100}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+                        {feedbackScope === 'bulk' && processingMessage ? (
+                          <div className="feedback info">{processingMessage}</div>
+                        ) : null}
+                        {feedbackScope === 'bulk' && successMessage ? (
+                          <div className="feedback success">{successMessage}</div>
+                        ) : null}
+                        {feedbackScope === 'bulk' && error ? (
+                          <div className="feedback error">{error}</div>
+                        ) : null}
+                      </div>
+
+                      <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-toggle-row">
                         <button
-                          className="button primary admin-approve-all-button"
+                          className="button secondary"
                           disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
-                          onClick={() =>
-                            void handleBulkApprove(pendingVisibleIds, '当前列表待审核')
-                          }
+                          onClick={handleSelectAllPendingVisible}
                           type="button"
                         >
-                          {bulkTask
-                            ? '批量处理中'
-                            : `通过当前待审核（${pendingVisibleIds.length}）`}
+                          全选
                         </button>
                         <button
-                          className="button primary"
-                          disabled={reviewMutationBusy || selectedAuthorPendingIds.length === 0}
-                          onClick={() =>
-                            void handleBulkApprove(
-                              selectedAuthorPendingIds,
-                              `作者 ${bulkAuthorName} 的待审核内容`,
-                            )
-                          }
+                          className="button secondary"
+                          disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
+                          onClick={handleInvertBulkSelection}
                           type="button"
                         >
-                          {bulkTask
-                            ? '批量处理中'
-                            : `通过该作者（${selectedAuthorPendingIds.length}）`}
+                          反选
                         </button>
-                        <div className="inline-actions admin-bulk-review-select-actions">
+                      </div>
+
+                      <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-selection-top-row">
+                        <div
+                          className="admin-bulk-review-top-count"
+                          role="group"
+                          aria-label="选中前几条待审核"
+                        >
                           <button
-                            className="button danger admin-bulk-delete-selected-button"
-                            disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                            className="button secondary admin-bulk-review-top-count-button"
+                            disabled={
+                              reviewMutationBusy ||
+                              bulkSelectCount <= 0 ||
+                              pendingVisibleIds.length === 0
+                            }
+                            onClick={handleSelectTopPendingVisible}
+                            type="button"
+                          >
+                            选中
+                          </button>
+                          <span>前</span>
+                          <input
+                            aria-label="选中前几条"
+                            inputMode="numeric"
+                            min="1"
+                            onChange={(event) =>
+                              setBulkSelectCountInput(event.target.value.replace(/\D+/g, ''))
+                            }
+                            placeholder="x"
+                            value={bulkSelectCountInput}
+                          />
+                          <span>条</span>
+                        </div>
+                        <button
+                          className="button ghost admin-bulk-review-clear-button"
+                          disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                          onClick={handleClearBulkSelection}
+                          type="button"
+                        >
+                          清空已选
+                        </button>
+                      </div>
+
+                      <div className="inline-actions wrap-mobile admin-bulk-review-row admin-bulk-review-row-compact">
+                        <button
+                          className="button secondary"
+                          disabled={!bulkTask || bulkTask.status !== 'running'}
+                          onClick={handlePauseBulkApprove}
+                          type="button"
+                        >
+                          暂停
+                        </button>
+                        <button
+                          className="button secondary"
+                          disabled={!bulkTask || bulkTask.status !== 'paused'}
+                          onClick={handleContinueBulkApprove}
+                          type="button"
+                        >
+                          继续
+                        </button>
+                        <button
+                          className="button ghost"
+                          disabled={!bulkTask || bulkTask.status === 'stopping'}
+                          onClick={() => void handleStopBulkApprove()}
+                          type="button"
+                        >
+                          {bulkTaskStatus === 'stopping' ? '正在停止' : '停止'}
+                        </button>
+                      </div>
+
+                      <div className="field-grid two-columns admin-bulk-review-grid">
+                        <label>
+                          <span>按作者一键通过</span>
+                          <SearchableAuthorSelect
+                            options={pendingAuthorOptions}
+                            placeholder="先选作者"
+                            value={bulkAuthorName}
+                            onChange={setBulkAuthorName}
+                          />
+                        </label>
+                        <div className="stack-gap-sm admin-bulk-review-actions">
+                          <button
+                            className="button primary admin-approve-all-button"
+                            disabled={reviewMutationBusy || pendingVisibleIds.length === 0}
                             onClick={() =>
-                              void handleBatchDelete(bulkSelectedIds, '已勾选待审核内容')
+                              void handleBulkApprove(pendingVisibleIds, '当前列表待审核')
                             }
                             type="button"
                           >
-                            {deleteBusy ? '删除处理中' : `删除已选（${bulkSelectedIds.length}）`}
+                            {bulkTask
+                              ? '批量处理中'
+                              : `通过当前待审核（${pendingVisibleIds.length}）`}
                           </button>
                           <button
                             className="button primary"
-                            disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
-                            onClick={() => void handleBulkApprove(bulkSelectedIds, '已勾选内容')}
+                            disabled={reviewMutationBusy || selectedAuthorPendingIds.length === 0}
+                            onClick={() =>
+                              void handleBulkApprove(
+                                selectedAuthorPendingIds,
+                                `作者 ${bulkAuthorName} 的待审核内容`,
+                              )
+                            }
                             type="button"
                           >
-                            {bulkTask ? '批量处理中' : `通过已选（${bulkSelectedIds.length}）`}
+                            {bulkTask
+                              ? '批量处理中'
+                              : `通过该作者（${selectedAuthorPendingIds.length}）`}
                           </button>
+                          <div className="inline-actions admin-bulk-review-select-actions">
+                            <button
+                              className="button danger admin-bulk-delete-selected-button"
+                              disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                              onClick={() =>
+                                void handleBatchDelete(bulkSelectedIds, '已勾选待审核内容')
+                              }
+                              type="button"
+                            >
+                              {deleteBusy ? '删除处理中' : `删除已选（${bulkSelectedIds.length}）`}
+                            </button>
+                            <button
+                              className="button primary"
+                              disabled={reviewMutationBusy || bulkSelectedIds.length === 0}
+                              onClick={() => void handleBulkApprove(bulkSelectedIds, '已勾选内容')}
+                              type="button"
+                            >
+                              {bulkTask ? '批量处理中' : `通过已选（${bulkSelectedIds.length}）`}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
 
               {loading ? <div className="empty-panel">正在加载审核池…</div> : null}
               {feedbackScope !== 'bulk' && feedbackScope !== 'delete' && processingMessage ? (
@@ -6884,11 +7024,11 @@ export function AdminReviewPage() {
               <div className="form-panel stack-gap-md">
                 <div className="content-head">
                   <div>
-                    <p className="eyebrow">Similar Plays</p>
-                    <h3>相似</h3>
+                    <p className="eyebrow">同源小剧场</p>
+                    <h3>同源</h3>
                     <p className="sub-copy">
-                      列出与当前锚点「同标题 + 同分类」的小剧场，每条卡片自带完整的
-                      查看模式预览与通过 / 拒绝 / 下线 / 删除按钮，完全复刻审核小剧场里查看模式。
+                      把全库按「同标题 + 同分类」聚成若干组，每组卡片显示同源数量和最后同源时间；
+                      点开一组后，可对该组里的每条小剧场单独通过 / 拒绝 / 下线 / 删除 / 修改。
                     </p>
                   </div>
                   <div className="inline-actions wrap-mobile">
@@ -6913,8 +7053,8 @@ export function AdminReviewPage() {
                     </strong>
                     <span className="content-meta">
                       {similarAnchorTitle
-                        ? '只列出同标题同分类的小剧场；点击其他卡片可切换锚点。'
-                        : '可先用搜索框定位一篇，再切换到同标题同分类的列表。'}
+                        ? '只列出与锚点同标题同分类的小剧场（构成若干同源组）。'
+                        : '可先用搜索框定位一篇，再把对应同源组设为锚点。'}
                     </span>
                   </div>
                   <div className="duplicate-summary-card stack-gap-sm">
@@ -6957,8 +7097,10 @@ export function AdminReviewPage() {
                     </div>
                   </div>
                   <div className="duplicate-summary-card stack-gap-sm">
-                    <span>当前候选</span>
-                    <strong>{similarPlays.length} 篇</strong>
+                    <span>同源组数</span>
+                    <strong>
+                      {similarGroups.length} 组 / {similarPlays.length} 篇
+                    </strong>
                   </div>
                 </div>
 
@@ -6983,140 +7125,209 @@ export function AdminReviewPage() {
                 ) : null}
               </div>
 
-              {similarPlays.length === 0 ? (
+              {similarGroups.length === 0 ? (
                 <div className="empty-panel">
                   没有匹配的小剧场。试试切换锚点、调整状态筛选或清空检索。
                 </div>
               ) : (
-                <div className="stack-gap-lg">
-                  {similarPlays.map((play) => {
-                    const busy = similarBusyAction?.playId === play.id;
+                <div className="plaza-derived-group-list stack-gap-lg">
+                  {similarGroups.map((group) => {
+                    const isExpanded = similarExpandedGroups.has(group.key);
                     const isAnchor =
-                      similarAnchorTitle === play.title &&
-                      (similarAnchorCategory || DEFAULT_CATEGORY) ===
-                        (play.category || DEFAULT_CATEGORY);
+                      similarAnchorTitle.trim() === group.title &&
+                      (similarAnchorCategory || DEFAULT_CATEGORY).trim() === group.category;
                     return (
                       <article
-                        className="form-panel stack-gap-md duplicate-group-card"
-                        key={play.id}
+                        className="form-panel stack-gap-md duplicate-group-card admin-same-source-group"
+                        key={group.key}
                       >
-                        <div className="content-head">
-                          <div>
-                            <h3>{play.title}</h3>
-                            <p className="sub-copy">
-                              {play.authorName} · {play.category || DEFAULT_CATEGORY} ·{' '}
-                              {new Date(play.createdAt).toLocaleString('zh-CN')}
-                              {' · '}
-                              {statusLabelMap[play.status]}
-                            </p>
-                          </div>
-                          <div className="inline-actions wrap-mobile">
-                            <span
-                              className={isAnchor ? 'status-tag approved' : 'status-tag offline'}
-                            >
-                              {isAnchor ? '当前锚点' : '点击设为锚点'}
-                            </span>
-                            <button
-                              className="button ghost"
-                              onClick={() => handleSimilarAnchorPlay(play)}
-                              type="button"
-                            >
-                              {isAnchor ? '刷新锚点' : '设为锚点'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* 查看模式预览:完全复刻审核后台的预览样式 */}
-                        <div className="detail-panel stack-gap-md">
-                          <div className="card-topline">
-                            <span className={`status-tag ${play.status}`}>
-                              {statusLabelMap[play.status]}
-                            </span>
-                            <span>{play.category || DEFAULT_CATEGORY}</span>
-                          </div>
-                          <div className="preview-section-header">
-                            <h3>{play.title}</h3>
-                            <button
-                              aria-label="复制标题"
-                              className="preview-copy-btn"
-                              onClick={() => void copyToClipboard(play.title, '标题')}
-                              title="复制标题"
-                              type="button"
-                            >
-                              <i className="fas fa-copy" />
-                            </button>
-                          </div>
-                          {play.summary ? <p className="sub-copy">{play.summary}</p> : null}
-                          <div className="inline-detail-block stack-gap-md preview-content-block">
-                            <div className="preview-section-header">
-                              <span className="content-meta">正文约 {play.content.length} 字</span>
-                              <button
-                                aria-label="复制正文"
-                                className="preview-copy-btn"
-                                onClick={() => void copyToClipboard(play.content, '正文')}
-                                title="复制正文"
-                                type="button"
-                              >
-                                <i className="fas fa-copy" />
-                              </button>
-                            </div>
-                            <p>{play.content}</p>
-                          </div>
-                          {play.status !== 'pending' && play.reviewNote ? (
-                            <div className="stack-gap-sm">
-                              <span className="content-meta">审核备注</span>
-                              <p className="sub-copy">{play.reviewNote}</p>
-                            </div>
-                          ) : null}
-                          <div className="meta-row">
-                            <span>作者 {play.authorName}</span>
-                            <span>创建于 {new Date(play.createdAt).toLocaleString('zh-CN')}</span>
-                            {play.reviewedAt ? (
-                              <span>
-                                审核于 {new Date(play.reviewedAt).toLocaleString('zh-CN')}
+                        <button
+                          className="admin-same-source-group-header"
+                          onClick={() => {
+                            setSimilarExpandedGroups((current) => {
+                              const next = new Set(current);
+                              if (next.has(group.key)) {
+                                next.delete(group.key);
+                              } else {
+                                next.add(group.key);
+                              }
+                              return next;
+                            });
+                          }}
+                          type="button"
+                        >
+                          <div className="card-topline wrap-mobile align-start plaza-continuation-topline admin-same-source-topline">
+                            <div className="inline-actions wrap-mobile align-start plaza-continuation-meta">
+                              <span className="compact-meta-item">◈ {group.category}</span>
+                              <span className="compact-meta-item">
+                                ✎ {group.authorName?.trim() || '匿名'}
                               </span>
-                            ) : null}
+                            </div>
+                            <span
+                              className="derived-badge continuation-badge plaza-continuation-count admin-same-source-count"
+                              aria-label={`同源 ${group.plays.length} 条`}
+                              title={`同源 ${group.plays.length} 条`}
+                            >
+                              同源 {group.plays.length}
+                            </span>
                           </div>
-                        </div>
+                          <h3 className="plaza-continuation-title admin-same-source-title">
+                            {group.title}
+                          </h3>
+                          <span className="sub-copy plaza-continuation-date">
+                            最后同源：
+                            {new Date(group.latestUpdatedAt).toLocaleString('zh-CN')}
+                            {isAnchor ? ' · 当前锚点' : ''}
+                          </span>
+                          <span className="content-meta admin-same-source-toggle-hint">
+                            {isExpanded ? '收起该组' : '展开操作'}
+                          </span>
+                        </button>
 
-                        <div className="action-bar split-actions review-action-layout">
-                          <div className="inline-actions review-action-row">
-                            {actionMeta.map((item) => (
+                        {isExpanded ? (
+                          <div className="stack-gap-md admin-same-source-group-body">
+                            <div className="inline-actions wrap-mobile admin-same-source-group-actions">
                               <button
-                                key={item.action}
-                                className={`button ${item.tone} review-primary-action-button`}
-                                disabled={similarBusyAction !== null && !busy}
-                                onClick={() => void handleSimilarReview(play, item.action)}
+                                className={isAnchor ? 'button secondary' : 'button ghost'}
+                                onClick={() => {
+                                  if (isAnchor) {
+                                    setSimilarAnchorTitle('');
+                                    setSimilarAnchorCategory('');
+                                  } else {
+                                    setSimilarAnchorTitle(group.title);
+                                    setSimilarAnchorCategory(group.category);
+                                  }
+                                }}
                                 type="button"
                               >
-                                {busy && similarBusyAction?.action === item.action
-                                  ? '正在处理'
-                                  : item.label}
+                                {isAnchor ? '清除锚点' : '把这一组设为锚点'}
                               </button>
-                            ))}
-                            <button
-                              className="button warning review-delete-action-button"
-                              disabled={similarBusyAction !== null && !busy}
-                              onClick={() => void handleSimilarDelete(play)}
-                              type="button"
-                            >
-                              {busy && similarBusyAction?.action === 'delete' ? '正在处理' : '删除'}
-                            </button>
-                          </div>
-                          {busy ? <div className="feedback info">正在处理</div> : null}
-                        </div>
+                            </div>
+                            {group.plays.map((play) => {
+                              const busy = similarBusyAction?.playId === play.id;
+                              return (
+                                <article
+                                  className="form-panel stack-gap-md duplicate-group-card admin-same-source-item"
+                                  key={play.id}
+                                >
+                                  <div className="content-head">
+                                    <div>
+                                      <h3>{play.title}</h3>
+                                      <p className="sub-copy">
+                                        {play.authorName} · {play.category || DEFAULT_CATEGORY} ·{' '}
+                                        {new Date(play.createdAt).toLocaleString('zh-CN')}
+                                        {' · '}
+                                        {statusLabelMap[play.status]}
+                                      </p>
+                                    </div>
+                                  </div>
 
-                        {/* 修改面板:管理员可在此直接编辑标题/作者/分类/简介/正文,
-                         * 与审核后台的编辑面板字段一致。 */}
-                        <details className="admin-similar-edit-details">
-                          <summary>展开修改面板</summary>
-                          <SimilarInlineEditor
-                            play={play}
-                            busy={busy && similarBusyAction?.action === 'save'}
-                            disabled={similarBusyAction !== null}
-                            onSave={(next) => void handleSimilarSave(play, next)}
-                          />
-                        </details>
+                                  {/* 查看模式预览:完全复刻审核后台的预览样式 */}
+                                  <div className="detail-panel stack-gap-md">
+                                    <div className="card-topline">
+                                      <span className={`status-tag ${play.status}`}>
+                                        {statusLabelMap[play.status]}
+                                      </span>
+                                      <span>{play.category || DEFAULT_CATEGORY}</span>
+                                    </div>
+                                    <div className="preview-section-header">
+                                      <h3>{play.title}</h3>
+                                      <button
+                                        aria-label="复制标题"
+                                        className="preview-copy-btn"
+                                        onClick={() => void copyToClipboard(play.title, '标题')}
+                                        title="复制标题"
+                                        type="button"
+                                      >
+                                        <i className="fas fa-copy" />
+                                      </button>
+                                    </div>
+                                    {play.summary ? (
+                                      <p className="sub-copy">{play.summary}</p>
+                                    ) : null}
+                                    <div className="inline-detail-block stack-gap-md preview-content-block">
+                                      <div className="preview-section-header">
+                                        <span className="content-meta">
+                                          正文约 {play.content.length} 字
+                                        </span>
+                                        <button
+                                          aria-label="复制正文"
+                                          className="preview-copy-btn"
+                                          onClick={() => void copyToClipboard(play.content, '正文')}
+                                          title="复制正文"
+                                          type="button"
+                                        >
+                                          <i className="fas fa-copy" />
+                                        </button>
+                                      </div>
+                                      <p>{play.content}</p>
+                                    </div>
+                                    {play.status !== 'pending' && play.reviewNote ? (
+                                      <div className="stack-gap-sm">
+                                        <span className="content-meta">审核备注</span>
+                                        <p className="sub-copy">{play.reviewNote}</p>
+                                      </div>
+                                    ) : null}
+                                    <div className="meta-row">
+                                      <span>作者 {play.authorName}</span>
+                                      <span>
+                                        创建于 {new Date(play.createdAt).toLocaleString('zh-CN')}
+                                      </span>
+                                      {play.reviewedAt ? (
+                                        <span>
+                                          审核于 {new Date(play.reviewedAt).toLocaleString('zh-CN')}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+
+                                  <div className="action-bar split-actions review-action-layout">
+                                    <div className="inline-actions review-action-row">
+                                      {actionMeta.map((item) => (
+                                        <button
+                                          key={item.action}
+                                          className={`button ${item.tone} review-primary-action-button`}
+                                          disabled={similarBusyAction !== null && !busy}
+                                          onClick={() =>
+                                            void handleSimilarReview(play, item.action)
+                                          }
+                                          type="button"
+                                        >
+                                          {busy && similarBusyAction?.action === item.action
+                                            ? '正在处理'
+                                            : item.label}
+                                        </button>
+                                      ))}
+                                      <button
+                                        className="button warning review-delete-action-button"
+                                        disabled={similarBusyAction !== null && !busy}
+                                        onClick={() => void handleSimilarDelete(play)}
+                                        type="button"
+                                      >
+                                        {busy && similarBusyAction?.action === 'delete'
+                                          ? '正在处理'
+                                          : '删除'}
+                                      </button>
+                                    </div>
+                                    {busy ? <div className="feedback info">正在处理</div> : null}
+                                  </div>
+
+                                  {/* 修改面板:管理员可在此直接编辑标题/作者/分类/简介/正文,
+                                   * 与审核后台的编辑面板字段一致。 */}
+                                  <details className="admin-similar-edit-details">
+                                    <summary>展开修改面板</summary>
+                                    <SimilarInlineEditor
+                                      play={play}
+                                      busy={busy && similarBusyAction?.action === 'save'}
+                                      disabled={similarBusyAction !== null}
+                                      onSave={(next) => void handleSimilarSave(play, next)}
+                                    />
+                                  </details>
+                                </article>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </article>
                     );
                   })}
