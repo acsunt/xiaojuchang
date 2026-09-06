@@ -2443,6 +2443,25 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   .admin-derived-action-row > .button.primary {
     flex: 1 1 auto;
   }
+
+  /* 审核后台：手机端「续写 + 提交并通过」同一行,
+   * 与旧 .admin-derived-action-row 行为一致。 */
+  .admin-continuation-action-row {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .admin-continuation-action-row > .button {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .admin-continuation-action-row > .button.primary {
+    flex: 1 1 auto;
+  }
 }
 
 /* 广场列表 & 详情页里的"衍生"徽标：

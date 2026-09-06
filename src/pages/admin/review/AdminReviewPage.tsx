@@ -848,19 +848,25 @@ export function AdminReviewPage() {
   const [reviewContent, setReviewContent] = useState('');
   const [reviewNote, setReviewNote] = useState('');
   const reviewContentRef = useRef<HTMLTextAreaElement | null>(null);
-  /* 审核编辑面板底部的"追加衍生"表单:
-   * 只对已通过条目生效。每次点"衍生"追加一版,填简介 + 内容;
-   * 提交时按顺序 uploadPlay + reviewPlay(approve),让新版本直接落库为已通过。
-   * 与前台上传共享一个思路:共享 作者/标题/分类,只维护简介/内容。 */
-  const [derivedDrafts, setDerivedDrafts] = useState<
-    Array<{ id: string; summary: string; content: string }>
+  /* 审核编辑面板底部的"追加续写"表单:
+   * 只对已通过条目生效。每次点"续写"追加一版,填昵称(可空,空=匿名) + 简介 + 内容;
+   * 提交时按顺序 createContinuation + reviewContinuation(approve),
+   * 让新续写直接落库为已通过。
+   *
+   * 旧版的"追加衍生"已下线:原来走 uploadPlay(submissionType='derived')
+   * 后端已不再支持,所以会返回「接口返回了异常页面」。
+   * 续写版本从 plays.submission_type='derived' 改造为 continuations 表后,
+   * 这里也对应改为续写。 */
+  const [continuationDrafts, setContinuationDrafts] = useState<
+    Array<{ id: string; nickname: string; summary: string; content: string }>
   >([]);
-  const [derivedSubmitting, setDerivedSubmitting] = useState(false);
-  const makeAdminDerivedDraft = () => ({
+  const [continuationSubmitting, setContinuationSubmitting] = useState(false);
+  const makeAdminContinuationDraft = () => ({
     id:
       typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
-        : `admin-derived-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        : `admin-continuation-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    nickname: '',
     summary: '',
     content: '',
   });
@@ -2045,7 +2051,7 @@ export function AdminReviewPage() {
       setReviewCategory('');
       setReviewSummary('');
       setReviewContent('');
-      setDerivedDrafts([]);
+      setContinuationDrafts([]);
       return;
     }
 
@@ -2054,8 +2060,8 @@ export function AdminReviewPage() {
     setReviewCategory(selectedPlay.category || DEFAULT_CATEGORY);
     setReviewSummary(selectedPlay.summary);
     setReviewContent(selectedPlay.content);
-    /* 切换选中条目时清空待追加的衍生版本,避免误提交到别的作品下。 */
-    setDerivedDrafts([]);
+    /* 切换选中条目时清空待追加的续写,避免误提交到别的作品下。 */
+    setContinuationDrafts([]);
   }, [selectedPlay]);
 
   useEffect(() => {
@@ -2923,71 +2929,80 @@ export function AdminReviewPage() {
     }
   };
 
-  const addAdminDerivedDraft = () => {
-    setDerivedDrafts((current) => [...current, makeAdminDerivedDraft()]);
+  const addAdminContinuationDraft = () => {
+    setContinuationDrafts((current) => [...current, makeAdminContinuationDraft()]);
   };
 
-  const removeAdminDerivedDraft = (id: string) => {
-    setDerivedDrafts((current) => current.filter((draft) => draft.id !== id));
+  const removeAdminContinuationDraft = (id: string) => {
+    setContinuationDrafts((current) => current.filter((draft) => draft.id !== id));
   };
 
-  const updateAdminDerivedDraft = (
+  const updateAdminContinuationDraft = (
     id: string,
-    patch: Partial<{ summary: string; content: string }>,
+    patch: Partial<{ nickname: string; summary: string; content: string }>,
   ) => {
-    setDerivedDrafts((current) =>
+    setContinuationDrafts((current) =>
       current.map((draft) => (draft.id === id ? { ...draft, ...patch } : draft)),
     );
   };
 
-  /* 审核后台"追加衍生":
-   * 只对已通过条目开放。共享作者/标题/分类,每版单独简介/内容;
-   * 提交时按顺序 uploadPlay + reviewPlay(approve, 自动通过备注),
-   * 让新版本直接落库为已通过,前台列表页会自动聚合到同一组。 */
-  const handleSubmitDerivedDrafts = async () => {
+  /* 审核后台"追加续写":
+   * 只对已通过条目开放。共享选中原 play 的 id,每条续写单独昵称/简介/内容;
+   * 提交时按顺序 createContinuation + reviewContinuation('approve', 自动通过备注),
+   * 让新续写直接落库为已通过,前台续写列表会自动聚合。
+   *
+   * 历史:原"追加衍生"用 uploadPlay(submissionType='derived'),后端已下线,
+   * 所以会返回「接口返回了异常页面」。改成走 continuations 即可。 */
+  const handleSubmitAdminContinuationDrafts = async () => {
     if (!selectedPlay || selectedPlay.status !== 'approved') {
       return;
     }
-    const drafts = derivedDrafts
-      .map((draft) => ({ ...draft, summary: draft.summary.trim(), content: draft.content.trim() }))
+    const drafts = continuationDrafts
+      .map((draft) => ({
+        ...draft,
+        nickname: draft.nickname.trim(),
+        summary: draft.summary.trim(),
+        content: draft.content.trim(),
+      }))
       .filter((draft) => draft.content.length > 0);
     if (drafts.length === 0) {
-      setError('每个衍生版本都需要填写正文');
+      setError('每条续写都需要填写正文');
       setFeedbackScope('review');
       return;
     }
 
-    const authorName = reviewAuthorName.trim() || selectedPlay.authorName;
-    const title = reviewTitle.trim() || selectedPlay.title;
-    const category = reviewCategory.trim() || selectedPlay.category || DEFAULT_CATEGORY;
+    /* 管理员没有 visitorId,使用一个固定占位「__admin__:<session.username>」,
+     * 不会跟普通游客的浏览器指纹冲突,也方便在审核记录里区分。 */
+    const adminVisitorId = `__admin__:${session?.username ?? 'admin'}`;
+    const playId = selectedPlay.id;
 
-    setDerivedSubmitting(true);
+    setContinuationSubmitting(true);
     setFeedbackScope('review');
     setError('');
     setSuccessMessage('');
-    setProcessingMessage(`正在追加 ${drafts.length} 个衍生版本`);
+    setProcessingMessage(`正在追加 ${drafts.length} 条续写`);
 
     try {
       for (const draft of drafts) {
-        const created = await playApi.uploadPlay({
-          authorName,
-          title,
-          category,
+        const created = await playApi.createContinuation({
+          playId,
+          nickname: draft.nickname,
+          visitorId: adminVisitorId,
           summary: draft.summary,
           content: draft.content,
         });
-        await playApi.reviewPlay(created.id, 'approve', '管理员追加衍生版本，自动通过');
+        await playApi.reviewContinuation(created.id, 'approve', '管理员追加续写，自动通过');
       }
 
-      setDerivedDrafts([]);
+      setContinuationDrafts([]);
       setProcessingMessage('');
-      setSuccessMessage(`已追加并通过 ${drafts.length} 个衍生版本。`);
+      setSuccessMessage(`已追加并通过 ${drafts.length} 条续写。`);
       await refreshAdminAfterReviewMutation(selectedPlay.id);
     } catch (reason) {
       setProcessingMessage('');
-      setError(reason instanceof Error ? reason.message : '追加衍生版本失败');
+      setError(reason instanceof Error ? reason.message : '追加续写失败');
     } finally {
-      setDerivedSubmitting(false);
+      setContinuationSubmitting(false);
     }
   };
 
@@ -6152,78 +6167,97 @@ export function AdminReviewPage() {
                         />
                       </label>
 
-                      {/* 追加衍生版本:仅对已通过条目开放。
-                       * 每按一次"衍生"追加一版,填简介 + 内容;
-                       * 提交时会依次上传并自动通过,前台列表页按同标题+分类聚合。 */}
+                      {/* 追加续写:仅对已通过条目开放。
+                       * 每按一次「续写」追加一条,填昵称(可空) + 简介(必填) + 正文(必填);
+                       * 提交时会按顺序 createContinuation + reviewContinuation('approve')
+                       * 直接落库为已通过,前台续写列表自动聚合到这一篇下。
+                       *
+                       * 旧版「追加衍生」已下线:原来走 uploadPlay(submissionType='derived'),
+                       * 后端不再支持,所以会返回「接口返回了异常页面」。*/}
                       {selectedPlay?.status === 'approved' ? (
-                        <div className="stack-gap-sm admin-derived-section">
+                        <div className="stack-gap-sm admin-continuation-section">
                           <div className="stack-gap-sm">
                             <span className="content-meta">
-                              追加衍生版本:与本篇共享作者/标题/分类,提交后会自动通过并出现在前台"衍生"聚合里。
+                              追加续写:与本篇绑定,提交后会自动通过并出现在前台续写列表里。
+                              昵称留空时后台统一展示「匿名」。
                             </span>
                           </div>
-                          {derivedDrafts.map((draft, index) => (
-                            <div className="upload-derived-block stack-gap-sm" key={draft.id}>
-                              <div className="upload-derived-head">
-                                <strong>{`衍生版本 ${index + 1}`}</strong>
+                          {continuationDrafts.map((draft, index) => (
+                            <div className="upload-continuation-block stack-gap-sm" key={draft.id}>
+                              <div className="upload-continuation-head">
+                                <strong>{`续写 ${index + 1}`}</strong>
                                 <button
                                   className="text-button"
-                                  disabled={derivedSubmitting}
-                                  onClick={() => removeAdminDerivedDraft(draft.id)}
+                                  disabled={continuationSubmitting}
+                                  onClick={() => removeAdminContinuationDraft(draft.id)}
                                   type="button"
                                 >
-                                  删除该版本
+                                  删除该续写
                                 </button>
                               </div>
                               <label>
-                                <span>简介(可空)</span>
+                                <span>昵称（可空，空字符串在详情页不展示）</span>
                                 <input
-                                  value={draft.summary}
+                                  value={draft.nickname}
                                   onChange={(event) =>
-                                    updateAdminDerivedDraft(draft.id, {
-                                      summary: event.target.value,
+                                    updateAdminContinuationDraft(draft.id, {
+                                      nickname: event.target.value,
                                     })
                                   }
-                                  placeholder="留空则前台不展示简介"
+                                  placeholder="留空表示匿名续写"
                                 />
                               </label>
                               <label>
-                                <span>正文</span>
+                                <span>简介（必填）</span>
+                                <input
+                                  value={draft.summary}
+                                  onChange={(event) =>
+                                    updateAdminContinuationDraft(draft.id, {
+                                      summary: event.target.value,
+                                    })
+                                  }
+                                  placeholder="这条续写写什么？"
+                                />
+                              </label>
+                              <label>
+                                <span>正文（必填）</span>
                                 <textarea
                                   rows={8}
                                   value={draft.content}
                                   onChange={(event) =>
-                                    updateAdminDerivedDraft(draft.id, {
+                                    updateAdminContinuationDraft(draft.id, {
                                       content: event.target.value,
                                     })
                                   }
-                                  placeholder="写下这一版本的正文"
+                                  placeholder="写下这一条续写的正文"
                                 />
                               </label>
                             </div>
                           ))}
-                          <div className="inline-actions wrap-mobile admin-derived-action-row">
+                          <div className="inline-actions wrap-mobile admin-continuation-action-row">
                             <button
                               className="button secondary"
-                              disabled={derivedSubmitting}
-                              onClick={addAdminDerivedDraft}
+                              disabled={continuationSubmitting}
+                              onClick={addAdminContinuationDraft}
                               type="button"
                             >
-                              衍生
+                              续写
                             </button>
-                            {derivedDrafts.length > 0 ? (
+                            {continuationDrafts.length > 0 ? (
                               <button
                                 className="button primary"
                                 disabled={
-                                  derivedSubmitting ||
-                                  derivedDrafts.every((draft) => !draft.content.trim())
+                                  continuationSubmitting ||
+                                  continuationDrafts.every(
+                                    (draft) => !draft.content.trim() || !draft.summary.trim(),
+                                  )
                                 }
-                                onClick={() => void handleSubmitDerivedDrafts()}
+                                onClick={() => void handleSubmitAdminContinuationDrafts()}
                                 type="button"
                               >
-                                {derivedSubmitting
+                                {continuationSubmitting
                                   ? '提交中'
-                                  : `提交并通过（${derivedDrafts.length} 版）`}
+                                  : `提交并通过（${continuationDrafts.length} 条）`}
                               </button>
                             ) : null}
                           </div>
