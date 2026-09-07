@@ -3,8 +3,12 @@ import {
   normalizePlay,
   normalizeReviewLog,
   now,
+  parseContinuationStatus,
+  validContinuationStatuses,
   validPlayStatuses,
+  type ContinuationStatus,
   type PlayStatus,
+  type RepoStatus,
   type ReviewAction,
 } from './http';
 import {
@@ -14,6 +18,7 @@ import {
   D1_SELECT_CHUNK_SIZE,
 } from './db-utils';
 import { ensureTagByName } from './tags';
+import { parseRepoStatus } from './repos';
 
 type PlayDraft = {
   title: string;
@@ -593,6 +598,319 @@ export const restoreBackupPlays = async (db: D1Database, plays: BackupPlayDraft[
   }
 
   return { restoredCount: normalizedPlays.length };
+};
+
+/* —— 备份恢复(repos / continuations / tags) ——
+ *
+ * 设计要点:
+ * 1. 备份数据来自前端 buildBackup() 序列化(从 localStorage mock-db 导出),
+ *    字段名是前端驼峰式(playId / authorName / createdAt ...),与后端
+ *    DB 列名(snake_case)不同,所以需要 normalize 函数。
+ * 2. 备份表 id 必须唯一(同表内 + 与 plays 之间);整体覆盖前清空对应表
+ *    涉及的审计日志,避免孤儿审核记录(review_logs 已由 restoreBackupPlays
+ *    清掉,这里只清 repo_review_logs / continuation_review_logs)。
+ * 3. tags 表没有审计日志,直接 DELETE + 批量 INSERT 即可;sort_order 按
+ *    入参数组顺序重排(前端导出时已经按 sortOrder ASC 排过)。
+ * 4. 4 个 helper 都不抛事务;任一失败直接让调用方决定是否回滚。
+ *    admin/backup.ts 入口会按 plays → repos → continuations → tags 顺序
+ *    调用,如果中途失败,前面已写的数据不会被回滚(简单 + 出错易诊断)。
+ */
+
+type BackupRepoDraft = {
+  id: string;
+  playId: string;
+  parentId?: string;
+  rootId?: string;
+  nickname: string;
+  visitorId: string;
+  content: string;
+  status: RepoStatus;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+};
+
+const normalizeBackupRepoDraft = (
+  draft: BackupRepoDraft,
+  fallbackTimestamp: string,
+): BackupRepoDraft => {
+  const createdAt = normalizeBackupTimestamp(String(draft.createdAt ?? ''), fallbackTimestamp);
+  const updatedAt = normalizeBackupTimestamp(String(draft.updatedAt ?? ''), createdAt);
+  const normalizedStatus = parseRepoStatus(String(draft.status ?? '')) ?? 'pending';
+  const reviewedAtRaw = String(draft.reviewedAt ?? '').trim();
+  const reviewNote = String(draft.reviewNote ?? '').trim();
+
+  return {
+    id: String(draft.id ?? '').trim() || makeId('repo'),
+    playId: String(draft.playId ?? '').trim(),
+    parentId: String(draft.parentId ?? '').trim() || undefined,
+    rootId: String(draft.rootId ?? '').trim() || undefined,
+    nickname: String(draft.nickname ?? '').trim(),
+    visitorId: String(draft.visitorId ?? '').trim(),
+    content: String(draft.content ?? ''),
+    status: normalizedStatus,
+    createdAt,
+    updatedAt,
+    reviewedAt:
+      normalizedStatus === 'pending'
+        ? undefined
+        : reviewedAtRaw
+          ? normalizeBackupTimestamp(reviewedAtRaw, updatedAt)
+          : updatedAt,
+    reviewNote: normalizedStatus === 'pending' ? undefined : reviewNote || undefined,
+  };
+};
+
+export const restoreBackupRepos = async (db: D1Database, repos: BackupRepoDraft[]) => {
+  const normalizedRepos = repos.map((draft) => normalizeBackupRepoDraft(draft, now()));
+  const seenIds = new Set<string>();
+
+  for (const repo of normalizedRepos) {
+    if (seenIds.has(repo.id)) {
+      throw new Error('备份里存在重复 id，请检查压缩包内容');
+    }
+    if (!repo.playId) {
+      throw new Error('备份里存在缺少 playId 的 repo');
+    }
+    if (!repo.content.trim()) {
+      throw new Error('备份里存在正文为空的 repo');
+    }
+    seenIds.add(repo.id);
+  }
+
+  /* repo 引用的 play 可能不存在(备份里 plays 与 repos 顺序写入时,
+   * 若先写 repos 再写 plays,FK 会被 SQLite 拒绝)。
+   * 由于 restoreBackupPlays 已经先 DELETE+INSERT 完成,这里直接 INSERT。
+   * 如果用户只导入了一份只有 repos 的备份(没有 plays),FK 会失败 ——
+   * 但这是 admin/backup.ts 层的责任,不归本 helper 管。 */
+  await db.prepare(`DELETE FROM repo_review_logs`).run();
+  await db.prepare(`DELETE FROM repos`).run();
+
+  for (const repoChunk of chunkItems(normalizedRepos, D1_BACKUP_INSERT_CHUNK_SIZE)) {
+    await db.batch(
+      repoChunk.map((repo) =>
+        db
+          .prepare(
+            `INSERT INTO repos (
+              id, play_id, parent_id, root_id, nickname, visitor_id, content, status,
+              created_at, updated_at, reviewed_at, review_note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            repo.id,
+            repo.playId,
+            repo.parentId ?? null,
+            repo.rootId ?? null,
+            repo.nickname,
+            repo.visitorId,
+            repo.content,
+            repo.status,
+            repo.createdAt,
+            repo.updatedAt,
+            repo.reviewedAt ?? null,
+            repo.reviewNote ?? null,
+          ),
+      ),
+    );
+  }
+
+  return { restoredCount: normalizedRepos.length };
+};
+
+type BackupContinuationDraft = {
+  id: string;
+  playId: string;
+  nickname: string;
+  visitorId: string;
+  summary: string;
+  content: string;
+  status: ContinuationStatus;
+  createdAt: string;
+  updatedAt: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  lastApprovedNickname?: string;
+  lastApprovedSummary?: string;
+  lastApprovedContent?: string;
+  lastApprovedAt?: string;
+  pendingDraftNickname?: string;
+  pendingDraftSummary?: string;
+  pendingDraftContent?: string;
+  pendingDraftUpdatedAt?: string;
+};
+
+const normalizeBackupContinuationDraft = (
+  draft: BackupContinuationDraft,
+  fallbackTimestamp: string,
+): BackupContinuationDraft => {
+  const createdAt = normalizeBackupTimestamp(String(draft.createdAt ?? ''), fallbackTimestamp);
+  const updatedAt = normalizeBackupTimestamp(String(draft.updatedAt ?? ''), createdAt);
+  const normalizedStatus = parseContinuationStatus(String(draft.status ?? '')) ?? 'pending';
+  const reviewedAtRaw = String(draft.reviewedAt ?? '').trim();
+  const reviewNote = String(draft.reviewNote ?? '').trim();
+
+  return {
+    id: String(draft.id ?? '').trim() || makeId('cont'),
+    playId: String(draft.playId ?? '').trim(),
+    nickname: String(draft.nickname ?? '').trim(),
+    visitorId: String(draft.visitorId ?? '').trim(),
+    summary: String(draft.summary ?? ''),
+    content: String(draft.content ?? ''),
+    status: normalizedStatus,
+    createdAt,
+    updatedAt,
+    reviewedAt:
+      normalizedStatus === 'pending'
+        ? undefined
+        : reviewedAtRaw
+          ? normalizeBackupTimestamp(reviewedAtRaw, updatedAt)
+          : updatedAt,
+    reviewNote: normalizedStatus === 'pending' ? undefined : reviewNote || undefined,
+    lastApprovedNickname: String(draft.lastApprovedNickname ?? '').trim() || undefined,
+    lastApprovedSummary: String(draft.lastApprovedSummary ?? '').trim() || undefined,
+    lastApprovedContent: String(draft.lastApprovedContent ?? '').trim() || undefined,
+    lastApprovedAt: String(draft.lastApprovedAt ?? '').trim() || undefined,
+    pendingDraftNickname: String(draft.pendingDraftNickname ?? '').trim() || undefined,
+    pendingDraftSummary: String(draft.pendingDraftSummary ?? '').trim() || undefined,
+    pendingDraftContent: String(draft.pendingDraftContent ?? '').trim() || undefined,
+    pendingDraftUpdatedAt: String(draft.pendingDraftUpdatedAt ?? '').trim() || undefined,
+  };
+};
+
+export const restoreBackupContinuations = async (
+  db: D1Database,
+  continuations: BackupContinuationDraft[],
+) => {
+  const normalized = continuations.map((draft) => normalizeBackupContinuationDraft(draft, now()));
+  const seenIds = new Set<string>();
+
+  for (const item of normalized) {
+    if (seenIds.has(item.id)) {
+      throw new Error('备份里存在重复 id，请检查压缩包内容');
+    }
+    if (!item.playId) {
+      throw new Error('备份里存在缺少 playId 的续写');
+    }
+    if (!item.summary.trim() || !item.content.trim()) {
+      throw new Error('备份里存在简介或正文为空的续写');
+    }
+    seenIds.add(item.id);
+  }
+
+  await db.prepare(`DELETE FROM continuation_review_logs`).run();
+  await db.prepare(`DELETE FROM continuations`).run();
+
+  for (const chunk of chunkItems(normalized, D1_BACKUP_INSERT_CHUNK_SIZE)) {
+    await db.batch(
+      chunk.map((item) =>
+        db
+          .prepare(
+            `INSERT INTO continuations (
+              id, play_id, nickname, visitor_id, summary, content, status,
+              created_at, updated_at, reviewed_at, review_note,
+              last_approved_nickname, last_approved_summary, last_approved_content, last_approved_at,
+              pending_draft_nickname, pending_draft_summary, pending_draft_content, pending_draft_updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            item.id,
+            item.playId,
+            item.nickname,
+            item.visitorId,
+            item.summary,
+            item.content,
+            item.status,
+            item.createdAt,
+            item.updatedAt,
+            item.reviewedAt ?? null,
+            item.reviewNote ?? null,
+            item.lastApprovedNickname ?? null,
+            item.lastApprovedSummary ?? null,
+            item.lastApprovedContent ?? null,
+            item.lastApprovedAt ?? null,
+            item.pendingDraftNickname ?? null,
+            item.pendingDraftSummary ?? null,
+            item.pendingDraftContent ?? null,
+            item.pendingDraftUpdatedAt ?? null,
+          ),
+      ),
+    );
+  }
+
+  return { restoredCount: normalized.length };
+};
+
+type BackupTagDraft = {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const normalizeBackupTagDraft = (
+  draft: BackupTagDraft,
+  fallbackTimestamp: string,
+): BackupTagDraft => {
+  const createdAt = normalizeBackupTimestamp(String(draft.createdAt ?? ''), fallbackTimestamp);
+  const updatedAt = normalizeBackupTimestamp(String(draft.updatedAt ?? ''), createdAt);
+  return {
+    id: String(draft.id ?? '').trim() || makeId('tag'),
+    name: String(draft.name ?? '').trim(),
+    sortOrder: Number.isFinite(Number(draft.sortOrder)) ? Number(draft.sortOrder) : 0,
+    createdAt,
+    updatedAt,
+  };
+};
+
+export const restoreBackupTags = async (db: D1Database, tags: BackupTagDraft[]) => {
+  const normalized = tags.map((draft) => normalizeBackupTagDraft(draft, now()));
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+
+  for (const tag of normalized) {
+    if (seenIds.has(tag.id)) {
+      throw new Error('备份里存在重复 id，请检查压缩包内容');
+    }
+    if (!tag.name) {
+      throw new Error('备份里存在名称为空的标签');
+    }
+    const lowerName = tag.name.toLowerCase();
+    if (seenNames.has(lowerName)) {
+      throw new Error('备份里存在重复名称的标签');
+    }
+    seenIds.add(tag.id);
+    seenNames.add(lowerName);
+  }
+
+  await db.prepare(`DELETE FROM tags`).run();
+
+  /* sort_order 按入参顺序重排:与 mock-db.restoreAdminBackup
+   * (对 tags 不重排 sortOrder) 不同 — 后端更严格,保证列表顺序可预测。 */
+  for (const [chunkIndex, tagChunk] of chunkItems(
+    normalized,
+    D1_BACKUP_INSERT_CHUNK_SIZE,
+  ).entries()) {
+    await db.batch(
+      tagChunk.map((tag, index) =>
+        db
+          .prepare(
+            `INSERT INTO tags (id, name, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            tag.id,
+            tag.name,
+            chunkIndex * D1_BACKUP_INSERT_CHUNK_SIZE + index,
+            tag.createdAt,
+            tag.updatedAt,
+          ),
+      ),
+    );
+  }
+
+  return { restoredCount: normalized.length };
 };
 
 export const reviewPlay = async (

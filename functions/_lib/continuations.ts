@@ -193,6 +193,57 @@ export const listApprovedContinuationsByPlayId = async (
   return result.results.map(normalizeContinuation);
 };
 
+/* 批量按 play_id 列表取已通过续写 — 广场「导出续写」用。
+ *
+ * 与单 play_id 版 listApprovedContinuationsByPlayId 的差异:
+ * - 单 id 版直接 .bind(playId),适合详情页;
+ * - 此版本用 IN (?) 占位符 + D1_SELECT_CHUNK_SIZE 分片,适合
+ *   「把整页 N 个 play 的续写一次拉回来」。
+ *
+ * 过滤条件保持一致:status='approved' 或 last_approved_content 非空,
+ * 同时 deleted_at IS NULL。排序按 created_at。 */
+export const listApprovedContinuationsByPlayIds = async (
+  db: D1Database,
+  playIds: string[],
+  order: 'asc' | 'desc' = 'asc',
+) => {
+  await ensureContinuationsSchema(db);
+  const normalizedIds = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+  if (normalizedIds.length === 0) {
+    return [] as ContinuationRecord[];
+  }
+
+  const merged = new Map<string, ContinuationRecord>();
+  for (const idChunk of chunkItems(normalizedIds, D1_SELECT_CHUNK_SIZE)) {
+    const placeholders = idChunk.map(() => '?').join(', ');
+    const result = await db
+      .prepare(
+        `${continuationSelect}
+         WHERE continuations.deleted_at IS NULL
+           AND continuations.play_id IN (${placeholders})
+           AND (
+             continuations.status = 'approved'
+             OR (continuations.last_approved_content IS NOT NULL
+                 AND continuations.last_approved_content != '')
+           )
+         ORDER BY continuations.created_at ${order === 'desc' ? 'DESC' : 'ASC'}`,
+      )
+      .bind(...idChunk)
+      .all<Record<string, unknown>>();
+
+    result.results.forEach((row) => {
+      const item = normalizeContinuation(row);
+      merged.set(item.id, item);
+    });
+  }
+
+  return [...merged.values()].sort((left, right) =>
+    order === 'desc'
+      ? right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
+      : left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(left.id),
+  );
+};
+
 export const listMyContinuations = async (
   db: D1Database,
   visitorId: string,

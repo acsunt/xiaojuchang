@@ -1,6 +1,7 @@
 import {
   createContinuation,
   listApprovedContinuationsByPlayId,
+  listApprovedContinuationsByPlayIds,
   listMyContinuations,
   listReceivedContinuations,
 } from '../../_lib/db';
@@ -30,6 +31,14 @@ export const onRequestGet: PagesFunction = async ({ env, request }) => {
 export const onRequestPost: PagesFunction = async ({ env, request }) => {
   try {
     const body = (await request.json()) as Record<string, unknown>;
+
+    /* 广场「导出续写」按钮:批量拉取一组 play_id 下所有已通过续写,
+     * 不带 visitorId 过滤(导出场景包含自己写的和别人写的)。 */
+    if (body.mode === 'approved-by-play-ids') {
+      const playIds = Array.isArray(body.playIds) ? body.playIds.map(String) : [];
+      const order = body.order === 'asc' ? 'asc' : 'desc';
+      return json(await listApprovedContinuationsByPlayIds(env.DB, playIds, order));
+    }
 
     if (body.mode === 'received') {
       const playIds = Array.isArray(body.playIds) ? body.playIds.map(String) : [];
