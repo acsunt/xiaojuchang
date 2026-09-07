@@ -30,6 +30,10 @@ import type {
 } from '../types/play';
 
 const apiMode = import.meta.env.VITE_API_MODE ?? (import.meta.env.DEV ? 'local' : 'remote');
+
+/* 当前运行模式 — 后台「备份恢复」面板在 remote 模式下隐藏导入按钮,
+ * 避免管理员误以为导入了 repo / 续写 / 标签(后端改造另起 PR)。 */
+export const isAdminBackupLocalOnly = () => apiMode !== 'remote';
 const ADMIN_SESSION_STORAGE_KEY = 'mini-theater.remote-admin-session';
 const PUBLIC_PLAYS_CACHE_KEY = 'mini-theater.public-plays-cache';
 let publicPlaysCache: Play[] | null = null;
@@ -834,15 +838,54 @@ export const playApi = {
     return Promise.resolve(mockDb.getTags());
   },
 
-  async restoreAdminBackup(plays: Play[]): Promise<{ restoredCount: number }> {
+  async restoreAdminBackup(payload: {
+    plays: Play[];
+    repos: Repo[];
+    continuations: Continuation[];
+    tags: Tag[];
+  }): Promise<{ restoredCount: number }> {
+    /* 当前 remote 分支只覆盖 plays(repo / continuations / tags 后端改造另起 PR) */
     if (apiMode === 'remote') {
       return jsonRequest<{ restoredCount: number }>('/api/admin/backup', {
         method: 'POST',
-        body: JSON.stringify({ plays }),
+        body: JSON.stringify({ plays: payload.plays }),
       });
     }
 
-    return Promise.resolve(mockDb.restoreAdminBackup(plays));
+    return Promise.resolve(mockDb.restoreAdminBackup(payload));
+  },
+
+  /* 批量查 play 列表下所有已审核续写 — 广场「导出续写」按钮用。
+   * 不带 visitorId 过滤,导出场景里既包含「自己写的」也包含「别人写的」续写。 */
+  async getApprovedContinuationsByPlayIds(
+    playIds: string[],
+    order: RepoOrder,
+  ): Promise<Continuation[]> {
+    const normalized = Array.from(new Set(playIds.map((id) => id.trim()).filter(Boolean)));
+    if (normalized.length === 0) {
+      return [];
+    }
+    if (apiMode === 'remote') {
+      return jsonRequest<Continuation[]>('/api/continuations', {
+        method: 'POST',
+        body: JSON.stringify({
+          mode: 'approved-by-play-ids',
+          playIds: normalized,
+          order,
+        }),
+      });
+    }
+    return Promise.resolve(mockDb.getApprovedContinuationsByPlayIds(normalized, order));
+  },
+
+  async restoreContinuationsBackup(
+    continuations: Continuation[],
+  ): Promise<{ restoredCount: number }> {
+    if (apiMode === 'remote') {
+      /* 后端改造另起 PR */
+      throw new Error('远程模式下暂不支持续写备份导入');
+    }
+    return Promise.resolve(mockDb.restoreContinuationsBackup(continuations));
   },
 
   async getAdminSiteSettings(): Promise<SiteSettings> {

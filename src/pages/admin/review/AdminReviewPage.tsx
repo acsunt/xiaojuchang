@@ -15,6 +15,7 @@ import { UpdatePromptModal } from '../../../components/UpdatePromptModal';
 import {
   backupStatusLabelMap,
   downloadBackupArchive,
+  downloadContinuationsArchive,
   downloadMergedBackupArchive,
   flattenBackupArchive,
   getBackupStatusCounts,
@@ -36,7 +37,7 @@ import {
   type DuplicateScanProgress,
   type DuplicateScanScope,
 } from '../../../services/admin-duplicate-review';
-import { playApi } from '../../../services/play-api';
+import { isAdminBackupLocalOnly, playApi } from '../../../services/play-api';
 import {
   getAdminReviewDiffFlat,
   setAdminReviewDiffFlat,
@@ -1065,6 +1066,9 @@ export function AdminReviewPage() {
   const [backupMessageTone, setBackupMessageTone] = useState<'success' | 'error'>('success');
   const [backupImportName, setBackupImportName] = useState('');
   const [backupImportPlays, setBackupImportPlays] = useState<Play[]>([]);
+  const [backupImportRepostorys, setBackupImportRepostorys] = useState<Repo[]>([]);
+  const [backupImportContinuations, setBackupImportContinuations] = useState<Continuation[]>([]);
+  const [backupImportTags, setBackupImportTags] = useState<Tag[]>([]);
   const [backupImportCounts, setBackupImportCounts] = useState<Record<PlayStatus, number> | null>(
     null,
   );
@@ -2032,6 +2036,13 @@ export function AdminReviewPage() {
 
   const backupCounts = useMemo(() => getBackupStatusCounts(allPlays), [allPlays]);
   const backupImportTotal = backupImportPlays.length;
+  const backupImportRepoTotal = backupImportRepostorys.length;
+  const backupImportContinuationTotal = backupImportContinuations.length;
+  const backupImportTagTotal = backupImportTags.length;
+  /* remote 模式下「导入并恢复」后端只覆盖 plays(repo / 续写 / 标签会丢),
+   * 在此模式下隐藏导入按钮 + 文件选择 + 确认弹窗,
+   * 避免管理员误以为导入了 repo / 续写 / 标签(后端改造另起 PR)。 */
+  const backupRestoreAvailable = isAdminBackupLocalOnly();
 
   const displayTags = isTagSorting ? tagSortDraft : tags;
 
@@ -2309,6 +2320,9 @@ export function AdminReviewPage() {
   const clearBackupImportSelection = useCallback(() => {
     setBackupImportName('');
     setBackupImportPlays([]);
+    setBackupImportRepostorys([]);
+    setBackupImportContinuations([]);
+    setBackupImportTags([]);
     setBackupImportCounts(null);
     setBackupRestoreConfirmOpen(false);
     setBackupRestoreConfirmInput('');
@@ -2319,14 +2333,17 @@ export function AdminReviewPage() {
 
   const handleExportBackup = () => {
     try {
-      const repoCount = backupIncludeRepos ? allRepos.length : 0;
+      const approvedCount = allPlays.filter((play) => play.status === 'approved').length;
+      const repoCount = backupIncludeRepos
+        ? allRepos.filter((repo) => repo.status === 'approved').length
+        : 0;
       downloadBackupArchive(allPlays, tags, {
         repos: backupIncludeRepos ? allRepos : [],
       });
       setBackupMessageTone('success');
       setBackupMessage(
-        `备份已导出，共 ${allPlays.length} 篇内容，附带 ${tags.length} 个标签${
-          backupIncludeRepos ? `和 ${repoCount} 条 repo 回复` : ''
+        `备份已导出，共 ${approvedCount} 篇已通过内容，附带 ${tags.length} 个标签${
+          backupIncludeRepos ? `和 ${repoCount} 条已审核 repo 回复` : ''
         }。`,
       );
     } catch (reason) {
@@ -2337,20 +2354,34 @@ export function AdminReviewPage() {
 
   const handleExportMergedBackup = () => {
     try {
-      const repoCount = backupIncludeRepos ? allRepos.length : 0;
-      downloadMergedBackupArchive(allPlays, {
-        includeAttachedMeta: mergedBackupIncludeAttachedMeta,
+      const approvedCount = allPlays.filter((play) => play.status === 'approved').length;
+      const repoCount = backupIncludeRepos
+        ? allRepos.filter((repo) => repo.status === 'approved').length
+        : 0;
+      downloadMergedBackupArchive(allPlays, tags, {
         repos: backupIncludeRepos ? allRepos : [],
       });
       setBackupMessageTone('success');
       setBackupMessage(
-        `合并备份已导出，共 ${allPlays.length} 篇内容，按作者和分类分别成组，${
-          mergedBackupIncludeAttachedMeta ? '保留' : '不保留'
-        }附带信息${backupIncludeRepos ? `；附带 ${repoCount} 条 repo 回复,按作者和分类再各一组` : ''}。`,
+        `合并备份已导出，共 ${approvedCount} 篇已通过内容，按作者和分类分别成组${
+          backupIncludeRepos ? `；附带 ${repoCount} 条已审核 repo,按作者和分类再各一组` : ''
+        }。`,
       );
     } catch (reason) {
       setBackupMessageTone('error');
       setBackupMessage(reason instanceof Error ? reason.message : '导出合并备份失败');
+    }
+  };
+
+  const handleExportContinuationsBackup = () => {
+    try {
+      const approvedCount = allContinuations.filter((item) => item.status === 'approved').length;
+      downloadContinuationsArchive(allContinuations);
+      setBackupMessageTone('success');
+      setBackupMessage(`续写已导出，共 ${approvedCount} 条已审核续写。`);
+    } catch (reason) {
+      setBackupMessageTone('error');
+      setBackupMessage(reason instanceof Error ? reason.message : '导出续写失败');
     }
   };
 
@@ -2367,15 +2398,25 @@ export function AdminReviewPage() {
     try {
       const archive = await parseBackupArchive(file);
       const importedPlays = flattenBackupArchive(archive);
-      if (importedPlays.length === 0) {
+      if (
+        importedPlays.length === 0 &&
+        archive.repos.length === 0 &&
+        archive.continuations.length === 0 &&
+        archive.tags.length === 0
+      ) {
         throw new Error('备份压缩包里没有可导入内容');
       }
 
       setBackupImportName(file.name);
       setBackupImportPlays(importedPlays);
+      setBackupImportRepostorys(archive.repos);
+      setBackupImportContinuations(archive.continuations);
+      setBackupImportTags(archive.tags);
       setBackupImportCounts(getBackupStatusCounts(importedPlays));
       setBackupMessageTone('success');
-      setBackupMessage(`已识别备份，共 ${importedPlays.length} 篇内容。`);
+      setBackupMessage(
+        `已识别备份，共 ${importedPlays.length} 篇内容、${archive.repos.length} 条 repo、${archive.continuations.length} 条续写、${archive.tags.length} 个标签。`,
+      );
     } catch (reason) {
       clearBackupImportSelection();
       setBackupMessageTone('error');
@@ -2386,7 +2427,12 @@ export function AdminReviewPage() {
   };
 
   const handleRestoreBackup = async () => {
-    if (backupImportPlays.length === 0) {
+    if (
+      backupImportPlays.length === 0 &&
+      backupImportRepostorys.length === 0 &&
+      backupImportContinuations.length === 0 &&
+      backupImportTags.length === 0
+    ) {
       setBackupMessageTone('error');
       setBackupMessage('先选择一个可解析的备份压缩包');
       return;
@@ -2413,14 +2459,21 @@ export function AdminReviewPage() {
     setBackupMessage('');
 
     try {
-      const result = await playApi.restoreAdminBackup(backupImportPlays);
+      const result = await playApi.restoreAdminBackup({
+        plays: backupImportPlays,
+        repos: backupImportRepostorys,
+        continuations: backupImportContinuations,
+        tags: backupImportTags,
+      });
       setBulkSelectedIds([]);
       setDeleteSelectedIds([]);
       setReviewNote('');
       await refreshAdminAfterReviewMutation();
       clearBackupImportSelection();
       setBackupMessageTone('success');
-      setBackupMessage(`备份已恢复，共导入 ${result.restoredCount} 篇内容。`);
+      setBackupMessage(
+        `备份已恢复，共导入 ${result.restoredCount} 篇内容、${backupImportRepostorys.length} 条 repo、${backupImportContinuations.length} 条续写、${backupImportTags.length} 个标签。`,
+      );
     } catch (reason) {
       setBackupMessageTone('error');
       setBackupMessage(reason instanceof Error ? reason.message : '恢复备份失败');
@@ -6663,34 +6716,56 @@ export function AdminReviewPage() {
                   <button
                     className="button secondary"
                     disabled={backupBusy}
-                    onClick={() => backupFileInputRef.current?.click()}
+                    onClick={() => void handleExportContinuationsBackup()}
                     type="button"
                   >
-                    选择备份压缩包
+                    导出续写
                   </button>
-                  <button
-                    className="button warning"
-                    disabled={backupBusy || backupImportTotal === 0}
-                    onClick={() => void handleRestoreBackup()}
-                    type="button"
-                  >
-                    {backupBusy ? '恢复中' : `导入并恢复（${backupImportTotal}）`}
-                  </button>
-                  <button
-                    className="button ghost"
-                    disabled={backupBusy || !backupImportName}
-                    onClick={clearBackupImportSelection}
-                    type="button"
-                  >
-                    清空选择
-                  </button>
-                  <input
-                    accept=".zip,application/zip"
-                    hidden
-                    onChange={(event) => void handleBackupFileChange(event)}
-                    ref={backupFileInputRef}
-                    type="file"
-                  />
+                  {backupRestoreAvailable ? (
+                    <>
+                      <button
+                        className="button secondary"
+                        disabled={backupBusy}
+                        onClick={() => backupFileInputRef.current?.click()}
+                        type="button"
+                      >
+                        选择备份压缩包
+                      </button>
+                      <button
+                        className="button warning"
+                        disabled={
+                          backupBusy ||
+                          (backupImportTotal === 0 &&
+                            backupImportRepoTotal === 0 &&
+                            backupImportContinuationTotal === 0 &&
+                            backupImportTagTotal === 0)
+                        }
+                        onClick={() => void handleRestoreBackup()}
+                        type="button"
+                      >
+                        {backupBusy ? '恢复中' : `导入并恢复（${backupImportTotal}）`}
+                      </button>
+                      <button
+                        className="button ghost"
+                        disabled={backupBusy || !backupImportName}
+                        onClick={clearBackupImportSelection}
+                        type="button"
+                      >
+                        清空选择
+                      </button>
+                      <input
+                        accept=".zip,application/zip"
+                        hidden
+                        onChange={(event) => void handleBackupFileChange(event)}
+                        ref={backupFileInputRef}
+                        type="file"
+                      />
+                    </>
+                  ) : (
+                    <span className="content-meta">
+                      远程模式下导入恢复功能暂未对接后端，仅支持导出。
+                    </span>
+                  )}
                 </div>
 
                 <div className="backup-meta-row">
@@ -6716,20 +6791,20 @@ export function AdminReviewPage() {
 
                 <div className="stack-gap-sm backup-notes-panel">
                   <span className="content-meta">
-                    当前备份包会保留标题、作者、分类、简介、正文、状态、创建时间、更新时间、审核时间、审核备注和标签顺序。
+                    当前备份包只导出「已通过审核」的内容；待审核 / 已拒绝 / 已下线不参与导出。
                   </span>
                   <span className="content-meta">
-                    合并导出会额外生成 authors/ 和 categories/ 两个文件夹，每位作者、每个分类各一个
-                    TXT，便于人工查看与整理。
+                    主备份压缩包内只会有 已通过.txt / 标签.txt 两个核心文件；勾选「附带
+                    repo」后会再附上 repo-已审核.txt。导入会覆盖当前全部 plays / repos / 续写 / tags
+                    四个表的内容。
                   </span>
                   <span className="content-meta">
-                    关闭“保留附带信息”后，合并导出的 TXT 会去掉
-                    Id、Status、CreatedAt、UpdatedAt、ReviewedAt、ReviewNote，只保留阅读整理需要的正文信息。
+                    合并导出额外按 作者/ 分类/ 作者-repo/ 分类-repo
+                    四个文件夹分别成组，便于人工查看与整理。
                   </span>
                   <span className="content-meta">
-                    勾选「附带 repo」后，导出备份压缩包会多出 repo-pending.txt / repo-approved.txt /
-                    repo-rejected.txt 三个文件，合并导出则额外多出 authors-repo/ 与 categories-repo/
-                    两个文件夹。
+                    「导出续写」会单独产生 小剧场续写-yyyy-MM-dd-N条.zip，里面只有 续写-已审核.txt
+                    一份。
                   </span>
                   <span className="content-meta">审核日志不在这次 TXT 备份里。</span>
                   {backupImportName ? (
@@ -6749,6 +6824,24 @@ export function AdminReviewPage() {
                         <span className="content-meta">压缩包里该状态的内容数量。</span>
                       </div>
                     ))}
+                    <div className="duplicate-summary-card stack-gap-sm" key="backup_import_repos">
+                      <span>待导入 repo</span>
+                      <strong>{backupImportRepoTotal} 条</strong>
+                      <span className="content-meta">压缩包里的 repo 回复数量。</span>
+                    </div>
+                    <div
+                      className="duplicate-summary-card stack-gap-sm"
+                      key="backup_import_continuations"
+                    >
+                      <span>待导入续写</span>
+                      <strong>{backupImportContinuationTotal} 条</strong>
+                      <span className="content-meta">压缩包里的续写数量。</span>
+                    </div>
+                    <div className="duplicate-summary-card stack-gap-sm" key="backup_import_tags">
+                      <span>待导入标签</span>
+                      <strong>{backupImportTagTotal} 个</strong>
+                      <span className="content-meta">压缩包里的标签数量。</span>
+                    </div>
                   </div>
                 ) : null}
 
@@ -7635,11 +7728,15 @@ export function AdminReviewPage() {
             </h3>
             <div className="update-prompt-warning">
               <strong>⚠ 这是一个危险操作：</strong>
-              恢复备份会先清空当前内容库，再整体导入压缩包内容，此操作无法撤销。
+              恢复备份会先清空当前内容库（plays / repos / 续写 /
+              tags），再整体导入压缩包内容，此操作无法撤销。
             </div>
             <p className="sub-copy">
-              即将导入 <strong>{backupImportTotal}</strong> 篇内容（
-              {backupImportName || '未命名压缩包'}），覆盖当前库内全部内容。
+              即将导入 <strong>{backupImportTotal}</strong> 篇 plays、
+              <strong>{backupImportRepoTotal}</strong> 条 repos、
+              <strong>{backupImportContinuationTotal}</strong> 条续写、
+              <strong>{backupImportTagTotal}</strong> 个 tags （{backupImportName || '未命名压缩包'}
+              ），覆盖当前库内全部内容。
             </p>
             <p className="sub-copy">请输入「{BACKUP_RESTORE_CONFIRM_PHRASE}」以继续：</p>
             <input

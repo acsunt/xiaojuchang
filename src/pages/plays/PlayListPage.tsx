@@ -54,6 +54,7 @@ import {
 } from '../../services/play-text';
 import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
+import { downloadContinuationsArchive } from '../../services/play-backup';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaContinuationPanel } from './PlazaContinuationPanel';
 import { getPlayVersionKey, sortPlayVersions } from './play-versions';
@@ -1453,6 +1454,34 @@ export function PlayListPage() {
     exportPlays(favoritePlays, '收藏小剧场', '收藏');
   };
 
+  /* 广场「导出续写」:取当前 filteredPlays 下所有 play 的已审核续写,导出单独 zip。
+   * 异步,避免一次查询太多 play 时阻塞 UI。 */
+  const handleExportContinuations = async () => {
+    const sourcePlays = blockDislikedOnExport
+      ? filteredPlays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
+      : filteredPlays;
+    const playIds = sourcePlays.map((play) => play.id);
+
+    if (playIds.length === 0) {
+      showFloatingToast('当前没有可导出续写的小剧场', 'error');
+      return;
+    }
+
+    showFloatingToast(`正在整理 ${playIds.length} 篇小剧场下的续写…`);
+
+    try {
+      const continuations = await playApi.getApprovedContinuationsByPlayIds(playIds, 'asc');
+      if (continuations.length === 0) {
+        showFloatingToast('当前条件下没有可导出的续写', 'error');
+        return;
+      }
+      downloadContinuationsArchive(continuations, '续写');
+      showFloatingToast(`已导出 ${continuations.length} 条已审核续写。`);
+    } catch (reason) {
+      showFloatingToast(reason instanceof Error ? reason.message : '导出续写失败', 'error');
+    }
+  };
+
   const handleExportSelected = () => {
     if (selectionMode !== 'export') {
       setSelectionMode('export');
@@ -1993,6 +2022,13 @@ export function PlayListPage() {
                   </button>
                   <button
                     className="button secondary plaza-toolbar-button"
+                    onClick={() => void handleExportContinuations()}
+                    type="button"
+                  >
+                    导出续写
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
                     onClick={() => handleOpenExportModal('category')}
                     type="button"
                   >
@@ -2116,6 +2152,13 @@ export function PlayListPage() {
                     type="button"
                   >
                     导出作者
+                  </button>
+                  <button
+                    className="button secondary plaza-toolbar-button"
+                    onClick={() => void handleExportContinuations()}
+                    type="button"
+                  >
+                    导出续写
                   </button>
                   <button
                     className="button secondary plaza-toolbar-button"

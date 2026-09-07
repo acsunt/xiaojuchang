@@ -323,6 +323,71 @@ const normalizeBackupPlay = (play: Play): Play => {
   };
 };
 
+const normalizeBackupRepo = (repo: Repo): Repo => {
+  const timestampFallback = now();
+  const createdAt = normalizeBackupTimestamp(repo.createdAt, timestampFallback);
+  const updatedAt = normalizeBackupTimestamp(repo.updatedAt, createdAt);
+  const reviewedAt = repo.reviewedAt?.trim()
+    ? normalizeBackupTimestamp(repo.reviewedAt, updatedAt)
+    : undefined;
+
+  return {
+    id: repo.id.trim() || makeId('repo'),
+    playId: repo.playId.trim(),
+    parentId: undefined,
+    rootId: undefined,
+    nickname: repo.nickname?.trim() ?? '',
+    visitorId: '',
+    content: repo.content,
+    status: repo.status,
+    createdAt,
+    updatedAt,
+    reviewedAt,
+    reviewNote: repo.reviewNote?.trim() || undefined,
+    playTitle: repo.playTitle?.trim() || undefined,
+    playAuthorName: repo.playAuthorName?.trim() || undefined,
+    replyToNickname: repo.replyToNickname?.trim() || undefined,
+  };
+};
+
+const normalizeBackupContinuation = (item: Continuation): Continuation => {
+  const timestampFallback = now();
+  const createdAt = normalizeBackupTimestamp(item.createdAt, timestampFallback);
+  const updatedAt = normalizeBackupTimestamp(item.updatedAt, createdAt);
+  const reviewedAt = item.reviewedAt?.trim()
+    ? normalizeBackupTimestamp(item.reviewedAt, updatedAt)
+    : undefined;
+
+  return {
+    id: item.id.trim() || makeId('cont'),
+    playId: item.playId.trim(),
+    nickname: item.nickname?.trim() ?? '',
+    /* 续写 zip 不导出 visitorId,导入后留空 —
+     * 避免恢复后旧 visitorId 跟新作者串号。 */
+    visitorId: '',
+    summary: item.summary?.trim() ?? '',
+    content: item.content,
+    status: item.status,
+    createdAt,
+    updatedAt,
+    reviewedAt,
+    reviewNote: item.reviewNote?.trim() || undefined,
+    playTitle: item.playTitle?.trim() || undefined,
+    playAuthorName: item.playAuthorName?.trim() || undefined,
+  };
+};
+
+const normalizeBackupTag = (tag: Tag): Tag => {
+  const timestampFallback = now();
+  return {
+    id: tag.id.trim() || makeId('tag'),
+    name: tag.name.trim(),
+    sortOrder: Number.isFinite(tag.sortOrder) ? tag.sortOrder : 0,
+    createdAt: normalizeBackupTimestamp(tag.createdAt, timestampFallback),
+    updatedAt: normalizeBackupTimestamp(tag.updatedAt, tag.createdAt || timestampFallback),
+  };
+};
+
 export const mockDb = {
   getPublicPlays() {
     return getPlays()
@@ -540,29 +605,128 @@ export const mockDb = {
     return getPlays().find((play) => play.id === id) ?? null;
   },
 
-  restoreAdminBackup(plays: Play[]) {
-    const normalizedPlays = plays.map(normalizeBackupPlay);
+  restoreAdminBackup(payload: {
+    plays: Play[];
+    repos: Repo[];
+    continuations: Continuation[];
+    tags: Tag[];
+  }) {
+    const normalizedPlays = payload.plays.map(normalizeBackupPlay);
+    const normalizedRepos = payload.repos.map(normalizeBackupRepo);
+    const normalizedContinuations = payload.continuations.map(normalizeBackupContinuation);
+    const normalizedTags = payload.tags.map(normalizeBackupTag);
+
     const seenIds = new Set<string>();
 
+    const assertUnique = (collection: string, ids: string[]) => {
+      for (const id of ids) {
+        if (seenIds.has(id)) {
+          throw new Error(`备份里存在重复 id(${id}),请检查压缩包内容`);
+        }
+        seenIds.add(id);
+      }
+      void collection;
+    };
+
+    assertUnique(
+      'plays',
+      normalizedPlays.map((p) => p.id),
+    );
+    assertUnique(
+      'repos',
+      normalizedRepos.map((r) => r.id),
+    );
+    assertUnique(
+      'continuations',
+      normalizedContinuations.map((c) => c.id),
+    );
+    assertUnique(
+      'tags',
+      normalizedTags.map((t) => t.id),
+    );
+
     for (const play of normalizedPlays) {
-      if (!play.id) {
-        throw new Error('备份里存在缺少 id 的内容');
-      }
-
-      if (seenIds.has(play.id)) {
-        throw new Error('备份里存在重复 id，请检查压缩包内容');
-      }
-
       if (!play.title || !play.authorName || !play.content) {
         throw new Error('备份里存在标题、署名或正文为空的内容');
       }
-
-      seenIds.add(play.id);
+    }
+    for (const repo of normalizedRepos) {
+      if (!repo.playId) {
+        throw new Error('备份里存在缺少 playId 的 repo');
+      }
+      if (!repo.content) {
+        throw new Error('备份里存在正文为空的 repo');
+      }
+    }
+    for (const item of normalizedContinuations) {
+      if (!item.playId) {
+        throw new Error('备份里存在缺少 playId 的续写');
+      }
+      if (!item.summary || !item.content) {
+        throw new Error('备份里存在简介或正文为空的续写');
+      }
+    }
+    for (const tag of normalizedTags) {
+      if (!tag.name) {
+        throw new Error('备份里存在名称为空的标签');
+      }
     }
 
+    /* 整体覆盖前清掉所有审计日志 —
+     * 旧库的 review_logs / repo_review_logs / continuation_review_logs
+     * 都引用了旧 play / repo / continuation id,留着会出现「孤儿审核记录」。
+     * 标签库没有审计日志,无需清理。 */
     setReviewLogs([]);
+    setRepoReviewLogs([]);
+    setContinuationReviewLogs([]);
+
+    setTags(normalizedTags);
     setPlays(normalizedPlays.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
-    return { restoredCount: normalizedPlays.length };
+    setRepos(normalizedRepos);
+    setContinuations(normalizedContinuations);
+
+    return {
+      restoredCount: normalizedPlays.length,
+    };
+  },
+
+  restoreContinuationsBackup(continuations: Continuation[]) {
+    const normalized = continuations.map(normalizeBackupContinuation);
+    const seenIds = new Set<string>();
+
+    for (const item of normalized) {
+      if (!item.id) {
+        throw new Error('续写备份里存在缺少 id 的内容');
+      }
+      if (seenIds.has(item.id)) {
+        throw new Error(`续写备份里存在重复 id(${item.id})`);
+      }
+      seenIds.add(item.id);
+      if (!item.playId) {
+        throw new Error('续写备份里存在缺少 playId 的续写');
+      }
+      if (!item.summary || !item.content) {
+        throw new Error('续写备份里存在简介或正文为空的续写');
+      }
+    }
+
+    /* 续写 zip 导入只覆盖续写库,不动 plays / repos / tags;
+     * 审计日志里指向旧续写 id 的条目失去对象,一并清空续写相关日志。 */
+    setContinuationReviewLogs([]);
+    setContinuations(normalized);
+    return { restoredCount: normalized.length };
+  },
+
+  /* 批量取 play 列表下所有已审核续写(不带 visitorId 过滤,广场导出场景使用) */
+  getApprovedContinuationsByPlayIds(playIds: string[], order: 'asc' | 'desc') {
+    const idSet = new Set(playIds);
+    return getContinuations()
+      .filter((item) => idSet.has(item.playId) && item.status === 'approved' && !item.deletedAt)
+      .sort((left, right) =>
+        order === 'desc'
+          ? right.createdAt.localeCompare(left.createdAt)
+          : left.createdAt.localeCompare(right.createdAt),
+      );
   },
 
   createTag(draft: TagDraft) {
