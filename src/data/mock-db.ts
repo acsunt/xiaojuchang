@@ -120,24 +120,86 @@ const seedSiteSettings: SiteSettings = {
   updatedAt: now(),
 };
 
+/* 模块级内存缓存:同一会话内,readStore / writeStore 命中此处,
+ * 跳过 localStorage.getItem + JSON.parse,详情页一次性触发 getPlays /
+ * getRepos / getContinuations 三个查询时不再做重复反序列化。
+ *
+ * 注意:
+ * 1. 写入路径(setPlays / setRepos / ...) 必须同步更新缓存,否则下次读会拿到旧值;
+ * 2. 跨标签页同步通过 storage 事件主动失效缓存,避免缓存与磁盘不一致;
+ * 3. SSR / 测试环境下 window 不存在时,缓存层直接降级为原始 localStorage 读写。 */
+type StoreEntry = { value: unknown; raw: string | null };
+const memoryStore = new Map<string, StoreEntry>();
+
+/* 直接读全局 localStorage。浏览器里 window.localStorage === globalThis.localStorage,
+ * 测试里 vi.stubGlobal('localStorage', ...) 也会写到 globalThis,不需要绕道 window.localStorage
+ * (避免 mock 出的 window 对象没带 localStorage 属性时,getStorage 误返回 null)。 */
+const getStorage = () => {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+  return localStorage;
+};
+
 const readStore = <T>(key: string, fallback: T): T => {
-  const raw = localStorage.getItem(key);
+  const storage = getStorage();
+  if (!storage) {
+    return fallback;
+  }
+
+  const raw = storage.getItem(key);
+  const cached = memoryStore.get(key);
+
+  /* 缓存与磁盘一致(都没写 / 写的同一份 raw),直接走内存,
+   * 跳过 JSON.parse,这是详情页快速加载续写 / repo 的关键路径。 */
+  if (cached && cached.raw === raw && cached.value !== undefined) {
+    return cached.value as T;
+  }
+
   if (!raw) {
-    localStorage.setItem(key, JSON.stringify(fallback));
+    const serializedFallback = JSON.stringify(fallback);
+    storage.setItem(key, serializedFallback);
+    memoryStore.set(key, { value: fallback, raw: serializedFallback });
     return fallback;
   }
 
   try {
-    return JSON.parse(raw) as T;
+    const parsed = JSON.parse(raw) as T;
+    memoryStore.set(key, { value: parsed, raw });
+    return parsed;
   } catch {
-    localStorage.setItem(key, JSON.stringify(fallback));
+    const serializedFallback = JSON.stringify(fallback);
+    storage.setItem(key, serializedFallback);
+    memoryStore.set(key, { value: fallback, raw: serializedFallback });
     return fallback;
   }
 };
 
 const writeStore = <T>(key: string, value: T) => {
-  localStorage.setItem(key, JSON.stringify(value));
+  const storage = getStorage();
+  const raw = JSON.stringify(value);
+  if (storage) {
+    storage.setItem(key, raw);
+  }
+  memoryStore.set(key, { value, raw });
 };
+
+const invalidateStoreCache = (key: string) => {
+  memoryStore.delete(key);
+};
+
+/* 监听跨标签页 storage 事件:其它标签页写入时,本地缓存失效,
+ * 下次 readStore 重新从 localStorage 拉取。 */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (!event.key) {
+      // clear():谨慎起见清空全部缓存
+      memoryStore.clear();
+      return;
+    }
+    invalidateStoreCache(event.key);
+  });
+}
 
 const getTags = () => readStore<Tag[]>(TAG_STORE_KEY, seedTags);
 const setTags = (tags: Tag[]) => {

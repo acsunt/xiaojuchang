@@ -1,57 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+/* 仅识别「图床链接」的简易渲染器:
+ * - ![alt](图床URL) 渲染成可点击缩略图,点击放大预览
+ * - 单独的图床 URL(以 http(s):// 开头,且扩展名是常见图片)也按图片处理
+ * - 其余文字 / 普通链接全部按纯文本段落渲染,不再做 Markdown 解析
+ */
 const imagePattern = /\.(png|jpe?g|gif|webp|avif|svg)(\?.*)?$/i;
 const markdownImagePattern = /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g;
-const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
 const bareUrlPattern = /(https?:\/\/[^\s<>()]+)/g;
 
-type MarkdownTextToken = { type: 'text'; value: string };
-type MarkdownLinkToken = { type: 'link'; label: string; url: string };
-type MarkdownImageToken = { type: 'image'; alt: string; url: string; imageIndex: number };
-type MarkdownToken = MarkdownTextToken | MarkdownLinkToken | MarkdownImageToken;
+type RepoTextToken = { type: 'text'; value: string };
+type RepoImageToken = { type: 'image'; alt: string; url: string; imageIndex: number };
+type RepoToken = RepoTextToken | RepoImageToken;
 
-type ParsedRepoMarkdown = {
+type ParsedRepoContent = {
   images: Array<{ alt: string; url: string }>;
-  paragraphs: Array<{ id: string; tokens: MarkdownToken[] }>;
+  paragraphs: Array<{ id: string; tokens: RepoToken[] }>;
 };
 
 const isImageUrl = (url: string) => imagePattern.test(url.split('#')[0] ?? '');
 
-const pushTextWithLinks = (
-  tokens: MarkdownToken[],
-  images: ParsedRepoMarkdown['images'],
-  value: string,
-) => {
-  let cursor = 0;
-  const matches = Array.from(value.matchAll(markdownLinkPattern));
-
-  for (const match of matches) {
-    const index = match.index ?? 0;
-    if (index > cursor) {
-      pushBareUrls(tokens, images, value.slice(cursor, index));
-    }
-
-    const label = match[1] ?? '';
-    const url = match[2] ?? '';
-    if (isImageUrl(url)) {
-      const imageIndex = images.push({ alt: label || '图床图片', url }) - 1;
-      tokens.push({ type: 'image', alt: label, url, imageIndex });
-    } else {
-      tokens.push({ type: 'link', label, url });
-    }
-    cursor = index + match[0].length;
-  }
-
-  if (cursor < value.length) {
-    pushBareUrls(tokens, images, value.slice(cursor));
-  }
-};
-
-const pushBareUrls = (
-  tokens: MarkdownToken[],
-  images: ParsedRepoMarkdown['images'],
-  value: string,
-) => {
+const pushBareUrls = (tokens: RepoToken[], images: ParsedRepoContent['images'], value: string) => {
   let cursor = 0;
   const matches = Array.from(value.matchAll(bareUrlPattern));
 
@@ -66,7 +35,8 @@ const pushBareUrls = (
       const imageIndex = images.push({ alt: '图床图片', url }) - 1;
       tokens.push({ type: 'image', alt: '图床图片', url, imageIndex });
     } else {
-      tokens.push({ type: 'link', label: url, url });
+      // 非图床链接也按纯文本展示,不再做 Markdown 渲染
+      tokens.push({ type: 'text', value: url });
     }
     cursor = index + match[0].length;
   }
@@ -76,27 +46,30 @@ const pushBareUrls = (
   }
 };
 
-const parseInlineMarkdown = (
-  images: ParsedRepoMarkdown['images'],
-  value: string,
-): MarkdownToken[] => {
-  const tokens: MarkdownToken[] = [];
+const parseInlineContent = (images: ParsedRepoContent['images'], value: string): RepoToken[] => {
+  const tokens: RepoToken[] = [];
   let cursor = 0;
   const matches = Array.from(value.matchAll(markdownImagePattern));
 
   for (const match of matches) {
     const index = match.index ?? 0;
     if (index > cursor) {
-      pushTextWithLinks(tokens, images, value.slice(cursor, index));
+      pushBareUrls(tokens, images, value.slice(cursor, index));
     }
 
-    const imageIndex = images.push({ alt: match[1] ?? '图床图片', url: match[2] ?? '' }) - 1;
-    tokens.push({ type: 'image', alt: match[1] ?? '图床图片', url: match[2] ?? '', imageIndex });
+    const url = match[2] ?? '';
+    if (isImageUrl(url)) {
+      const imageIndex = images.push({ alt: match[1] || '图床图片', url }) - 1;
+      tokens.push({ type: 'image', alt: match[1] || '图床图片', url, imageIndex });
+    } else {
+      // 非图床的 ![alt](url) 也按纯文本展示
+      tokens.push({ type: 'text', value: match[0] });
+    }
     cursor = index + match[0].length;
   }
 
   if (cursor < value.length) {
-    pushTextWithLinks(tokens, images, value.slice(cursor));
+    pushBareUrls(tokens, images, value.slice(cursor));
   }
 
   return tokens;
@@ -109,11 +82,11 @@ const splitParagraphs = (content: string) =>
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
 
-const parseRepoMarkdown = (content: string): ParsedRepoMarkdown => {
-  const images: ParsedRepoMarkdown['images'] = [];
+const parseRepoContent = (content: string): ParsedRepoContent => {
+  const images: ParsedRepoContent['images'] = [];
   const paragraphs = splitParagraphs(content).map((paragraph, paragraphIndex) => ({
     id: `${paragraphIndex}-${paragraph.slice(0, 12)}`,
-    tokens: parseInlineMarkdown(images, paragraph),
+    tokens: parseInlineContent(images, paragraph),
   }));
 
   return {
@@ -129,7 +102,7 @@ type RepoMarkdownProps = {
 export function RepoMarkdown({ content }: RepoMarkdownProps) {
   const touchStartXRef = useRef<number | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const parsedContent = useMemo(() => parseRepoMarkdown(content), [content]);
+  const parsedContent = useMemo(() => parseRepoContent(content), [content]);
   const previewImage = previewIndex === null ? null : (parsedContent.images[previewIndex] ?? null);
   const hasMultipleImages = parsedContent.images.length > 1;
 
@@ -193,14 +166,6 @@ export function RepoMarkdown({ content }: RepoMarkdownProps) {
           {paragraph.tokens.map((token, tokenIndex) => {
             if (token.type === 'text') {
               return <span key={tokenIndex}>{token.value}</span>;
-            }
-
-            if (token.type === 'link') {
-              return (
-                <a href={token.url} key={tokenIndex} rel="noreferrer" target="_blank">
-                  {token.label}
-                </a>
-              );
             }
 
             return (

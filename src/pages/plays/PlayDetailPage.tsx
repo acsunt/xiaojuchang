@@ -26,6 +26,8 @@ import {
 
 import { RepoMarkdown } from '../repos/RepoMarkdown';
 
+import { ContinuationText } from './ContinuationText';
+
 import { showFloatingToast } from '../../components/floating-toast-store';
 
 const formatDate = (value: string) => new Date(value).toLocaleString('zh-CN');
@@ -490,8 +492,8 @@ export function PlayDetailPage() {
             </button>
           </div>
 
-          {play.summary ? <p className="sub-copy plaza-card-summary">{play.summary}</p> : null}
-
+          {/* 简介原本在标题下一行展示,但与「小剧场正文」区域上方的简介重复。
+           * 只保留正文区那一份,这里不再渲染。*/}
           <div className="detail-meta-switch-wrapper">
             <div className="meta-row wrap-mobile">
               <span>
@@ -765,7 +767,7 @@ export function PlayDetailPage() {
                     </div>
                   ) : null}
                   <div className="continuation-content-row">
-                    <p className="play-detail-copy continuation-content">{item.content}</p>
+                    <ContinuationText content={item.content} />
                     <button
                       aria-label="复制正文"
                       className="icon-button continuation-copy-button"
@@ -790,7 +792,7 @@ export function PlayDetailPage() {
           <div>
             <h3>repo</h3>
 
-            <p className="sub-copy">支持 Markdown和图床链接，欢迎给各位大大积极repo。</p>
+            <p className="sub-copy">支持图床链接，欢迎给各位大大积极repo。</p>
           </div>
 
           <div className="repo-toolbar-row">
