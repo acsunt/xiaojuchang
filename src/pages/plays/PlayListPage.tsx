@@ -78,8 +78,10 @@ import {
   Dices,
   Download,
   Filter,
+  GitBranch,
   HeartCrack,
   Layers,
+  MessageSquare,
   MoreHorizontal,
   Search,
 } from 'lucide-react';
@@ -536,7 +538,44 @@ function ExportPickerModal({
 function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  /* 菜单的位置（fixed 坐标系）。由 trigger 的 getBoundingClientRect 推算。 */
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const selectedOption = options.find((item) => item.value === value) ?? options[0];
+
+  /* 打开时：基于 trigger 位置更新菜单 fixed 坐标。
+   * 用 fixed 定位而不是 absolute,是为了:
+   *   1) 菜单可以逃离任意祖先 stacking context(尤其是 .play-card-shell { overflow: hidden }),
+   *      不再被裁剪;
+   *   2) 菜单始终绘制在最高层(z-index: 9999),不会被卡片或兄弟元素遮挡。 */
+  useEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setMenuPos({
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+
+    updatePosition();
+
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -571,6 +610,7 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
         aria-expanded={open}
         className="custom-select-trigger"
         onClick={() => setOpen((current) => !current)}
+        ref={triggerRef}
         type="button"
       >
         <span>{selectedOption?.label ?? ''}</span>
@@ -578,8 +618,18 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
           ▾
         </span>
       </button>
-      {open ? (
-        <div className="custom-select-menu" role="listbox" aria-label={label}>
+      {open && menuPos ? (
+        <div
+          className="custom-select-menu"
+          role="listbox"
+          aria-label={label}
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+          }}
+        >
           {options.map((option) => {
             const active = option.value === value;
             return (
@@ -1853,9 +1903,7 @@ export function PlayListPage() {
           title={disliked ? '取消不喜欢' : '不喜欢'}
           type="button"
         >
-          <span aria-hidden="true" className="marker-broken-heart-icon">
-            💔
-          </span>
+          <HeartCrack aria-hidden="true" strokeWidth={1.75} className="marker-broken-heart-icon" />
         </button>
       </div>
     );
@@ -1867,33 +1915,93 @@ export function PlayListPage() {
    * - 续写条数(若 > 0,挂在作者后面提示"这篇有 N 条续写",
    *   替换旧版"衍生"徽章。续写走 continuations 表独立审核,
    *   不再复用 plays 多版本折叠的 versionCount。)
-   * - repo 评论数(若 > 0) */
+   * - repo 评论数(若 > 0) 已迁出 renderCardFooter —— 作者和续写/repo 统一放卡片底部 footer 行。
+   */
   const renderCompactMeta = (play: Play) => {
+    return (
+      <div className="compact-meta-row compact-meta-row-small">
+        <span className="compact-meta-item">◈ {play.category?.trim() || DEFAULT_CATEGORY}</span>
+      </div>
+    );
+  };
+
+  /* 广场卡片的最后一行：作者(左) + 续写 / repo / 收藏 / 不喜欢 等仅图标(右)。
+   * - 收藏 / 不喜欢 受父级 showPreferenceActions 控制：默认隐藏、点击「展开标记」后才出现。
+   * - 续写 / repo 是固定显示：续写用分支形状图标(GitBranch)；repo 用评论气泡(MessageSquare)。
+   * - 4 个图标按钮统一尺寸与样式，与「不喜欢 / 收藏」同样外观但缩小一档 (24px 直径)。 */
+  const renderCardFooter = (play: Play) => {
+    const favorite = isFavoritePlay(play.id, preferenceStore);
+    const disliked = isDislikedPlay(play.id, preferenceStore);
     const repoCount = repoCounts.find((item) => item.playId === play.id)?.count ?? 0;
     const continuationCount =
       continuationCounts.find((item) => item.playId === play.id)?.count ?? 0;
 
     return (
-      <div className="compact-meta-row compact-meta-row-small">
-        <span className="compact-meta-item">◈ {play.category?.trim() || DEFAULT_CATEGORY}</span>
-        <span className="compact-meta-item compact-meta-item-with-repo">
-          <span>✎ {play.authorName}</span>
-          {continuationCount > 0 ? (
-            <span
-              className="derived-badge continuation-badge"
-              aria-label={`续写 ${continuationCount} 条`}
-              title={`续写 ${continuationCount} 条`}
+      <div className="play-card-footer wrap-mobile align-start" onClick={stopCardAction}>
+        <span className="play-card-footer-author content-meta" title={play.authorName}>
+          ✎ {play.authorName}
+        </span>
+        <div className="inline-actions play-card-footer-icons">
+          {showPreferenceActions ? (
+            <button
+              aria-label={favorite ? '取消收藏' : '收藏'}
+              className={`play-card-footer-icon play-marker-icon ${favorite ? 'is-active favorite' : ''}`}
+              onClick={() => handleToggleFavorite(play.id)}
+              title={favorite ? '取消收藏' : '收藏'}
+              type="button"
             >
-              续写 {continuationCount}
-            </span>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="marker-star-icon"
+              >
+                <path d="M12 2l2.95 7.36L22 10l-5.92 4.43L18.18 22 12 17.77 5.82 22l2.1-7.57L2 10l7.05-.64L12 2z" />
+              </svg>
+            </button>
+          ) : null}
+          {showPreferenceActions ? (
+            <button
+              aria-label={disliked ? '取消不喜欢' : '不喜欢'}
+              className={`play-card-footer-icon play-marker-icon ${disliked ? 'is-active disliked' : ''}`}
+              onClick={() => handleToggleDisliked(play.id)}
+              title={disliked ? '取消不喜欢' : '不喜欢'}
+              type="button"
+            >
+              <HeartCrack aria-hidden="true" strokeWidth={1.75} />
+            </button>
+          ) : null}
+          {continuationCount > 0 ? (
+            <button
+              aria-label={`续写 ${continuationCount} 条`}
+              className="play-card-footer-icon play-marker-icon continuation-icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                openPlayDetail(play, 'continuations');
+              }}
+              title={`续写 ${continuationCount} 条`}
+              type="button"
+            >
+              <GitBranch aria-hidden="true" strokeWidth={1.75} />
+              <span className="play-card-footer-icon-count">{continuationCount}</span>
+            </button>
           ) : null}
           {repoCount > 0 ? (
-            <span className="repo-count-meta" aria-label={`评论 ${repoCount} 条`}>
-              <span aria-hidden="true">💬</span>
-              {repoCount}
-            </span>
+            <button
+              aria-label={`评论 ${repoCount} 条`}
+              className="play-card-footer-icon play-marker-icon repo-icon"
+              onClick={(event) => {
+                event.stopPropagation();
+                openPlayDetail(play);
+              }}
+              title={`评论 ${repoCount} 条`}
+              type="button"
+            >
+              <MessageSquare aria-hidden="true" strokeWidth={1.75} />
+              <span className="play-card-footer-icon-count">{repoCount}</span>
+            </button>
           ) : null}
-        </span>
+        </div>
       </div>
     );
   };
@@ -2863,7 +2971,7 @@ export function PlayListPage() {
                         {showPreview ? (
                           <p className="preview-copy plaza-card-preview">{play.content}</p>
                         ) : null}
-                        {showPreferenceActions ? renderPreferenceActions(play) : null}
+                        {renderCardFooter(play)}
                       </article>
                     );
                   })}

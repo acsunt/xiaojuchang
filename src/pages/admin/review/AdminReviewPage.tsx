@@ -168,6 +168,32 @@ function SearchableCategorySelect({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
+  /* 菜单 fixed 坐标系 (与 CustomSelect 同款改造:避免被父级 stacking context 遮挡) */
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setMenuPos({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -220,11 +246,17 @@ function SearchableCategorySelect({
         placeholder={placeholder}
         value={value}
       />
-      {open ? (
+      {open && menuPos ? (
         <div
           className="custom-select-menu searchable-category-menu"
           role="listbox"
           aria-label="选择分类"
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+          }}
         >
           {filtered.length > 0 ? (
             filtered.map((option) => (
@@ -273,6 +305,31 @@ function SearchableAuthorSelect({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rect = inputRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setMenuPos({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+    };
+
+    updatePosition();
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -325,11 +382,17 @@ function SearchableAuthorSelect({
         placeholder={placeholder}
         value={value}
       />
-      {open ? (
+      {open && menuPos ? (
         <div
           className="custom-select-menu searchable-category-menu"
           role="listbox"
           aria-label="选择作者"
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: menuPos.width,
+          }}
         >
           {filtered.length > 0 ? (
             filtered.map((option) => (

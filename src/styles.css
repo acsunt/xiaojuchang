@@ -676,6 +676,17 @@ select option {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent 82%);
 }
 
+/* 下方面板的 CustomSelect：label + trigger 文字与正文(14px)一致 */
+.plaza-pill-grid .custom-select > span,
+.plaza-pill-grid .custom-select .custom-select-trigger,
+.plaza-pill-grid .custom-select .custom-select-trigger > span,
+.plaza-pill-grid .toolbar-toggle-field > span {
+  font-size: calc(14px * var(--text-scale, 1));
+}
+.plaza-pill-grid .custom-select > span {
+  color: var(--text-soft);
+}
+
 .custom-select-chevron {
   color: var(--text-soft);
   font-size: calc(12px * var(--text-scale, 1));
@@ -683,11 +694,10 @@ select option {
 }
 
 .custom-select-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 800;
+  position: fixed;
+  /* 用 fixed 定位(JS 计算坐标),脱离任意父级 stacking context;
+   * z-index 升到 1300,确保不被卡片网格 / app-header 等任何祖先遮挡。 */
+  z-index: 1300;
   display: grid;
   gap: 6px;
   padding: 8px;
@@ -696,6 +706,8 @@ select option {
   background: color-mix(in srgb, var(--panel) 96%, #000 4%);
   box-shadow: 0 18px 38px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(18px);
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 .custom-select-option {
@@ -3617,6 +3629,102 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   width: 40px;
   height: 40px;
 }
+
+/* ====== 卡片底部 footer 行 ======
+ * 设计目标：
+ *   - 作者放最后一行左侧（content-meta 等宽小字）
+ *   - 续写 / repo / 收藏 / 不喜欢 等仅图标按钮放最后一行右侧
+ *   - 4 个按钮统一尺寸（24×24）、统一外观（胶囊形），缩小一档
+ */
+.play-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.play-card-footer-author {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.play-card-footer-icons {
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.play-card-footer-icon {
+  /* 与 .play-marker-icon 共享胶囊外观，但缩成 24×24 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 0;
+  padding: 0;
+  font-size: calc(14px * var(--text-scale, 1));
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text-soft);
+  cursor: pointer;
+  position: relative;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.play-card-footer-icon:hover,
+.play-card-footer-icon:focus-visible {
+  background: color-mix(in srgb, var(--panel) 88%, white 12%);
+  border-color: var(--border);
+}
+
+.play-card-footer-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* 续写 + repo：徽章数字叠在图标右下角 */
+.play-card-footer-icon-count {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.play-card-footer-icon.continuation-icon.is-active,
+.play-card-footer-icon.continuation-icon:hover {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+}
+
+.play-card-footer-icon.repo-icon.is-active,
+.play-card-footer-icon.repo-icon:hover {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+}
+
+.play-card-footer-icon.is-active.favorite {
+  color: #ffbe3c;
+}
 .play-marker-menu .play-marker-icon svg {
   width: 28px;
   height: 28px;
@@ -3626,16 +3734,21 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
 }
 
 /* 不喜欢 (💔)：默认灰色 (opacity + grayscale)，激活时去掉滤镜恢复原色红心裂开 */
-.play-marker-menu .play-marker-icon .marker-broken-heart-icon {
-  font-size: calc(24px * var(--text-scale, 1));
+.play-marker-menu .play-marker-icon .marker-broken-heart-icon,
+.play-card-footer-icon .marker-broken-heart-icon {
+  font-size: calc(20px * var(--text-scale, 1));
   line-height: 1;
   opacity: 0.34;
   filter: grayscale(100%);
   transition:
     opacity 160ms ease,
     filter 160ms ease;
+  width: 1em;
+  height: 1em;
+  display: inline-block;
 }
-.play-marker-menu .play-marker-icon.is-active.disliked .marker-broken-heart-icon {
+.play-marker-menu .play-marker-icon.is-active.disliked .marker-broken-heart-icon,
+.play-card-footer-icon.is-active.disliked .marker-broken-heart-icon {
   opacity: 1;
   filter: none;
 }
@@ -5773,12 +5886,9 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 }
 
 .searchable-category-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  /* 与 .custom-select-menu 对齐，保证绝对定位的下拉菜单始终在最上层 */
-  z-index: 801;
+  position: fixed;
+  /* 与 .custom-select-menu 对齐(都是 fixed 定位) */
+  z-index: 1301;
   display: grid;
   gap: 6px;
   padding: 8px;
@@ -8440,9 +8550,21 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 
 /* 入口 + 子项 同一行时（顶部页面导航、工具栏）的横向布局 */
 .plaza-pill-group.is-inline {
+  display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
+  /* 显式指定与按钮一致的最小高度，避免被 .plaza-toolbar-v2 的
+   * align-items: center 拉伸后出现基线偏移 */
+  min-height: 34px;
+}
+
+/* 在 .plaza-toolbar-v2 内：PillGroup 与纯按钮的高度对齐。
+ * PillGroup 内的 trigger 必须垂直居中在 PillGroup 容器自身的高度内，
+ * 而容器高度应与左侧的折叠 / 骰子按钮 (min-height: 34px) 完全一致。 */
+.plaza-toolbar-v2 > .plaza-pill-group.is-inline > .plaza-pill-trigger,
+.plaza-toolbar-v2 > .plaza-pill-group.is-inline > .plaza-pill-body {
+  align-self: center;
 }
 
 /* 展开态：明确不让任何祖先 .overflow-hidden 容器裁剪展开区。
@@ -8451,10 +8573,18 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   overflow: visible;
 }
 
-/* 工具栏 / 面板的 inline 入口：展开区强制独占下一行（flex-basis:100%） */
+/* 工具栏 / 面板的 inline 入口：展开区换到下一行最左侧，仅占内容宽度
+ *   - flex-basis: 0 让其按内容自适应，不再横跨整行
+ *   - margin-left: 0 / align-self: flex-start 保证从下一行最左侧开始
+ *   - min-width: 0 + width: auto 不被父容器约束
+ */
 .plaza-pill-group.is-inline > .plaza-pill-body {
-  flex: 0 0 100%;
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
   max-width: 100%;
+  align-self: flex-start;
+  margin-left: 0;
 }
 
 .plaza-pill-group.is-inline > .plaza-pill-body.is-open {
@@ -8498,8 +8628,13 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 /* PillGroup 整体被打开时：再额外上一层 stacking 上下文，保证 overflow
  * 场景下展开区不会被裁剪。 */
 .plaza-pill-group.is-open {
-  position: relative;
-  z-index: 4;
+  /* 不要给整个 PillGroup 创建 stacking context：
+   *   如果 group 上挂 position + z-index，它会变成局部堆叠上下文，
+   *   内部 custom-select 菜单 (z-index: 800) 就无法"突破"到外部，
+   *   仍可能被外面的卡片网格 (.play-card-shell { overflow: hidden }) 裁剪遮挡。
+   *   把 stacking 范围限定在 .plaza-pill-body.is-open 即可：
+   *   内部子元素（custom-select / searchable-category-select）能够与
+   *   工具栏外的高 z-index 元素正确比较。 */
 }
 
 .plaza-pill-group.is-block .plaza-pill-body.is-open {
@@ -8533,7 +8668,8 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   gap: 4px;
   min-height: 30px;
   padding: 0 12px;
-  font-size: calc(13px * var(--text-scale, 1));
+  /* 与小剧场正文(.preview-copy) 字号对齐(14px),让面板子项视觉密度和卡片正文一致 */
+  font-size: calc(14px * var(--text-scale, 1));
   font-weight: 500;
   color: var(--text);
   background: transparent;
