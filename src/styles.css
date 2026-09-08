@@ -8254,3 +8254,441 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   align-items: center;
   line-height: 1;
 }
+
+/* =============================================================================
+ * 广场页 UI 重构 v2：胶囊 + 分组收起
+ *
+ * 设计目标：
+ *   1. 把原来"平铺一长条按钮"的工具栏改为按"分组入口 + 原位展开子项"形式。
+ *   2. 同一时间只允许一个分组展开（区域内互斥），由 data-open 标记。
+ *   3. 保持原有米黄暖色系（沿用项目已有 --accent / --border / --panel 等 token）。
+ *   4. 展开/收起走轻量手风琴过渡（max-height + opacity），避免瞬间跳变。
+ *
+ * 结构约定：
+ *   .plaza-pill-group    —— 一个分组容器（含入口按钮 + 展开区）
+ *   .plaza-pill-trigger  —— 入口按钮（胶囊）
+ *   .plaza-pill-body     —— 展开区（手风琴）
+ *   .plaza-pill-grid     —— 展开区内部栅格
+ *   .plaza-pill-subitem  —— 展开后的子选项
+ *   .plaza-pill-trigger.is-open —— 入口处于展开态
+ * ===========================================================================*/
+
+/* 入口胶囊 —— 与现有 .nav-pill / .tab-chip 视觉一致，仅收紧内边距 */
+.plaza-pill-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 88%, white 12%);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  white-space: nowrap;
+  /* 与现有按钮统一过渡（不动画 border-color 防 1px 圆角毛刺） */
+  transition:
+    background-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms ease;
+}
+
+.plaza-pill-trigger:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel) 92%);
+}
+
+.plaza-pill-trigger.is-open {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel) 86%);
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.plaza-pill-trigger.is-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: white;
+  border-color: transparent;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.plaza-pill-trigger.is-primary.is-open {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.plaza-pill-trigger.is-active {
+  /* "页面 Tab / 状态 Tab" 等已处于激活态时的胶囊样式 */
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel) 86%);
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* 纯图标入口 —— 移除 padding 让尺寸贴近 .icon-button */
+.plaza-pill-trigger.is-icon-only {
+  width: 34px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+/* 页面 Tab 行：横向滚动、紧凑间距、纯文字不带背景激活态 */
+.plaza-page-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.plaza-page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.plaza-page-tab:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.plaza-page-tab.is-active {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* 分组容器：让按钮和展开区按列堆叠，不互相挤占横向空间 */
+.plaza-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plaza-pill-group.is-block {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+/* 入口 + 子项 同一行时（顶部页面导航、工具栏）的横向布局 */
+.plaza-pill-group.is-inline {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+/* 展开区：手风琴动画 + 原位展开（紧接入口） */
+.plaza-pill-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows 240ms ease,
+    opacity 200ms ease,
+    margin-top 240ms ease;
+  margin-top: 0;
+}
+
+.plaza-pill-group.is-block .plaza-pill-body {
+  margin-top: 0;
+}
+
+.plaza-pill-body > .plaza-pill-body-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.plaza-pill-body.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.plaza-pill-group.is-block .plaza-pill-body.is-open {
+  margin-top: 4px;
+}
+
+/* 展开区内部栅格 —— 默认多列、空间窄时折成单列 */
+.plaza-pill-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--panel) 92%, white 8%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.plaza-pill-grid.is-tight {
+  padding: 6px 10px;
+  gap: 6px 8px;
+  border-radius: 12px;
+}
+
+/* 展开区子项 —— 纯文字、无图标 */
+.plaza-pill-subitem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 500;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.plaza-pill-subitem:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.plaza-pill-subitem.is-active {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+/* 状态 Tab 行（全部 / 未标记 / 收藏 / 不喜欢）—— 纯文字胶囊 */
+.plaza-status-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.plaza-status-tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.plaza-status-tab:hover {
+  color: var(--text);
+}
+
+.plaza-status-tab.is-active {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.plaza-status-tab .plaza-status-tab-count {
+  font-size: calc(12px * var(--text-scale, 1));
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--accent) 14%);
+  font-variant-numeric: tabular-nums;
+}
+
+.plaza-status-tab.is-active .plaza-status-tab-count {
+  color: color-mix(in srgb, var(--accent) 90%, var(--text) 10%);
+}
+
+/* 顶部导航行：把 ▼ 折叠按钮 + repo + 页面 Tab + 动作按钮排成一行 */
+.plaza-top-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.plaza-top-nav-row > .plaza-pill-group.is-inline {
+  flex: 0 0 auto;
+}
+
+.plaza-top-nav-row > .plaza-page-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.plaza-top-nav-row > .plaza-page-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.plaza-top-nav-row > .plaza-top-nav-trailing {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 工具栏容器 —— 在 hero-panel 内横向排列各入口 */
+.plaza-toolbar-v2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.plaza-toolbar-v2 > .plaza-pill-group.is-block {
+  width: 100%;
+  margin-top: 4px;
+}
+
+/* 下方控制面板整体栅格 */
+.plaza-panel-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.plaza-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.plaza-panel-row.is-split {
+  justify-content: space-between;
+}
+
+.plaza-panel-row > .plaza-panel-row-trailing {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* 搜索展开态容器：输入框 + 范围选项 一起进/出 */
+.plaza-search-popover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.plaza-search-popover > input {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: calc(13px * var(--text-scale, 1));
+  background: color-mix(in srgb, var(--panel) 96%, white 4%);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  outline: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.plaza-search-popover > input:focus {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border) 40%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.plaza-search-popover > .plaza-search-fields {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* "屏蔽不喜欢内容" 行：独立、不进分组，保持原 checkbox-chip 风格 */
+.plaza-block-disliked-row {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 4px;
+}
+
+/* 给 lucide 用的 SVG 尺寸约束：继承文字色、不抢尺寸 */
+.plaza-pill-trigger svg,
+.plaza-page-tab svg,
+.plaza-status-tab svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 1.75;
+}
+
+.plaza-pill-trigger svg.lucide-calendar-plus-icon,
+.plaza-pill-trigger svg.lucide-shield-off-icon {
+  /* 日历 + 角标 / 盾牌这类组合图标放大到 18px 更协调 */
+  width: 18px;
+  height: 18px;
+}
+
+/* 手机端：分组展开区宽度自适应、入口与子项更紧凑 */
+@media (max-width: 720px) {
+  .plaza-pill-grid {
+    border-radius: 14px;
+    padding: 8px 10px;
+  }
+
+  .plaza-pill-trigger {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: calc(12.5px * var(--text-scale, 1));
+  }
+
+  .plaza-pill-trigger.is-icon-only {
+    width: 32px;
+  }
+
+  .plaza-page-tab {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: calc(12.5px * var(--text-scale, 1));
+  }
+
+  .plaza-status-tab {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: calc(12.5px * var(--text-scale, 1));
+  }
+
+  .plaza-pill-subitem {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: calc(12.5px * var(--text-scale, 1));
+  }
+}

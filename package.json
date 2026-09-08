@@ -19,6 +19,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "lucide-react": "^1.42.0",
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "latest"

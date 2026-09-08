@@ -4,7 +4,6 @@ import {
   normalizeReviewLog,
   now,
   parseContinuationStatus,
-  validContinuationStatuses,
   validPlayStatuses,
   type ContinuationStatus,
   type PlayStatus,

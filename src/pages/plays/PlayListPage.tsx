@@ -70,6 +70,19 @@ import { ExportContinuationsButton } from './ExportContinuationsButton';
 import { ExportAllButton } from './ExportAllButton';
 import { ExportFavoritesButton } from './ExportFavoritesButton';
 import { ExportSelectedButton } from './ExportSelectedButton';
+import {
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Cog,
+  Download,
+  Filter,
+  ListChecks,
+  MoreHorizontal,
+  Search,
+  ShieldOff,
+  Shuffle,
+} from 'lucide-react';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';
@@ -591,6 +604,56 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
   );
 }
 
+/* ============================================================================
+ * PillGroup —— 胶囊按钮 + 原位展开的手风琴分组
+ *
+ * 设计要点：
+ *   - 仅负责"入口 + 展开区"两个区域的展示，状态由父组件传入(open)。
+ *   - 展开走 grid-template-rows 0fr ↔ 1fr + opacity 的轻量过渡，
+ *     不依赖具体子项高度，避免硬切。
+ *   - 子选项按需由父组件传入，纯文字胶囊或图标型均可。
+ * ============================================================================ */
+type PillGroupVariant = 'inline' | 'block';
+
+type PillGroupProps = {
+  open: boolean;
+  className?: string;
+  variant?: PillGroupVariant;
+  trigger: (props: { open: boolean }) => ReactNode;
+  children: ReactNode;
+  bodyClassName?: string;
+};
+
+function PillGroup({
+  open,
+  className,
+  variant = 'block',
+  trigger,
+  children,
+  bodyClassName,
+}: PillGroupProps) {
+  const groupClassName = ['plaza-pill-group', `is-${variant}`, className].filter(Boolean).join(' ');
+
+  return (
+    <div className={groupClassName}>
+      {/* 入口按钮：父组件通过 trigger() 自行渲染 SVG/文字 + 点击事件 */}
+      {trigger({ open })}
+
+      <div
+        aria-hidden={!open}
+        className={
+          open
+            ? `plaza-pill-body is-open ${bodyClassName ?? ''}`.trim()
+            : `plaza-pill-body ${bodyClassName ?? ''}`.trim()
+        }
+        role="region"
+      >
+        <div className="plaza-pill-body-inner">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export function PlayListPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -722,6 +785,18 @@ export function PlayListPage() {
 
   const [controlsCollapsed, setControlsCollapsed] = useState(() => getPlazaControlsCollapsed());
   const [toolbarCollapsed, setToolbarCollapsed] = useState(() => getPlazaToolbarCollapsed());
+  /* 分组收起 v2：
+   *   openToolbarGroup —— 工具栏内的"分组展开键",区域内互斥(null=全部收起)。
+   *   openPanelGroup   —— 下方控制面板内的"分组展开键",区域内互斥。
+   *   openSearch       —— 搜索是右侧图标入口,不属于上述两个 key。
+   *   randomPanelOpen  —— 随机抽选面板,沿用旧 state,行为独立。 */
+  const [openToolbarGroup, setOpenToolbarGroup] = useState<string | null>(null);
+  const [openPanelGroup, setOpenPanelGroup] = useState<string | null>(null);
+  const [openSearch, setOpenSearch] = useState(false);
+  const toggleToolbarGroup = (group: string) =>
+    setOpenToolbarGroup((current) => (current === group ? null : group));
+  const togglePanelGroup = (group: string) =>
+    setOpenPanelGroup((current) => (current === group ? null : group));
   const [randomMode, setRandomMode] = useState<RandomMode>('repeatable');
   const [randomPickedPlayId, setRandomPickedPlayId] = useState('');
   const [confettiPrefs, setConfettiPrefsState] = useState<ConfettiPrefs>(() => getConfettiPrefs());
@@ -1848,19 +1923,33 @@ export function PlayListPage() {
           {!toolbarCollapsed ? (
             <div className="hero-panel hero-grid hero-panel-compact">
               <div className="stack-gap-sm plaza-toolbar-stack">
-                <div
-                  className="plaza-toolbar-row plaza-toolbar-row-desktop"
-                  role="group"
-                  aria-label="广场桌面端操作"
-                >
+                {/* 工具栏 v2：随机 / 折叠独立，分组入口按"区域内互斥"展开 */}
+                <div className="plaza-toolbar-v2" role="group" aria-label="广场操作工具栏">
+                  {/* 随机：核心操作，权重最大，不参与任何分组 */}
                   <button
+                    aria-pressed={randomPanelOpen}
+                    className={
+                      randomPanelOpen
+                        ? 'plaza-pill-trigger is-primary is-open'
+                        : 'plaza-pill-trigger is-primary'
+                    }
+                    onClick={() => setRandomPanelOpen((current) => !current)}
+                    type="button"
+                  >
+                    <Shuffle aria-hidden="true" strokeWidth={1.75} />
+                    <span>随机</span>
+                  </button>
+
+                  {/* 折叠：开关，独立，纯图标（合并/展开箭头类） */}
+                  <button
+                    aria-pressed={controlsCollapsed}
                     aria-label={
                       controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
                     }
                     className={
                       controlsCollapsed
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
+                        ? 'plaza-pill-trigger is-icon-only is-open'
+                        : 'plaza-pill-trigger is-icon-only'
                     }
                     onClick={() => setControlsCollapsed((current) => !current)}
                     title={
@@ -1868,221 +1957,195 @@ export function PlayListPage() {
                     }
                     type="button"
                   >
-                    {controlsCollapsed ? '展开' : '折叠'}
+                    {controlsCollapsed ? (
+                      <ChevronsUpDown aria-hidden="true" strokeWidth={1.75} />
+                    ) : (
+                      <ChevronsDownUp aria-hidden="true" strokeWidth={1.75} />
+                    )}
                   </button>
-                  <button
-                    className={
-                      randomPanelOpen
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setRandomPanelOpen((current) => !current)}
-                    type="button"
-                  >
-                    随机
-                  </button>
-                  <button
-                    className={
-                      categoryFilterOpen || activeCategory
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setCategoryFilterOpen((current) => !current)}
-                    type="button"
-                  >
-                    分类
-                  </button>
-                  <button
-                    className={
-                      authorFilterOpen || activeAuthor
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setAuthorFilterOpen((current) => !current)}
-                    type="button"
-                  >
-                    作者
-                  </button>
-                  <button
-                    className={
-                      autoRefreshOnNewPlays
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={handleToggleAutoRefresh}
-                    type="button"
-                  >
-                    {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
-                  </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={openVisitorChangelog}
-                    type="button"
-                  >
-                    更新日志
-                  </button>
-                  <ExportAllButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    plays={plays}
-                    preferenceStore={preferenceStore}
-                  />
-                  <ExportSelectedButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    preferenceStore={preferenceStore}
-                    selectedPlays={selectedPlays}
-                    selectionMode={selectionMode}
-                    setSelectionMode={setSelectionMode}
-                  />
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => handleOpenExportModal('author')}
-                    type="button"
-                  >
-                    导出作者
-                  </button>
-                  <ExportContinuationsButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    plays={filteredPlays}
-                    preferenceStore={preferenceStore}
-                  />
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => handleOpenExportModal('category')}
-                    type="button"
-                  >
-                    导出分类
-                  </button>
-                  <ExportFavoritesButton favoritePlays={favoritePlays} />
-                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
-                    <input
-                      checked={blockDislikedOnExport}
-                      onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>屏蔽不喜欢</span>
-                  </label>
-                </div>
 
-                <div
-                  className="plaza-toolbar-row plaza-toolbar-row-mobile-main"
-                  role="group"
-                  aria-label="广场手机端主操作"
-                >
-                  <button
-                    aria-label={
-                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
-                    }
-                    className={
-                      controlsCollapsed
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setControlsCollapsed((current) => !current)}
-                    title={
-                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
-                    }
-                    type="button"
+                  {/* 筛选：分类 + 作者（漏斗图标） */}
+                  <PillGroup
+                    variant="inline"
+                    open={openToolbarGroup === 'filter'}
+                    trigger={({ open: groupOpen }) => (
+                      <button
+                        aria-expanded={groupOpen}
+                        className={
+                          groupOpen || categoryFilterOpen || authorFilterOpen
+                            ? 'plaza-pill-trigger is-open'
+                            : 'plaza-pill-trigger'
+                        }
+                        onClick={() => toggleToolbarGroup('filter')}
+                        type="button"
+                      >
+                        <Filter aria-hidden="true" strokeWidth={1.75} />
+                        <span>筛选</span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          strokeWidth={1.75}
+                          style={{
+                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 200ms ease',
+                          }}
+                        />
+                      </button>
+                    )}
                   >
-                    {controlsCollapsed ? '展开' : '折叠'}
-                  </button>
-                  <button
-                    className={
-                      randomPanelOpen
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setRandomPanelOpen((current) => !current)}
-                    type="button"
-                  >
-                    随机
-                  </button>
-                  <button
-                    className={
-                      categoryFilterOpen || activeCategory
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setCategoryFilterOpen((current) => !current)}
-                    type="button"
-                  >
-                    分类
-                  </button>
-                  <button
-                    className={
-                      authorFilterOpen || activeAuthor
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={() => setAuthorFilterOpen((current) => !current)}
-                    type="button"
-                  >
-                    作者
-                  </button>
-                  <button
-                    className={
-                      autoRefreshOnNewPlays
-                        ? 'button primary plaza-toolbar-button'
-                        : 'button secondary plaza-toolbar-button'
-                    }
-                    onClick={handleToggleAutoRefresh}
-                    type="button"
-                  >
-                    {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
-                  </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={openVisitorChangelog}
-                    type="button"
-                  >
-                    更新日志
-                  </button>
-                </div>
+                    <div className="plaza-pill-grid is-tight">
+                      <button
+                        className={
+                          categoryFilterOpen || activeCategory
+                            ? 'plaza-pill-subitem is-active'
+                            : 'plaza-pill-subitem'
+                        }
+                        onClick={() => setCategoryFilterOpen((current) => !current)}
+                        type="button"
+                      >
+                        分类
+                      </button>
+                      <button
+                        className={
+                          authorFilterOpen || activeAuthor
+                            ? 'plaza-pill-subitem is-active'
+                            : 'plaza-pill-subitem'
+                        }
+                        onClick={() => setAuthorFilterOpen((current) => !current)}
+                        type="button"
+                      >
+                        作者
+                      </button>
+                    </div>
+                  </PillGroup>
 
-                <div
-                  className="plaza-toolbar-row plaza-toolbar-row-mobile-export"
-                  role="group"
-                  aria-label="广场手机端导出操作"
-                >
-                  <ExportAllButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    plays={plays}
-                    preferenceStore={preferenceStore}
-                  />
-                  <ExportSelectedButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    preferenceStore={preferenceStore}
-                    selectedPlays={selectedPlays}
-                    selectionMode={selectionMode}
-                    setSelectionMode={setSelectionMode}
-                  />
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => handleOpenExportModal('author')}
-                    type="button"
+                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标） */}
+                  <PillGroup
+                    variant="inline"
+                    open={openToolbarGroup === 'more'}
+                    trigger={({ open: groupOpen }) => (
+                      <button
+                        aria-expanded={groupOpen}
+                        className={groupOpen ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        onClick={() => toggleToolbarGroup('more')}
+                        type="button"
+                      >
+                        <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
+                        <span>更多</span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          strokeWidth={1.75}
+                          style={{
+                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 200ms ease',
+                          }}
+                        />
+                      </button>
+                    )}
                   >
-                    导出作者
-                  </button>
-                  <ExportContinuationsButton
-                    blockDislikedOnExport={blockDislikedOnExport}
-                    plays={filteredPlays}
-                    preferenceStore={preferenceStore}
-                  />
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => handleOpenExportModal('category')}
-                    type="button"
+                    <div className="plaza-pill-grid is-tight">
+                      <button
+                        className={
+                          autoRefreshOnNewPlays
+                            ? 'plaza-pill-subitem is-active'
+                            : 'plaza-pill-subitem'
+                        }
+                        onClick={handleToggleAutoRefresh}
+                        type="button"
+                      >
+                        {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
+                      </button>
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={openVisitorChangelog}
+                        type="button"
+                      >
+                        更新日志
+                      </button>
+                    </div>
+                  </PillGroup>
+
+                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 盾牌图标 */}
+                  <PillGroup
+                    variant="inline"
+                    open={openToolbarGroup === 'export'}
+                    trigger={({ open: groupOpen }) => (
+                      <button
+                        aria-expanded={groupOpen}
+                        className={groupOpen ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        onClick={() => toggleToolbarGroup('export')}
+                        type="button"
+                      >
+                        <Download aria-hidden="true" strokeWidth={1.75} />
+                        <span>导出</span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          strokeWidth={1.75}
+                          style={{
+                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 200ms ease',
+                          }}
+                        />
+                      </button>
+                    )}
                   >
-                    导出分类
-                  </button>
-                  <ExportFavoritesButton favoritePlays={favoritePlays} />
-                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
-                    <input
-                      checked={blockDislikedOnExport}
-                      onChange={(event) => setBlockDislikedOnExport(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>屏蔽不喜欢</span>
-                  </label>
+                    <div className="plaza-pill-grid is-tight">
+                      <ExportAllButton
+                        blockDislikedOnExport={blockDislikedOnExport}
+                        className="plaza-pill-subitem"
+                        plays={plays}
+                        preferenceStore={preferenceStore}
+                      />
+                      <ExportSelectedButton
+                        blockDislikedOnExport={blockDislikedOnExport}
+                        className="plaza-pill-subitem"
+                        preferenceStore={preferenceStore}
+                        selectedPlays={selectedPlays}
+                        selectionMode={selectionMode}
+                        setSelectionMode={setSelectionMode}
+                      />
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={() => handleOpenExportModal('author')}
+                        type="button"
+                      >
+                        导出作者
+                      </button>
+                      <ExportContinuationsButton
+                        blockDislikedOnExport={blockDislikedOnExport}
+                        className="plaza-pill-subitem"
+                        plays={filteredPlays}
+                        preferenceStore={preferenceStore}
+                      />
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={() => handleOpenExportModal('category')}
+                        type="button"
+                      >
+                        导出分类
+                      </button>
+                      <ExportFavoritesButton
+                        className="plaza-pill-subitem"
+                        favoritePlays={favoritePlays}
+                      />
+                      {/* 屏蔽(导出)：与下方"屏蔽不喜欢内容"独立,这里只控导出行 */}
+                      <button
+                        aria-pressed={blockDislikedOnExport}
+                        aria-label={
+                          blockDislikedOnExport ? '导出时不再屏蔽不喜欢' : '导出时屏蔽不喜欢'
+                        }
+                        className={
+                          blockDislikedOnExport
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
+                        }
+                        onClick={() => setBlockDislikedOnExport((current) => !current)}
+                        title={blockDislikedOnExport ? '导出时不再屏蔽不喜欢' : '导出时屏蔽不喜欢'}
+                        type="button"
+                      >
+                        <ShieldOff aria-hidden="true" strokeWidth={1.75} />
+                      </button>
+                    </div>
+                  </PillGroup>
                 </div>
 
                 {selectionMode === 'export' ? (
@@ -2166,29 +2229,115 @@ export function PlayListPage() {
           ) : null}
 
           {!controlsCollapsed && hasVisibleControls ? (
-            <div className="form-panel compact-panel stack-gap-md plaza-controls-panel">
+            <div className="form-panel compact-panel stack-gap-md plaza-controls-panel plaza-panel-v2">
               {hasFilterHeaderContent ? (
                 <div className="stack-gap-sm plaza-filter-header">
+                  {/* 第一行：状态 Tab（纯文字胶囊）+ 搜索图标入口（最右侧） */}
                   {!toolbarCollapsed ? (
-                    <div className="plaza-view-primary">
-                      {(['everything', 'all', 'favorites', 'disliked'] as const).map((view) => (
-                        <button
-                          key={view}
-                          className={activeView === view ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => {
-                            setActiveView(view);
-                            setActiveCategory('');
-                            setActiveAuthor('');
-                            setSelectionMode('idle');
-                            setCurrentPage(1);
-                          }}
-                          type="button"
+                    <div className="plaza-panel-row is-split">
+                      <div className="plaza-status-tabs" role="tablist" aria-label="广场状态">
+                        {(['everything', 'all', 'favorites', 'disliked'] as const).map((view) => (
+                          <button
+                            aria-pressed={activeView === view}
+                            className={
+                              activeView === view
+                                ? 'plaza-status-tab is-active'
+                                : 'plaza-status-tab'
+                            }
+                            key={view}
+                            onClick={() => {
+                              setActiveView(view);
+                              setActiveCategory('');
+                              setActiveAuthor('');
+                              setSelectionMode('idle');
+                              setCurrentPage(1);
+                            }}
+                            role="tab"
+                            type="button"
+                          >
+                            <span>{viewLabels[view]}</span>
+                            <span className="plaza-status-tab-count">{viewCounts[view]}</span>
+                          </button>
+                        ))}
+                      </div>
+                      {/* 搜索图标入口：仅图标，点击原位展开搜索框 + 范围选项 */}
+                      <div className="plaza-panel-row-trailing">
+                        <PillGroup
+                          variant="inline"
+                          open={openSearch}
+                          trigger={({ open }) => (
+                            <button
+                              aria-expanded={open}
+                              aria-label={open ? '收起搜索' : '打开搜索'}
+                              className={
+                                open
+                                  ? 'plaza-pill-trigger is-icon-only is-open'
+                                  : 'plaza-pill-trigger is-icon-only'
+                              }
+                              onClick={() => {
+                                setOpenSearch((current) => !current);
+                                setOpenPanelGroup(null);
+                              }}
+                              title={open ? '收起搜索' : '打开搜索'}
+                              type="button"
+                            >
+                              <Search aria-hidden="true" strokeWidth={1.75} />
+                            </button>
+                          )}
                         >
-                          {viewLabels[view]} {viewCounts[view]}
-                        </button>
-                      ))}
+                          <div className="plaza-pill-grid">
+                            <div className="plaza-search-popover">
+                              <ClearableField
+                                visible={Boolean(keyword.trim())}
+                                onClear={() => {
+                                  setKeyword('');
+                                  setCurrentPage(1);
+                                }}
+                              >
+                                <input
+                                  autoFocus={openSearch}
+                                  placeholder="默认搜标题、作者、分类或正文"
+                                  value={keyword}
+                                  onChange={(event) => {
+                                    setKeyword(event.target.value);
+                                    setCurrentPage(1);
+                                  }}
+                                />
+                              </ClearableField>
+                              <div
+                                className="plaza-search-fields"
+                                role="group"
+                                aria-label="搜索范围"
+                              >
+                                {playSearchFieldOptions.map((item) => (
+                                  <button
+                                    aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+                                    className={
+                                      isSearchFieldActive(playSearchFields, item.value)
+                                        ? 'plaza-pill-subitem is-active'
+                                        : 'plaza-pill-subitem'
+                                    }
+                                    key={item.value}
+                                    onClick={() => {
+                                      setPlaySearchFields((current) =>
+                                        toggleSearchField(current, item.value),
+                                      );
+                                      setCurrentPage(1);
+                                    }}
+                                    type="button"
+                                  >
+                                    {item.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </PillGroup>
+                      </div>
                     </div>
                   ) : null}
+
+                  {/* 分类筛选带（受筛选分组 / toolbar 折叠状态控制） */}
                   {categoryFilterOpen ? (
                     <div className="plaza-category-strip">
                       <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
@@ -2223,6 +2372,7 @@ export function PlayListPage() {
                   {categoryFilterOpen && authorFilterOpen ? (
                     <div className="plaza-filter-divider" aria-hidden="true" />
                   ) : null}
+                  {/* 作者筛选带（受筛选分组 / toolbar 折叠状态控制） */}
                   {authorFilterOpen ? (
                     <div className="plaza-category-strip">
                       <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
@@ -2256,130 +2406,110 @@ export function PlayListPage() {
               ) : null}
 
               {!toolbarCollapsed ? (
-                <div className="toolbar-grid plaza-filter-grid">
-                  <div className="plaza-toolbar-row-selects">
-                    <CustomSelect
-                      label="时间排序"
-                      onChange={(nextValue) => {
-                        setSortMode(nextValue as SortMode);
-                        setCurrentPage(1);
+                <PillGroup
+                  variant="block"
+                  open={openPanelGroup === 'display'}
+                  trigger={({ open }) => (
+                    <button
+                      aria-expanded={open}
+                      className={open ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                      onClick={() => {
+                        togglePanelGroup('display');
+                        setOpenSearch(false);
                       }}
-                      options={sortModeOptions}
-                      value={sortMode}
-                    />
-                    <CustomSelect
-                      label="评论筛选"
-                      onChange={(nextValue) => {
-                        setActiveRepoFilter(nextValue as RepoFilterMode);
-                        setCurrentPage(1);
-                        try {
-                          window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue);
-                        } catch {
-                          /* ignore storage errors */
-                        }
-                      }}
-                      options={[
-                        { value: 'all', label: '全部' },
-                        { value: 'with', label: '有评论' },
-                        { value: 'without', label: '无评论' },
-                      ]}
-                      value={activeRepoFilter}
-                    />
-                    <CustomSelect
-                      label="评论排序"
-                      onChange={(nextValue) => {
-                        setRepoSortMode(nextValue as RepoSortMode);
-                        try {
-                          window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue);
-                        } catch {
-                          /* ignore storage errors */
-                        }
-                      }}
-                      options={[
-                        { value: 'none', label: '默认(时间)' },
-                        { value: 'count_desc', label: '评论数 ↓' },
-                        { value: 'count_asc', label: '评论数 ↑' },
-                        { value: 'first_desc', label: '首评时间 ↓' },
-                        { value: 'first_asc', label: '首评时间 ↑' },
-                        { value: 'last_desc', label: '最新评论 ↓' },
-                        { value: 'last_asc', label: '最新评论 ↑' },
-                      ]}
-                      value={repoSortMode}
-                    />
-                    <CustomSelect
-                      label="一行几个"
-                      onChange={(nextValue) => setColumns(Number(nextValue))}
-                      options={columnOptions}
-                      value={String(renderColumns)}
-                    />
-                  </div>
-                  <div className="toolbar-toggle-field">
-                    <span>列表操作</span>
-                    <div className="inline-actions wrap-mobile toolbar-toggle-row">
-                      <button
-                        className="button secondary"
-                        onClick={() => setShowPreview((current) => !current)}
-                        type="button"
-                      >
-                        {showPreview ? '收起正文' : '展开正文'}
-                      </button>
-                      <button
-                        className="button secondary"
-                        onClick={() => setShowPreferenceActions((current) => !current)}
-                        type="button"
-                      >
-                        {showPreferenceActions ? '收起标记' : '展开标记'}
-                      </button>
+                      type="button"
+                    >
+                      <Cog aria-hidden="true" strokeWidth={1.75} />
+                      <span>显示设置</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        strokeWidth={1.75}
+                        style={{
+                          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 200ms ease',
+                        }}
+                      />
+                    </button>
+                  )}
+                >
+                  <div className="plaza-pill-grid">
+                    <div className="plaza-toolbar-row-selects">
+                      <CustomSelect
+                        label="时间排序"
+                        onChange={(nextValue) => {
+                          setSortMode(nextValue as SortMode);
+                          setCurrentPage(1);
+                        }}
+                        options={sortModeOptions}
+                        value={sortMode}
+                      />
+                      <CustomSelect
+                        label="评论筛选"
+                        onChange={(nextValue) => {
+                          setActiveRepoFilter(nextValue as RepoFilterMode);
+                          setCurrentPage(1);
+                          try {
+                            window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue);
+                          } catch {
+                            /* ignore storage errors */
+                          }
+                        }}
+                        options={[
+                          { value: 'all', label: '全部' },
+                          { value: 'with', label: '有评论' },
+                          { value: 'without', label: '无评论' },
+                        ]}
+                        value={activeRepoFilter}
+                      />
+                      <CustomSelect
+                        label="评论排序"
+                        onChange={(nextValue) => {
+                          setRepoSortMode(nextValue as RepoSortMode);
+                          try {
+                            window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue);
+                          } catch {
+                            /* ignore storage errors */
+                          }
+                        }}
+                        options={[
+                          { value: 'none', label: '默认(时间)' },
+                          { value: 'count_desc', label: '评论数 ↓' },
+                          { value: 'count_asc', label: '评论数 ↑' },
+                          { value: 'first_desc', label: '首评时间 ↓' },
+                          { value: 'first_asc', label: '首评时间 ↑' },
+                          { value: 'last_desc', label: '最新评论 ↓' },
+                          { value: 'last_asc', label: '最新评论 ↑' },
+                        ]}
+                        value={repoSortMode}
+                      />
+                      <CustomSelect
+                        label="一行几个"
+                        onChange={(nextValue) => setColumns(Number(nextValue))}
+                        options={columnOptions}
+                        value={String(renderColumns)}
+                      />
+                    </div>
+                    <div className="toolbar-toggle-field">
+                      <span>列表操作</span>
+                      <div className="inline-actions wrap-mobile toolbar-toggle-row">
+                        <button
+                          className="plaza-pill-subitem"
+                          onClick={() => setShowPreview((current) => !current)}
+                          type="button"
+                        >
+                          {showPreview ? '收起正文' : '展开正文'}
+                        </button>
+                        <button
+                          className="plaza-pill-subitem"
+                          onClick={() => setShowPreferenceActions((current) => !current)}
+                          type="button"
+                        >
+                          {showPreferenceActions ? '收起标记' : '展开标记'}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-              {!toolbarCollapsed ? (
-                <div className="plaza-search-row">
-                  <label>
-                    <span>搜索</span>
-                    <ClearableField
-                      visible={Boolean(keyword.trim())}
-                      onClear={() => {
-                        setKeyword('');
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <input
-                        value={keyword}
-                        onChange={(event) => {
-                          setKeyword(event.target.value);
-                          setCurrentPage(1);
-                        }}
-                        placeholder="默认搜标题、作者、分类或正文"
-                      />
-                    </ClearableField>
-                  </label>
-                  <div
-                    className="inline-actions wrap-mobile admin-search-field-row"
-                    role="group"
-                    aria-label="搜索范围"
-                  >
-                    {playSearchFieldOptions.map((item) => (
-                      <button
-                        aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
-                        className={
-                          isSearchFieldActive(playSearchFields, item.value)
-                            ? 'tab-chip active'
-                            : 'tab-chip'
-                        }
-                        key={item.value}
-                        onClick={() => {
-                          setPlaySearchFields((current) => toggleSearchField(current, item.value));
-                          setCurrentPage(1);
-                        }}
-                        type="button"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                </PillGroup>
               ) : null}
 
               {!toolbarCollapsed ? (
@@ -2413,43 +2543,73 @@ export function PlayListPage() {
               ) : null}
 
               {!toolbarCollapsed ? (
-                <div className="inline-actions wrap-mobile plaza-bulk-action-row">
-                  <button
-                    className="button secondary"
-                    onClick={() => applyBatchPreference('favorite')}
-                    type="button"
+                <div className="plaza-panel-row is-split">
+                  <PillGroup
+                    variant="inline"
+                    open={openPanelGroup === 'bulk'}
+                    trigger={({ open }) => (
+                      <button
+                        aria-expanded={open}
+                        className={open ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        onClick={() => {
+                          togglePanelGroup('bulk');
+                          setOpenSearch(false);
+                        }}
+                        type="button"
+                      >
+                        <ListChecks aria-hidden="true" strokeWidth={1.75} />
+                        <span>更多操作</span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          strokeWidth={1.75}
+                          style={{
+                            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                            transition: 'transform 200ms ease',
+                          }}
+                        />
+                      </button>
+                    )}
                   >
-                    {selectionMode === 'favorite'
-                      ? activeView === 'favorites'
-                        ? `取消收藏已选（${selectedIds.length}）`
-                        : `收藏已选（${selectedIds.length}）`
-                      : activeView === 'favorites'
-                        ? '多选取消收藏'
-                        : '多选收藏'}
-                  </button>
-                  <button
-                    className="button secondary"
-                    onClick={() => applyBatchPreference('disliked')}
-                    type="button"
-                  >
-                    {selectionMode === 'disliked'
-                      ? activeView === 'disliked'
-                        ? `取消不喜欢已选（${selectedIds.length}）`
-                        : `不喜欢已选（${selectedIds.length}）`
-                      : activeView === 'disliked'
-                        ? '多选取消不喜欢'
-                        : '多选不喜欢'}
-                  </button>
-                  {selectionMode === 'favorite' || selectionMode === 'disliked' ? (
-                    <button
-                      className="button ghost"
-                      onClick={() => setSelectionMode('idle')}
-                      type="button"
-                    >
-                      取消多选
-                    </button>
-                  ) : null}
-                  <label className="checkbox-chip checkbox-chip-wide">
+                    <div className="plaza-pill-grid is-tight">
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={() => applyBatchPreference('favorite')}
+                        type="button"
+                      >
+                        {selectionMode === 'favorite'
+                          ? activeView === 'favorites'
+                            ? `取消收藏已选（${selectedIds.length}）`
+                            : `收藏已选（${selectedIds.length}）`
+                          : activeView === 'favorites'
+                            ? '多选取消收藏'
+                            : '多选收藏'}
+                      </button>
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={() => applyBatchPreference('disliked')}
+                        type="button"
+                      >
+                        {selectionMode === 'disliked'
+                          ? activeView === 'disliked'
+                            ? `取消不喜欢已选（${selectedIds.length}）`
+                            : `不喜欢已选（${selectedIds.length}）`
+                          : activeView === 'disliked'
+                            ? '多选取消不喜欢'
+                            : '多选不喜欢'}
+                      </button>
+                      {selectionMode === 'favorite' || selectionMode === 'disliked' ? (
+                        <button
+                          className="plaza-pill-subitem"
+                          onClick={() => setSelectionMode('idle')}
+                          type="button"
+                        >
+                          取消多选
+                        </button>
+                      ) : null}
+                    </div>
+                  </PillGroup>
+                  {/* 屏蔽不喜欢内容：独立保留，常驻显示 */}
+                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-row">
                     <input
                       checked={preferenceStore.settings.blockDislikedGlobally}
                       onChange={(event) =>

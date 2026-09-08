@@ -1943,8 +1943,25 @@ export function AdminReviewPage() {
     );
   }, [allPlays, selectedPlay]);
 
+  /* 「与上一版文本对比」使用的真实「上一版」。
+   *
+   * 关键:当本次投稿是 modify 类型时,「上一版」必须等于 parentPlay,
+   * 不能用历史同名同作者的更早一条。
+   * 例如: A(已通过) → B(基于 A 的修改,审核未通过/下线,仍躺在列表里)
+   *          → C(基于 A 的又一次修改,待审)。
+   * 此时 C 的 parentPlay=A,但 previousSubmission 会按 createdAt 倒序
+   * 找到 B,把 B 当「上一版」,对比范围就串了。
+   *
+   * modify 时改取 parentPlay;否则保留原来的 previousSubmission。 */
+  const previousSubmissionForDiff = useMemo(() => {
+    if (selectedPlay?.submissionType === 'modify') {
+      return parentPlay ?? null;
+    }
+    return previousSubmission;
+  }, [selectedPlay, parentPlay, previousSubmission]);
+
   const submissionDiffItems = useMemo<SubmissionDiffItem[]>(() => {
-    if (!selectedPlay || !previousSubmission) {
+    if (!selectedPlay || !previousSubmissionForDiff) {
       return [];
     }
 
@@ -1952,25 +1969,25 @@ export function AdminReviewPage() {
       {
         label: '分类',
         changed:
-          (previousSubmission.category || DEFAULT_CATEGORY) !==
+          (previousSubmissionForDiff.category || DEFAULT_CATEGORY) !==
           (selectedPlay.category || DEFAULT_CATEGORY),
-        before: previousSubmission.category || DEFAULT_CATEGORY,
+        before: previousSubmissionForDiff.category || DEFAULT_CATEGORY,
         after: selectedPlay.category || DEFAULT_CATEGORY,
       },
       {
         label: '简介',
-        changed: previousSubmission.summary.trim() !== selectedPlay.summary.trim(),
-        before: previousSubmission.summary,
+        changed: previousSubmissionForDiff.summary.trim() !== selectedPlay.summary.trim(),
+        before: previousSubmissionForDiff.summary,
         after: selectedPlay.summary,
       },
       {
         label: '正文',
-        changed: previousSubmission.content.trim() !== selectedPlay.content.trim(),
-        before: previousSubmission.content,
+        changed: previousSubmissionForDiff.content.trim() !== selectedPlay.content.trim(),
+        before: previousSubmissionForDiff.content,
         after: selectedPlay.content,
       },
     ];
-  }, [previousSubmission, selectedPlay]);
+  }, [previousSubmissionForDiff, selectedPlay]);
 
   /* 直接读取 selectedPlay.submissionType,审核员据此判断本次为「修改」或「新增衍生」。
    * 不再依赖内容改动比例,避免被「局部小幅重投但实为衍生」的情况误判。 */
@@ -5834,7 +5851,7 @@ export function AdminReviewPage() {
                     </button>
                   </div>
                   <div className="inline-actions admin-adjacent-row admin-mode-righthalf">
-                    {previousSubmission ? (
+                    {previousSubmissionForDiff ? (
                       <>
                         <div
                           className="inline-actions admin-diff-range-group"
@@ -6033,11 +6050,7 @@ export function AdminReviewPage() {
                             <strong>正文</strong>
                             <p style={{ whiteSpace: 'pre-wrap' }}>{selectedPlay.content}</p>
                           </div>
-                          {parentPlay ? (
-                            <p className="content-meta">
-                              {`原内容 id: ${parentPlay.id} · 当前状态 ${parentPlay.status}`}
-                            </p>
-                          ) : (
+                          {parentPlay ? null : (
                             <p className="content-meta warning">
                               未找到原内容(id {selectedPlay.parentPlayId}),审核通过时无法合入
                             </p>
@@ -6046,9 +6059,15 @@ export function AdminReviewPage() {
                       </div>
                     ) : null}
 
-                    {/* 「与上一版文本对比」:独立面板,只有存在 previousSubmission 才显示。
+                    {/* 「与上一版文本对比」:独立面板,只有存在可对比的「上一版」才显示。
+                     * 「上一版」的来源:
+                     *   - 当 selectedPlay 是 modify 类型时,取 parentPlay
+                     *     (即本次修改草稿所基于的原作品);
+                     *   - 否则按历史同名同作者的最新一条。
+                     * 这样一个小剧场多次修改时,本面板始终展示「本次修改相对其直接基础版」,
+                     * 不会被上次未通过的修改记录串进来。
                      * 与「本次投稿类型」完全分离,不再混入「修改/新增衍生」判断。 */}
-                    {previousSubmission ? (
+                    {previousSubmissionForDiff ? (
                       <div className="stack-gap-md diff-panel">
                         <div className="content-head">
                           <h3>与上一版文本对比</h3>

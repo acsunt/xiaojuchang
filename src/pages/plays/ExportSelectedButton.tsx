@@ -6,8 +6,11 @@
  *
  * 选择模式 toggle 和导出动作都需要由 PlayListPage 自己控制(选择状态是页面级的),
  * 所以这里把 setSelectionMode 作为 prop 传入。
+ *
+ * className / style 允许父组件传入(例如 .plaza-pill-subitem),
+ * 默认值沿用旧 toolbar 的视觉样式以兼容其他场景。
  */
-import { useCallback } from 'react';
+import { useCallback, type CSSProperties } from 'react';
 import { showFloatingToast } from '../../components/floating-toast-store';
 import { isDislikedPlay, type PlayPreferenceStore } from '../../services/browser-play-preferences';
 import type { Play } from '../../types/play';
@@ -23,6 +26,8 @@ export type ExportSelectedButtonProps = {
   setSelectionMode: (mode: SelectionModeLike) => void;
   preferenceStore: PlayPreferenceStore;
   blockDislikedOnExport: boolean;
+  className?: string;
+  style?: CSSProperties;
 };
 
 export function ExportSelectedButton({
@@ -31,6 +36,8 @@ export function ExportSelectedButton({
   setSelectionMode,
   preferenceStore,
   blockDislikedOnExport,
+  className = 'button secondary plaza-toolbar-button',
+  style,
 }: ExportSelectedButtonProps) {
   const handleClick = useCallback(() => {
     if (selectionMode !== 'export') {
@@ -59,7 +66,7 @@ export function ExportSelectedButton({
   }, [selectedPlays, selectionMode, setSelectionMode, preferenceStore, blockDislikedOnExport]);
 
   return (
-    <button className="button secondary plaza-toolbar-button" onClick={handleClick} type="button">
+    <button className={className} onClick={handleClick} style={style} type="button">
       {selectionMode === 'export' ? `导出已选（${selectedPlays.length}）` : '导出所选'}
     </button>
   );

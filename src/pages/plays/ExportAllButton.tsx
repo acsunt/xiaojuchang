@@ -3,8 +3,11 @@
  *
  * 抽取动机与 ExportContinuationsButton 一致:PlayListPage 太大,
  * 拆成可独立渲染的小组件,让浏览器层冒烟能直接模拟按钮点击。
+ *
+ * className / style 允许父组件传入(例如 .plaza-pill-subitem),
+ * 默认值沿用旧 toolbar 的视觉样式以兼容其他场景。
  */
-import { useCallback } from 'react';
+import { useCallback, type CSSProperties } from 'react';
 import { showFloatingToast } from '../../components/floating-toast-store';
 import { isDislikedPlay, type PlayPreferenceStore } from '../../services/browser-play-preferences';
 import type { Play } from '../../types/play';
@@ -14,12 +17,16 @@ export type ExportAllButtonProps = {
   plays: Play[];
   preferenceStore: PlayPreferenceStore;
   blockDislikedOnExport: boolean;
+  className?: string;
+  style?: CSSProperties;
 };
 
 export function ExportAllButton({
   plays,
   preferenceStore,
   blockDislikedOnExport,
+  className = 'button secondary plaza-toolbar-button',
+  style,
 }: ExportAllButtonProps) {
   const handleClick = useCallback(() => {
     const sourcePlays = blockDislikedOnExport
@@ -37,7 +44,7 @@ export function ExportAllButton({
   }, [plays, preferenceStore, blockDislikedOnExport]);
 
   return (
-    <button className="button secondary plaza-toolbar-button" onClick={handleClick} type="button">
+    <button className={className} onClick={handleClick} style={style} type="button">
       导出全部
     </button>
   );
