@@ -208,7 +208,7 @@ select option {
 
 .plaza-controls-panel {
   position: relative;
-  z-index: 40;
+  z-index: 60;
   gap: 10px;
 }
 
@@ -5752,7 +5752,7 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 }
 
 .searchable-category-select.open {
-  z-index: 80;
+  z-index: 800;
 }
 
 .searchable-category-input {
@@ -5777,7 +5777,8 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  z-index: 30;
+  /* 与 .custom-select-menu 对齐，保证绝对定位的下拉菜单始终在最上层 */
+  z-index: 801;
   display: grid;
   gap: 6px;
   padding: 8px;
@@ -8368,6 +8369,21 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   flex: 0 0 auto;
 }
 
+/* 椭圆胶囊入口（图标 + chevron 两个元素，内容决定宽度）：
+ *   工具栏的筛选 / 更多 / 导出；
+ *   下方面板的显示设置 / 更多操作。
+ * 形状要求：border-radius 999px、padding 留左右内距，让整个按钮的轮廓被
+ * 一个完整的椭圆圈起来，而不是纯圆点。 */
+.plaza-pill-trigger.is-pill-icon {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 34px;
+  padding: 0 10px;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 /* 页面 Tab 行：横向滚动、紧凑间距、纯文字不带背景激活态 */
 .plaza-page-tabs {
   display: inline-flex;
@@ -8425,7 +8441,24 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 /* 入口 + 子项 同一行时（顶部页面导航、工具栏）的横向布局 */
 .plaza-pill-group.is-inline {
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 展开态：明确不让任何祖先 .overflow-hidden 容器裁剪展开区。
+ * 同时打开态的 PillGroup 整体抬高 stacking 上下文，详见 .plaza-pill-group.is-open。 */
+.plaza-pill-group.is-inline {
+  overflow: visible;
+}
+
+/* 工具栏 / 面板的 inline 入口：展开区强制独占下一行（flex-basis:100%） */
+.plaza-pill-group.is-inline > .plaza-pill-body {
+  flex: 0 0 100%;
+  max-width: 100%;
+}
+
+.plaza-pill-group.is-inline > .plaza-pill-body.is-open {
+  margin-top: 4px;
 }
 
 /* 展开区：手风琴动画 + 原位展开（紧接入口） */
@@ -8454,6 +8487,19 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   grid-template-rows: 1fr;
   opacity: 1;
   pointer-events: auto;
+  /* 展开区置于工具栏内最上层：
+   *   1) position: relative 让自己建立层叠上下文；
+   *   2) z-index: 5 高于兄弟 PillGroup 的触发器按钮（按钮默认 z-index: auto），
+   *      避免横向并列时被后一个 group 的按钮或图标压住。 */
+  position: relative;
+  z-index: 5;
+}
+
+/* PillGroup 整体被打开时：再额外上一层 stacking 上下文，保证 overflow
+ * 场景下展开区不会被裁剪。 */
+.plaza-pill-group.is-open {
+  position: relative;
+  z-index: 4;
 }
 
 .plaza-pill-group.is-block .plaza-pill-body.is-open {
@@ -8819,6 +8865,13 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
     width: 30px;
     height: 30px;
     min-height: 30px;
+  }
+
+  /* 手机端椭圆胶囊入口：保持比例缩小一圈，避免挤爆 6px 间距 */
+  .plaza-panel-row-tight .plaza-pill-trigger.is-pill-icon {
+    min-height: 30px;
+    padding: 0 8px;
+    gap: 2px;
   }
 }
 

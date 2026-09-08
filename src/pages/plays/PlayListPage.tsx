@@ -1949,13 +1949,13 @@ export function PlayListPage() {
                     )}
                   </button>
 
-                  {/* 随机：核心操作，权重最大，不参与任何分组。骰子图标，纯图标。 */}
+                  {/* 随机：核心操作，纯图标 + 骰子，与其它工具栏入口统一透明底。 */}
                   <button
                     aria-pressed={randomPanelOpen}
                     className={
                       randomPanelOpen
-                        ? 'plaza-pill-trigger is-primary is-icon-only is-open'
-                        : 'plaza-pill-trigger is-primary is-icon-only'
+                        ? 'plaza-pill-trigger is-icon-only is-open'
+                        : 'plaza-pill-trigger is-icon-only'
                     }
                     onClick={() => setRandomPanelOpen((current) => !current)}
                     title={randomPanelOpen ? '收起随机' : '随机抽一篇'}
@@ -1965,7 +1965,7 @@ export function PlayListPage() {
                     <Dices aria-hidden="true" strokeWidth={1.75} />
                   </button>
 
-                  {/* 筛选：分类 + 作者（漏斗图标，纯图标） */}
+                  {/* 筛选：分类 + 作者（漏斗图标，椭圆胶囊入口） */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'filter'}
@@ -1976,8 +1976,8 @@ export function PlayListPage() {
                         title="筛选"
                         className={
                           groupOpen || categoryFilterOpen || authorFilterOpen
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
+                            ? 'plaza-pill-trigger is-pill-icon is-open'
+                            : 'plaza-pill-trigger is-pill-icon'
                         }
                         onClick={() => toggleToolbarGroup('filter')}
                         type="button"
@@ -2020,7 +2020,7 @@ export function PlayListPage() {
                     </div>
                   </PillGroup>
 
-                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，纯图标） */}
+                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，椭圆胶囊入口） */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'more'}
@@ -2031,8 +2031,8 @@ export function PlayListPage() {
                         title="更多"
                         className={
                           groupOpen
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
+                            ? 'plaza-pill-trigger is-pill-icon is-open'
+                            : 'plaza-pill-trigger is-pill-icon'
                         }
                         onClick={() => toggleToolbarGroup('more')}
                         type="button"
@@ -2071,7 +2071,7 @@ export function PlayListPage() {
                     </div>
                   </PillGroup>
 
-                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 心碎斜杠图标 */}
+                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 心碎斜杠图标（椭圆胶囊入口） */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'export'}
@@ -2082,8 +2082,8 @@ export function PlayListPage() {
                         title="导出"
                         className={
                           groupOpen
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
+                            ? 'plaza-pill-trigger is-pill-icon is-open'
+                            : 'plaza-pill-trigger is-pill-icon'
                         }
                         onClick={() => toggleToolbarGroup('export')}
                         type="button"
@@ -2358,8 +2358,8 @@ export function PlayListPage() {
                       title="显示设置"
                       className={
                         open
-                          ? 'plaza-pill-trigger is-icon-only is-open'
-                          : 'plaza-pill-trigger is-icon-only'
+                          ? 'plaza-pill-trigger is-pill-icon is-open'
+                          : 'plaza-pill-trigger is-pill-icon'
                       }
                       onClick={() => {
                         togglePanelGroup('display');
@@ -2501,8 +2501,8 @@ export function PlayListPage() {
                         title="更多操作"
                         className={
                           open
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
+                            ? 'plaza-pill-trigger is-pill-icon is-open'
+                            : 'plaza-pill-trigger is-pill-icon'
                         }
                         onClick={() => {
                           togglePanelGroup('bulk');
