@@ -19,6 +19,8 @@ export type ExportAllButtonProps = {
   blockDislikedOnExport: boolean;
   className?: string;
   style?: CSSProperties;
+  /** 按钮文字,默认"导出全部"。广场胶囊分组里会被改成"全部"。 */
+  label?: string;
 };
 
 export function ExportAllButton({
@@ -27,6 +29,7 @@ export function ExportAllButton({
   blockDislikedOnExport,
   className = 'button secondary plaza-toolbar-button',
   style,
+  label = '导出全部',
 }: ExportAllButtonProps) {
   const handleClick = useCallback(() => {
     const sourcePlays = blockDislikedOnExport
@@ -45,7 +48,7 @@ export function ExportAllButton({
 
   return (
     <button className={className} onClick={handleClick} style={style} type="button">
-      导出全部
+      {label}
     </button>
   );
 }

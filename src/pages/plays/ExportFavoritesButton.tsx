@@ -15,12 +15,15 @@ export type ExportFavoritesButtonProps = {
   favoritePlays: Play[];
   className?: string;
   style?: CSSProperties;
+  /** 按钮文字,广场胶囊分组里改成"收藏"以省略"导出"前缀。 */
+  label?: string;
 };
 
 export function ExportFavoritesButton({
   favoritePlays,
   className = 'button secondary plaza-toolbar-button',
   style,
+  label = '导出收藏',
 }: ExportFavoritesButtonProps) {
   const handleClick = useCallback(() => {
     if (favoritePlays.length === 0) {
@@ -42,7 +45,7 @@ export function ExportFavoritesButton({
       style={style}
       type="button"
     >
-      导出收藏
+      {label}
     </button>
   );
 }

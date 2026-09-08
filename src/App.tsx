@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { CalendarPlus, MessageSquare, Palette, PenLine, Upload, LayoutGrid } from 'lucide-react';
 import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
 import { useThemeController } from './hooks/useThemeController';
@@ -37,8 +38,8 @@ import { AdminReviewPage } from './pages/admin/review/AdminReviewPage';
 import { RepoPage } from './pages/repos/RepoPage';
 
 const publicNavItems = [
-  { to: '/plays', label: '广场' },
-  { to: '/upload', label: '上传小剧场' },
+  { to: '/plays', label: '广场', Icon: LayoutGrid },
+  { to: '/upload', label: '上传', Icon: Upload },
 ];
 
 /**
@@ -354,11 +355,15 @@ export default function App() {
             </button>
             <NavLink
               to="/repos"
+              aria-label="repo"
+              title="repo"
               className={({ isActive }) =>
-                isActive ? 'nav-pill active repo-nav-pill' : 'nav-pill repo-nav-pill'
+                isActive
+                  ? 'icon-button header-icon-nav active repo-nav-pill'
+                  : 'icon-button header-icon-nav repo-nav-pill'
               }
             >
-              repo
+              <MessageSquare aria-hidden="true" focusable="false" />
               {repoNoticeSettings === 'count' && repoUnreadCount > 0 ? (
                 <span className="repo-nav-badge">{repoUnreadCount}</span>
               ) : null}
@@ -371,14 +376,21 @@ export default function App() {
               onClick={() => openPlazaPanel('continuations')}
               type="button"
             >
-              续写
+              <PenLine aria-hidden="true" focusable="false" className="nav-pill-icon" />
+              <span>续写</span>
             </button>
             <button
               className={calendarNavActive ? 'nav-pill active' : 'nav-pill'}
               onClick={() => openPlazaPanel('calendar')}
               type="button"
+              aria-label="新增日历"
+              title="新增日历"
             >
-              新增
+              <CalendarPlus
+                aria-hidden="true"
+                focusable="false"
+                className="nav-pill-icon nav-pill-icon-large"
+              />
             </button>
             {publicNavItems.map((item) => (
               <NavLink
@@ -386,7 +398,8 @@ export default function App() {
                 to={item.to}
                 className={({ isActive }) => (isActive ? 'nav-pill active' : 'nav-pill')}
               >
-                {item.label}
+                <item.Icon aria-hidden="true" focusable="false" className="nav-pill-icon" />
+                <span>{item.label}</span>
               </NavLink>
             ))}
           </nav>
@@ -395,7 +408,8 @@ export default function App() {
             onClick={() => setThemeDropdownOpen((current) => !current)}
             type="button"
           >
-            主题
+            <Palette aria-hidden="true" focusable="false" className="nav-pill-icon" />
+            <span>主题</span>
           </button>
         </div>
       </header>

@@ -75,13 +75,13 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Cog,
+  Dices,
   Download,
   Filter,
-  ListChecks,
+  HeartCrack,
+  Layers,
   MoreHorizontal,
   Search,
-  ShieldOff,
-  Shuffle,
 } from 'lucide-react';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
@@ -1925,22 +1925,7 @@ export function PlayListPage() {
               <div className="stack-gap-sm plaza-toolbar-stack">
                 {/* 工具栏 v2：随机 / 折叠独立，分组入口按"区域内互斥"展开 */}
                 <div className="plaza-toolbar-v2" role="group" aria-label="广场操作工具栏">
-                  {/* 随机：核心操作，权重最大，不参与任何分组 */}
-                  <button
-                    aria-pressed={randomPanelOpen}
-                    className={
-                      randomPanelOpen
-                        ? 'plaza-pill-trigger is-primary is-open'
-                        : 'plaza-pill-trigger is-primary'
-                    }
-                    onClick={() => setRandomPanelOpen((current) => !current)}
-                    type="button"
-                  >
-                    <Shuffle aria-hidden="true" strokeWidth={1.75} />
-                    <span>随机</span>
-                  </button>
-
-                  {/* 折叠：开关，独立，纯图标（合并/展开箭头类） */}
+                  {/* 折叠：开关，独立，最左侧，纯图标（合并/展开箭头类） */}
                   <button
                     aria-pressed={controlsCollapsed}
                     aria-label={
@@ -1964,29 +1949,46 @@ export function PlayListPage() {
                     )}
                   </button>
 
-                  {/* 筛选：分类 + 作者（漏斗图标） */}
+                  {/* 随机：核心操作，权重最大，不参与任何分组。骰子图标，纯图标。 */}
+                  <button
+                    aria-pressed={randomPanelOpen}
+                    className={
+                      randomPanelOpen
+                        ? 'plaza-pill-trigger is-primary is-icon-only is-open'
+                        : 'plaza-pill-trigger is-primary is-icon-only'
+                    }
+                    onClick={() => setRandomPanelOpen((current) => !current)}
+                    title={randomPanelOpen ? '收起随机' : '随机抽一篇'}
+                    aria-label={randomPanelOpen ? '收起随机' : '随机抽一篇'}
+                    type="button"
+                  >
+                    <Dices aria-hidden="true" strokeWidth={1.75} />
+                  </button>
+
+                  {/* 筛选：分类 + 作者（漏斗图标，纯图标） */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'filter'}
                     trigger={({ open: groupOpen }) => (
                       <button
                         aria-expanded={groupOpen}
+                        aria-label="筛选"
+                        title="筛选"
                         className={
                           groupOpen || categoryFilterOpen || authorFilterOpen
-                            ? 'plaza-pill-trigger is-open'
-                            : 'plaza-pill-trigger'
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
                         }
                         onClick={() => toggleToolbarGroup('filter')}
                         type="button"
                       >
                         <Filter aria-hidden="true" strokeWidth={1.75} />
-                        <span>筛选</span>
                         <ChevronDown
                           aria-hidden="true"
                           strokeWidth={1.75}
+                          className="plaza-pill-chevron"
                           style={{
                             transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 200ms ease',
                           }}
                         />
                       </button>
@@ -2018,25 +2020,30 @@ export function PlayListPage() {
                     </div>
                   </PillGroup>
 
-                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标） */}
+                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，纯图标） */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'more'}
                     trigger={({ open: groupOpen }) => (
                       <button
                         aria-expanded={groupOpen}
-                        className={groupOpen ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        aria-label="更多"
+                        title="更多"
+                        className={
+                          groupOpen
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
+                        }
                         onClick={() => toggleToolbarGroup('more')}
                         type="button"
                       >
                         <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
-                        <span>更多</span>
                         <ChevronDown
                           aria-hidden="true"
                           strokeWidth={1.75}
+                          className="plaza-pill-chevron"
                           style={{
                             transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 200ms ease',
                           }}
                         />
                       </button>
@@ -2064,25 +2071,30 @@ export function PlayListPage() {
                     </div>
                   </PillGroup>
 
-                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 盾牌图标 */}
+                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 心碎斜杠图标 */}
                   <PillGroup
                     variant="inline"
                     open={openToolbarGroup === 'export'}
                     trigger={({ open: groupOpen }) => (
                       <button
                         aria-expanded={groupOpen}
-                        className={groupOpen ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        aria-label="导出"
+                        title="导出"
+                        className={
+                          groupOpen
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
+                        }
                         onClick={() => toggleToolbarGroup('export')}
                         type="button"
                       >
                         <Download aria-hidden="true" strokeWidth={1.75} />
-                        <span>导出</span>
                         <ChevronDown
                           aria-hidden="true"
                           strokeWidth={1.75}
+                          className="plaza-pill-chevron"
                           style={{
                             transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 200ms ease',
                           }}
                         />
                       </button>
@@ -2094,6 +2106,7 @@ export function PlayListPage() {
                         className="plaza-pill-subitem"
                         plays={plays}
                         preferenceStore={preferenceStore}
+                        label="全部"
                       />
                       <ExportSelectedButton
                         blockDislikedOnExport={blockDislikedOnExport}
@@ -2102,32 +2115,35 @@ export function PlayListPage() {
                         selectedPlays={selectedPlays}
                         selectionMode={selectionMode}
                         setSelectionMode={setSelectionMode}
+                        label="所选"
                       />
                       <button
                         className="plaza-pill-subitem"
                         onClick={() => handleOpenExportModal('author')}
                         type="button"
                       >
-                        导出作者
+                        作者
                       </button>
                       <ExportContinuationsButton
                         blockDislikedOnExport={blockDislikedOnExport}
                         className="plaza-pill-subitem"
                         plays={filteredPlays}
                         preferenceStore={preferenceStore}
+                        label="续写"
                       />
                       <button
                         className="plaza-pill-subitem"
                         onClick={() => handleOpenExportModal('category')}
                         type="button"
                       >
-                        导出分类
+                        分类
                       </button>
                       <ExportFavoritesButton
                         className="plaza-pill-subitem"
                         favoritePlays={favoritePlays}
+                        label="收藏"
                       />
-                      {/* 屏蔽(导出)：与下方"屏蔽不喜欢内容"独立,这里只控导出行 */}
+                      {/* 屏蔽(导出)：心碎 + 斜杠 */}
                       <button
                         aria-pressed={blockDislikedOnExport}
                         aria-label={
@@ -2135,14 +2151,14 @@ export function PlayListPage() {
                         }
                         className={
                           blockDislikedOnExport
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
+                            ? 'plaza-pill-trigger is-icon-only is-open plaza-pill-trigger-disallow'
+                            : 'plaza-pill-trigger is-icon-only plaza-pill-trigger-disallow'
                         }
                         onClick={() => setBlockDislikedOnExport((current) => !current)}
                         title={blockDislikedOnExport ? '导出时不再屏蔽不喜欢' : '导出时屏蔽不喜欢'}
                         type="button"
                       >
-                        <ShieldOff aria-hidden="true" strokeWidth={1.75} />
+                        <HeartCrack aria-hidden="true" strokeWidth={1.75} />
                       </button>
                     </div>
                   </PillGroup>
@@ -2260,80 +2276,6 @@ export function PlayListPage() {
                           </button>
                         ))}
                       </div>
-                      {/* 搜索图标入口：仅图标，点击原位展开搜索框 + 范围选项 */}
-                      <div className="plaza-panel-row-trailing">
-                        <PillGroup
-                          variant="inline"
-                          open={openSearch}
-                          trigger={({ open }) => (
-                            <button
-                              aria-expanded={open}
-                              aria-label={open ? '收起搜索' : '打开搜索'}
-                              className={
-                                open
-                                  ? 'plaza-pill-trigger is-icon-only is-open'
-                                  : 'plaza-pill-trigger is-icon-only'
-                              }
-                              onClick={() => {
-                                setOpenSearch((current) => !current);
-                                setOpenPanelGroup(null);
-                              }}
-                              title={open ? '收起搜索' : '打开搜索'}
-                              type="button"
-                            >
-                              <Search aria-hidden="true" strokeWidth={1.75} />
-                            </button>
-                          )}
-                        >
-                          <div className="plaza-pill-grid">
-                            <div className="plaza-search-popover">
-                              <ClearableField
-                                visible={Boolean(keyword.trim())}
-                                onClear={() => {
-                                  setKeyword('');
-                                  setCurrentPage(1);
-                                }}
-                              >
-                                <input
-                                  autoFocus={openSearch}
-                                  placeholder="默认搜标题、作者、分类或正文"
-                                  value={keyword}
-                                  onChange={(event) => {
-                                    setKeyword(event.target.value);
-                                    setCurrentPage(1);
-                                  }}
-                                />
-                              </ClearableField>
-                              <div
-                                className="plaza-search-fields"
-                                role="group"
-                                aria-label="搜索范围"
-                              >
-                                {playSearchFieldOptions.map((item) => (
-                                  <button
-                                    aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
-                                    className={
-                                      isSearchFieldActive(playSearchFields, item.value)
-                                        ? 'plaza-pill-subitem is-active'
-                                        : 'plaza-pill-subitem'
-                                    }
-                                    key={item.value}
-                                    onClick={() => {
-                                      setPlaySearchFields((current) =>
-                                        toggleSearchField(current, item.value),
-                                      );
-                                      setCurrentPage(1);
-                                    }}
-                                    type="button"
-                                  >
-                                    {item.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </PillGroup>
-                      </div>
                     </div>
                   ) : null}
 
@@ -2407,12 +2349,18 @@ export function PlayListPage() {
 
               {!toolbarCollapsed ? (
                 <PillGroup
-                  variant="block"
+                  variant="inline"
                   open={openPanelGroup === 'display'}
                   trigger={({ open }) => (
                     <button
                       aria-expanded={open}
-                      className={open ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                      aria-label="显示设置"
+                      title="显示设置"
+                      className={
+                        open
+                          ? 'plaza-pill-trigger is-icon-only is-open'
+                          : 'plaza-pill-trigger is-icon-only'
+                      }
                       onClick={() => {
                         togglePanelGroup('display');
                         setOpenSearch(false);
@@ -2420,13 +2368,12 @@ export function PlayListPage() {
                       type="button"
                     >
                       <Cog aria-hidden="true" strokeWidth={1.75} />
-                      <span>显示设置</span>
                       <ChevronDown
                         aria-hidden="true"
                         strokeWidth={1.75}
+                        className="plaza-pill-chevron"
                         style={{
                           transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 200ms ease',
                         }}
                       />
                     </button>
@@ -2543,28 +2490,33 @@ export function PlayListPage() {
               ) : null}
 
               {!toolbarCollapsed ? (
-                <div className="plaza-panel-row is-split">
+                <div className="plaza-panel-row is-split plaza-panel-row-tight">
                   <PillGroup
                     variant="inline"
                     open={openPanelGroup === 'bulk'}
                     trigger={({ open }) => (
                       <button
                         aria-expanded={open}
-                        className={open ? 'plaza-pill-trigger is-open' : 'plaza-pill-trigger'}
+                        aria-label="更多操作"
+                        title="更多操作"
+                        className={
+                          open
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
+                        }
                         onClick={() => {
                           togglePanelGroup('bulk');
                           setOpenSearch(false);
                         }}
                         type="button"
                       >
-                        <ListChecks aria-hidden="true" strokeWidth={1.75} />
-                        <span>更多操作</span>
+                        <Layers aria-hidden="true" strokeWidth={1.75} />
                         <ChevronDown
                           aria-hidden="true"
                           strokeWidth={1.75}
+                          className="plaza-pill-chevron"
                           style={{
                             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 200ms ease',
                           }}
                         />
                       </button>
@@ -2606,19 +2558,102 @@ export function PlayListPage() {
                           取消多选
                         </button>
                       ) : null}
+                      <button
+                        aria-pressed={preferenceStore.settings.blockDislikedGlobally}
+                        aria-label={
+                          preferenceStore.settings.blockDislikedGlobally
+                            ? '取消屏蔽不喜欢内容'
+                            : '屏蔽不喜欢内容'
+                        }
+                        className={
+                          preferenceStore.settings.blockDislikedGlobally
+                            ? 'plaza-pill-trigger is-icon-only is-open plaza-pill-trigger-disallow plaza-pill-subitem'
+                            : 'plaza-pill-trigger is-icon-only plaza-pill-trigger-disallow plaza-pill-subitem'
+                        }
+                        onClick={() =>
+                          handleToggleSetting(
+                            'blockDislikedGlobally',
+                            !preferenceStore.settings.blockDislikedGlobally,
+                          )
+                        }
+                        title={
+                          preferenceStore.settings.blockDislikedGlobally
+                            ? '取消屏蔽不喜欢内容'
+                            : '屏蔽不喜欢内容'
+                        }
+                        type="button"
+                      >
+                        <HeartCrack aria-hidden="true" strokeWidth={1.75} />
+                      </button>
                     </div>
                   </PillGroup>
-                  {/* 屏蔽不喜欢内容：独立保留，常驻显示 */}
-                  <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-row">
-                    <input
-                      checked={preferenceStore.settings.blockDislikedGlobally}
-                      onChange={(event) =>
-                        handleToggleSetting('blockDislikedGlobally', event.target.checked)
-                      }
-                      type="checkbox"
-                    />
-                    <span>屏蔽不喜欢内容</span>
-                  </label>
+                  <PillGroup
+                    variant="inline"
+                    open={openSearch}
+                    trigger={({ open }) => (
+                      <button
+                        aria-expanded={open}
+                        aria-label={open ? '收起搜索' : '打开搜索'}
+                        className={
+                          open
+                            ? 'plaza-pill-trigger is-icon-only is-open'
+                            : 'plaza-pill-trigger is-icon-only'
+                        }
+                        onClick={() => {
+                          setOpenSearch((current) => !current);
+                          setOpenPanelGroup(null);
+                        }}
+                        title={open ? '收起搜索' : '打开搜索'}
+                        type="button"
+                      >
+                        <Search aria-hidden="true" strokeWidth={1.75} />
+                      </button>
+                    )}
+                  >
+                    <div className="plaza-pill-grid">
+                      <div className="plaza-search-popover">
+                        <ClearableField
+                          visible={Boolean(keyword.trim())}
+                          onClear={() => {
+                            setKeyword('');
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <input
+                            autoFocus={openSearch}
+                            placeholder="默认搜标题、作者、分类或正文"
+                            value={keyword}
+                            onChange={(event) => {
+                              setKeyword(event.target.value);
+                              setCurrentPage(1);
+                            }}
+                          />
+                        </ClearableField>
+                        <div className="plaza-search-fields" role="group" aria-label="搜索范围">
+                          {playSearchFieldOptions.map((item) => (
+                            <button
+                              aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+                              className={
+                                isSearchFieldActive(playSearchFields, item.value)
+                                  ? 'plaza-pill-subitem is-active'
+                                  : 'plaza-pill-subitem'
+                              }
+                              key={item.value}
+                              onClick={() => {
+                                setPlaySearchFields((current) =>
+                                  toggleSearchField(current, item.value),
+                                );
+                                setCurrentPage(1);
+                              }}
+                              type="button"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </PillGroup>
                 </div>
               ) : null}
 

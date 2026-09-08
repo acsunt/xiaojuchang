@@ -4134,6 +4134,37 @@ body.tag-sort-dragging {
   background: rgba(72, 213, 151, 0.08);
 }
 
+/* 审核后台「作者提交的修改」:每个字段一行,行内左右两个独立边框框。
+ * 上一版 = parentPlay,当前版本 = selectedPlay,中间 12px 间距。 */
+.review-pending-edit-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.review-pending-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.review-pending-edit-card {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.review-pending-edit-card p {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .review-pending-edit-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .diff-copy-row {
   display: grid;
   gap: 6px;
@@ -8490,7 +8521,8 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 
 .plaza-status-tab {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
   min-height: 30px;
   padding: 0 12px;
@@ -8501,6 +8533,7 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
+  line-height: 1;
   transition:
     background-color 180ms ease,
     color 180ms ease,
@@ -8691,4 +8724,137 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
     padding: 0 10px;
     font-size: calc(12.5px * var(--text-scale, 1));
   }
+}
+
+/* ===== 顶部导航：图标 + 文字胶囊 ===== */
+.nav-pill-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke-width: 1.75;
+}
+
+.nav-pill-icon-large {
+  width: 20px;
+  height: 20px;
+}
+
+/* App.tsx 顶部全局折叠按钮右侧那组"repo / 续写 / 新增 / 广场 / 上传 / 主题" */
+.top-nav,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.header-icon-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  position: relative;
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.header-icon-nav:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.header-icon-nav.active {
+  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.header-icon-nav svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ===== 工具栏：pill-chevron 旋转动画 ===== */
+.plaza-pill-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  transition: transform 200ms ease;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+/* ===== 工具栏"屏蔽(导出)"心碎 + 斜杠样式 ===== */
+.plaza-pill-trigger-disallow svg {
+  color: color-mix(in srgb, #c43347 86%, transparent);
+}
+
+/* ===== 下方面板：紧凑行（手机端） ===== */
+.plaza-panel-row-tight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.plaza-panel-row-tight > * {
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .plaza-panel-row-tight {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .plaza-panel-row-tight .plaza-pill-trigger.is-icon-only {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+}
+
+/* 工具栏手机端：入口全在同一行，展开子项落下一行 */
+@media (max-width: 720px) {
+  .plaza-toolbar-v2 {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .plaza-toolbar-v2::-webkit-scrollbar {
+    display: none;
+  }
+
+  .plaza-toolbar-v2 > [class*='plaza-pill-group'] {
+    flex: 0 0 auto;
+  }
+
+  .plaza-toolbar-v2 > [class*='plaza-pill-group'] > .plaza-pill-grid {
+    width: 100%;
+  }
+}
+
+/* 列表操作图标统一为线性 outline，与工具栏图标风格一致 */
+.toolbar-toggle-row .plaza-pill-subitem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toolbar-toggle-row .plaza-pill-subitem::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  flex: 0 0 auto;
 }

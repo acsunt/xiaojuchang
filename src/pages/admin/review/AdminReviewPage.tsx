@@ -6002,10 +6002,12 @@ export function AdminReviewPage() {
                       </div>
                     </div>
 
-                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现,
-                     * 以 parentPlay 的字段作为「当前」,以 selectedPlay(就是 modification 记录)
-                     * 的字段作为「待改为」。审核 approve 把 selectedPlay 的字段合入 parentPlay
-                     * 并删除本条,reject/offline 仅改本条 status,parentPlay 不动。 */}
+                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现。
+                     * 每个字段独立成一行,行内左右两个边框框:
+                     *   左框 = 上一版(parentPlay),
+                     *   右框 = 当前版本(selectedPlay / 待改为)。
+                     * 审核 approve 把当前版本合入 parentPlay 并删除本条,
+                     * reject/offline 仅改本条 status,parentPlay 不动。 */}
                     {selectedPlay.submissionType === 'modify' && selectedPlay.parentPlayId ? (
                       <div className="stack-gap-md review-pending-edit-panel">
                         <div className="content-head">
@@ -6014,41 +6016,66 @@ export function AdminReviewPage() {
                             {`作者于 ${new Date(selectedPlay.createdAt).toLocaleString('zh-CN')} 提交的修改草稿,审核通过后会覆盖到原作品`}
                           </span>
                         </div>
-                        <div className="stack-gap-sm">
-                          <div className="diff-card">
-                            <strong>标题</strong>
-                            <p>
-                              <span className="content-meta">当前：</span>
-                              {parentPlay?.title ?? '（原内容已删除）'}
-                              <span className="content-meta"> / 待改为：</span>
-                              <strong>{selectedPlay.title}</strong>
-                            </p>
+                        <div className="review-pending-edit-grid">
+                          <div className="review-pending-edit-row">
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">上一版 · 标题</span>
+                              <p>{parentPlay?.title ?? '（原内容已删除）'}</p>
+                            </div>
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">当前版本 · 标题</span>
+                              <p>
+                                <strong>{selectedPlay.title}</strong>
+                              </p>
+                            </div>
                           </div>
-                          <div className="diff-card">
-                            <strong>分类</strong>
-                            <p>
-                              <span className="content-meta">当前：</span>
-                              {parentPlay?.category ?? '（原内容已删除）'}
-                              <span className="content-meta"> / 待改为：</span>
-                              <strong>{selectedPlay.category}</strong>
-                            </p>
+                          <div className="review-pending-edit-row">
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">上一版 · 分类</span>
+                              <p>{parentPlay?.category ?? '（原内容已删除）'}</p>
+                            </div>
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">当前版本 · 分类</span>
+                              <p>
+                                <strong>{selectedPlay.category}</strong>
+                              </p>
+                            </div>
                           </div>
-                          <div className="diff-card">
-                            <strong>署名</strong>
-                            <p>
-                              <span className="content-meta">当前：</span>
-                              {parentPlay?.authorName ?? '（原内容已删除）'}
-                              <span className="content-meta"> / 待改为：</span>
-                              <strong>{selectedPlay.authorName}</strong>
-                            </p>
+                          <div className="review-pending-edit-row">
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">上一版 · 署名</span>
+                              <p>{parentPlay?.authorName ?? '（原内容已删除）'}</p>
+                            </div>
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">当前版本 · 署名</span>
+                              <p>
+                                <strong>{selectedPlay.authorName}</strong>
+                              </p>
+                            </div>
                           </div>
-                          <div className="diff-card">
-                            <strong>简介</strong>
-                            <p>{selectedPlay.summary}</p>
+                          <div className="review-pending-edit-row">
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">上一版 · 简介</span>
+                              <p>{parentPlay?.summary || '（空）'}</p>
+                            </div>
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">当前版本 · 简介</span>
+                              <p>{selectedPlay.summary || '（空）'}</p>
+                            </div>
                           </div>
-                          <div className="diff-card">
-                            <strong>正文</strong>
-                            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedPlay.content}</p>
+                          <div className="review-pending-edit-row">
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">上一版 · 正文</span>
+                              <p style={{ whiteSpace: 'pre-wrap' }}>
+                                {parentPlay?.content || '（空）'}
+                              </p>
+                            </div>
+                            <div className="diff-card review-pending-edit-card">
+                              <span className="content-meta">当前版本 · 正文</span>
+                              <p style={{ whiteSpace: 'pre-wrap' }}>
+                                {selectedPlay.content || '（空）'}
+                              </p>
+                            </div>
                           </div>
                           {parentPlay ? null : (
                             <p className="content-meta warning">

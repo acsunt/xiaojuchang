@@ -28,6 +28,8 @@ export type ExportContinuationsButtonProps = {
   className?: string;
   /** 覆盖按钮默认 style,留给 PlayListPage 注入样式 */
   style?: CSSProperties;
+  /** 按钮文字,广场胶囊分组里改成"续写"以省略"导出"前缀。 */
+  label?: string;
 };
 
 /* 异步,避免一次查询太多 play 时阻塞 UI。 */
@@ -37,6 +39,7 @@ export function ExportContinuationsButton({
   blockDislikedOnExport,
   className = 'button secondary plaza-toolbar-button',
   style,
+  label = '导出续写',
 }: ExportContinuationsButtonProps) {
   const handleClick = useCallback(async () => {
     const sourcePlays = blockDislikedOnExport
@@ -66,7 +69,7 @@ export function ExportContinuationsButton({
 
   return (
     <button className={className} onClick={() => void handleClick()} style={style} type="button">
-      导出续写
+      {label}
     </button>
   );
 }

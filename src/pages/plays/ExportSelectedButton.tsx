@@ -28,6 +28,8 @@ export type ExportSelectedButtonProps = {
   blockDislikedOnExport: boolean;
   className?: string;
   style?: CSSProperties;
+  /** 按钮默认文字,广场胶囊分组里改成"所选"以省略"导出"前缀。 */
+  label?: string;
 };
 
 export function ExportSelectedButton({
@@ -38,6 +40,7 @@ export function ExportSelectedButton({
   blockDislikedOnExport,
   className = 'button secondary plaza-toolbar-button',
   style,
+  label = '导出所选',
 }: ExportSelectedButtonProps) {
   const handleClick = useCallback(() => {
     if (selectionMode !== 'export') {
@@ -67,7 +70,7 @@ export function ExportSelectedButton({
 
   return (
     <button className={className} onClick={handleClick} style={style} type="button">
-      {selectionMode === 'export' ? `导出已选（${selectedPlays.length}）` : '导出所选'}
+      {selectionMode === 'export' ? `导出已选（${selectedPlays.length}）` : label}
     </button>
   );
 }
