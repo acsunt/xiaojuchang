@@ -40,6 +40,8 @@ const TITLE_PREFIX = 'Title:';
 const AUTHOR_PREFIX = 'Author:';
 const CATEGORY_PREFIX = 'Category:';
 const SUMMARY_PREFIX = 'Summary:';
+/* 纯净版 play 简介字段 — 与批量上传格式对齐(批量上传用 Desc:) */
+const DESC_PREFIX = 'Desc:';
 const STATUS_PREFIX = 'Status:';
 const CREATED_AT_PREFIX = 'CreatedAt:';
 const UPDATED_AT_PREFIX = 'UpdatedAt:';
@@ -63,6 +65,12 @@ const PLAY_APPROVED_FILE = '已通过.txt';
 const TAGS_FILE = '标签.txt';
 const REPO_APPROVED_FILE = 'repo-已审核.txt';
 const CONTINUATION_APPROVED_FILE = '续写-已审核.txt';
+const CONTINUATION_PURE_FILE = '续写-纯净版.txt';
+
+/* 合并导出"纯净版"专用的子文件名 — 全部中文,与现有的「作者/分类」风格一致 */
+const MERGED_CONTINUATION_TOTAL_FILE = '续写/已审核.txt';
+const MERGED_CONTINUATION_AUTHOR_DIR = '续写/作者';
+const MERGED_CONTINUATION_CATEGORY_DIR = '续写/分类';
 
 const MERGED_AUTHOR_DIR = '作者';
 const MERGED_CATEGORY_DIR = '分类';
@@ -204,6 +212,28 @@ const makePlayRecordText = (play: Play) => {
     `${REVIEW_NOTE_PREFIX} ${escapeInlineValue(reviewNote)}`,
     CONTENT_PREFIX,
     play.content,
+  ].join('\n');
+};
+
+/* ---------- Play 纯净版序列化(对齐批量上传格式) ----------
+ *
+ * 与 makePlayRecordText 的差异:丢弃所有数据库元信息字段
+ * (Id / Status / CreatedAt / UpdatedAt / ReviewedAt / ReviewNote),
+ * 只保留人能读懂的 Title / Author / Category / Desc + 正文。
+ * 块 marker 用原文标题,不再是 `play:<id> · ...`。
+ *
+ * 设计意图:让用户复制粘贴到任何文本编辑器 / 二次投稿时,产物干净;
+ * 解析侧不识别此格式(只出),需要 round-trip 的用户走主备份格式。
+ */
+const makePlayPureBlock = (play: Play) => {
+  const title = play.title.trim() || 'Untitled';
+  return [
+    `${MARKER_PREFIX}${title}`,
+    `${TITLE_PREFIX} ${title}`,
+    `${AUTHOR_PREFIX} ${escapeInlineValue(play.authorName.trim())}`,
+    `${CATEGORY_PREFIX} ${escapeInlineValue((play.category || DEFAULT_CATEGORY).trim())}`,
+    `${DESC_PREFIX} ${escapeInlineValue(normalizeImportedSummary(play.summary))}`,
+    play.content.trim(),
   ].join('\n');
 };
 
@@ -392,6 +422,34 @@ const makeContinuationRecordText = (item: Continuation) => {
   ].join('\n');
 };
 
+/* ---------- Continuation 纯净版序列化(对齐批量上传风格) ----------
+ *
+ * 块 marker 用「原标题 · 简介前 16 字」,字段只保留人能看懂的 4 个:
+ *   Title      — 原文标题(合并自原 playTitle,便于读者快速认出这是哪篇的续写)
+ *   Author     — 原文作者(合并自原 playAuthorName,与 Title 配对作为上下文)
+ *   Nickname   — 续写作者(空字符串写「匿名」)
+ *   Summary    — 续写简介
+ * 后面跟正文,块与块之间空行分隔。
+ *
+ * 同样只出,解析侧不识别;需要 round-trip 的场景请用主备份 zip。
+ */
+const makeContinuationPureBlock = (item: Continuation) => {
+  const playTitle = (item.playTitle ?? '').trim() || '未关联小剧场';
+  const playAuthor = (item.playAuthorName ?? '').trim();
+  const summary = item.summary ?? '';
+  const summaryPreview = summary.trim().slice(0, 16) || '续写';
+  const nickname = item.nickname?.trim() || '匿名';
+
+  return [
+    `${MARKER_PREFIX}${playTitle} · ${summaryPreview}`,
+    `${TITLE_PREFIX} ${escapeInlineValue(playTitle)}`,
+    ...(playAuthor ? [`${AUTHOR_PREFIX} ${escapeInlineValue(playAuthor)}` as const] : []),
+    `${NICKNAME_PREFIX} ${escapeInlineValue(nickname)}`,
+    `${SUMMARY_PREFIX} ${escapeInlineValue(summary)}`,
+    item.content.trim(),
+  ].join('\n');
+};
+
 const parseContinuationRecord = (block: string): Continuation => {
   const lines = block.split(LINE_BREAK);
   const markerTitle = readFirstMarkerTitle(lines);
@@ -575,19 +633,6 @@ const groupBy = <T>(items: T[], getKey: (item: T) => string) => {
   );
 };
 
-const makeGroupedPlayFiles = (
-  folderName: string,
-  groups: Array<[string, Play[]]>,
-  fallbackName: string,
-) =>
-  groups.map(([name, items]) => ({
-    name: `${folderName}/${safeBackupPathSegment(name, fallbackName)}.txt`,
-    text: [...items]
-      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
-      .map(makePlayRecordText)
-      .join('\n\n'),
-  }));
-
 const makeGroupedRepoFiles = (
   folderName: string,
   groups: Array<[string, Repo[]]>,
@@ -604,24 +649,85 @@ const makeGroupedRepoFiles = (
 export const createMergedBackupArchive = (
   plays: Play[],
   tags: Tag[] = [],
-  options: { repos?: Repo[] } = {},
+  options: { repos?: Repo[]; continuations?: Continuation[]; keepAttachedMeta?: boolean } = {},
 ) => {
-  const { repos = [] } = options;
+  const { repos = [], continuations = [], keepAttachedMeta = true } = options;
   const approvedPlays = filterApproved(plays);
   const approvedRepos = filterApproved(repos);
+  const approvedContinuations = filterApproved(continuations);
+
+  /* keepAttachedMeta=true(原行为):每条记录带 Id/Status/时间戳/ReviewNote
+   * keepAttachedMeta=false(纯净版):每条记录只保留人能看懂的字段,与批量上传对齐 */
+  const playRecordFn = keepAttachedMeta ? makePlayRecordText : makePlayPureBlock;
+  const continuationRecordFn = keepAttachedMeta
+    ? makeContinuationRecordText
+    : makeContinuationPureBlock;
 
   const authorGroups = groupBy(approvedPlays, (play) => play.authorName.trim() || '匿名');
   const categoryGroups = groupBy(
     approvedPlays,
     (play) => play.category?.trim() || DEFAULT_CATEGORY,
   );
+  /* 续写按"原 play 的作者/分类"分组,而不是按续写作者本身 —
+   * 与"导出作者/导出分类"按钮的语义对齐:都是按原文作者/分类成组。 */
+  const continuationAuthorGroups = groupBy(
+    approvedContinuations,
+    (item) => item.playAuthorName?.trim() || '匿名',
+  );
+  const continuationCategoryGroups = groupBy(
+    approvedContinuations,
+    (item) => item.playTitle?.trim() || '未关联',
+  );
   const repoAuthorGroups = groupBy(approvedRepos, (repo) => repo.playAuthorName?.trim() || '匿名');
   const repoCategoryGroups = groupBy(approvedRepos, (repo) => repo.playId || '未关联');
+
+  /* 是否要在合并导出里包含续写:
+   * - 不勾"保留附带信息"且调用方传了 continuations → 包含(纯净版)
+   * - 勾了附带信息 → 不包含(原行为,避免破坏老用户的备份)
+   * 这样保持向后兼容:不传 continuations 时跟原来一模一样。 */
+  const includeContinuations = !keepAttachedMeta && approvedContinuations.length > 0;
+
+  /* groupBy 内部返回的是按 key 排序后的 entries 数组(不是 Map) —
+   * 这里手工 forEach 而非 .map 是为了让回调内联排序时类型推断更稳定。 */
+  const buildPlayGroupFiles = (
+    folderName: string,
+    groups: Array<[string, Play[]]>,
+  ): ZipTextFile[] => {
+    const result: ZipTextFile[] = [];
+    groups.forEach(([name, items]) => {
+      result.push({
+        name: `${folderName}/${safeBackupPathSegment(name, '匿名')}.txt`,
+        text: [...items]
+          .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+          .map(playRecordFn)
+          .join('\n\n'),
+      });
+    });
+    return result;
+  };
+
+  const buildContinuationGroupFiles = (
+    folderName: string,
+    groups: Array<[string, Continuation[]]>,
+    fallbackName: string,
+  ): ZipTextFile[] => {
+    const result: ZipTextFile[] = [];
+    groups.forEach(([name, items]) => {
+      result.push({
+        name: `${folderName}/${safeBackupPathSegment(name, fallbackName)}.txt`,
+        text: [...items]
+          .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+          .map(continuationRecordFn)
+          .join('\n\n'),
+      });
+    });
+    return result;
+  };
 
   const files: ZipTextFile[] = [
     {
       name: PLAY_APPROVED_FILE,
-      text: approvedPlays.map(makePlayRecordText).join('\n\n'),
+      text: approvedPlays.map(playRecordFn).join('\n\n'),
     },
     {
       name: TAGS_FILE,
@@ -633,8 +739,29 @@ export const createMergedBackupArchive = (
         .map(makeTagRecordText)
         .join('\n\n'),
     },
-    ...makeGroupedPlayFiles(MERGED_AUTHOR_DIR, authorGroups, '匿名'),
-    ...makeGroupedPlayFiles(MERGED_CATEGORY_DIR, categoryGroups, DEFAULT_CATEGORY),
+    ...buildPlayGroupFiles(MERGED_AUTHOR_DIR, authorGroups),
+    ...buildPlayGroupFiles(MERGED_CATEGORY_DIR, categoryGroups),
+    ...(includeContinuations
+      ? [
+          {
+            name: MERGED_CONTINUATION_TOTAL_FILE,
+            text: [...approvedContinuations]
+              .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+              .map(continuationRecordFn)
+              .join('\n\n'),
+          },
+          ...buildContinuationGroupFiles(
+            MERGED_CONTINUATION_AUTHOR_DIR,
+            continuationAuthorGroups,
+            '匿名',
+          ),
+          ...buildContinuationGroupFiles(
+            MERGED_CONTINUATION_CATEGORY_DIR,
+            continuationCategoryGroups,
+            '未关联',
+          ),
+        ]
+      : []),
     ...(approvedRepos.length > 0
       ? [
           ...makeGroupedRepoFiles(MERGED_AUTHOR_REPO_DIR, repoAuthorGroups, '匿名'),
@@ -648,15 +775,29 @@ export const createMergedBackupArchive = (
 
 /* ---------- 续写 zip ---------- */
 
-export const createContinuationsArchive = (items: Continuation[]) => {
+export const createContinuationsArchive = (
+  items: Continuation[],
+  options: { keepAttachedMeta?: boolean } = {},
+) => {
+  const { keepAttachedMeta = false } = options;
   const approved = filterApproved(items);
+  const sorted = [...approved].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+  /* 默认 false:导出续写是用户场景,默认走纯净版;
+   * 后台"导出续写"按钮在勾选"保留附带信息"时切到带元信息版。 */
+  if (keepAttachedMeta) {
+    return createZipFromTextFiles([
+      {
+        name: CONTINUATION_APPROVED_FILE,
+        text: sorted.map(makeContinuationRecordText).join('\n\n'),
+      },
+    ]);
+  }
+
   return createZipFromTextFiles([
     {
-      name: CONTINUATION_APPROVED_FILE,
-      text: [...approved]
-        .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-        .map(makeContinuationRecordText)
-        .join('\n\n'),
+      name: CONTINUATION_PURE_FILE,
+      text: sorted.map(makeContinuationPureBlock).join('\n\n'),
     },
   ]);
 };
@@ -684,7 +825,13 @@ export const parseBackupArchive = async (file: Blob): Promise<ParsedBackup> => {
   const result: ParsedBackup = { plays: [], repos: [], continuations: [], tags: [] };
 
   for (const file of files) {
-    if (file.name === CONTINUATION_APPROVED_FILE) {
+    /* 续写导出在主备份/合并导出里都只用来给读者看,
+     * round-trip 走 parseContinuationsArchive;这里直接跳过避免纯净版缺 Type: 字段时报错。 */
+    if (
+      file.name === CONTINUATION_APPROVED_FILE ||
+      file.name === CONTINUATION_PURE_FILE ||
+      file.name.startsWith('续写/')
+    ) {
       continue;
     }
 
@@ -763,19 +910,29 @@ export const downloadBackupArchive = (
 export const downloadMergedBackupArchive = (
   plays: Play[],
   tags: Tag[] = [],
-  options: { repos?: Repo[] } = {},
+  options: { repos?: Repo[]; continuations?: Continuation[]; keepAttachedMeta?: boolean } = {},
 ) => {
   const dateTag = formatDateTag();
-  triggerDownload(createMergedBackupArchive(plays, tags, options), `导出作者和分类-${dateTag}.zip`);
+  const suffix = options.keepAttachedMeta ? '' : '-纯净版';
+  triggerDownload(
+    createMergedBackupArchive(plays, tags, options),
+    `导出作者和分类-${dateTag}${suffix}.zip`,
+  );
 };
 
 export const downloadContinuationsArchive = (
   items: Continuation[],
   prefix: string = '小剧场续写',
+  options: { keepAttachedMeta?: boolean } = {},
 ) => {
+  const { keepAttachedMeta = false } = options;
   const approvedCount = filterApproved(items).length;
   const dateTag = formatDateTag();
-  triggerDownload(createContinuationsArchive(items), `${prefix}-${dateTag}-${approvedCount}条.zip`);
+  const suffix = keepAttachedMeta ? '' : '-纯净版';
+  triggerDownload(
+    createContinuationsArchive(items, options),
+    `${prefix}-${dateTag}${suffix}-${approvedCount}条.zip`,
+  );
 };
 
 /* ---------- 计数 / 状态映射 ---------- */

@@ -55,3 +55,6 @@ src/__tests__/
 # 本轮临时比对 / 输出文件（仅 git index 留痕，磁盘已不存在）
 diff_*.txt
 show_*.txt
+
+# 工作日志(常驻,不随仓库 commit / push;每次新功能改动先来这里组织思路)
+__WORKLOG__/

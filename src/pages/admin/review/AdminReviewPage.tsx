@@ -2358,14 +2358,30 @@ export function AdminReviewPage() {
       const repoCount = backupIncludeRepos
         ? allRepos.filter((repo) => repo.status === 'approved').length
         : 0;
+      const approvedContinuationsCount = allContinuations.filter(
+        (item) => item.status === 'approved',
+      ).length;
+      /* keepAttachedMeta=false 时,合并导出额外按「续写/」结构把已审核续写纳入。
+       * keepAttachedMeta=true(勾选)时,行为与原版完全一致,不包含续写,避免破坏
+       * 老用户对「合并导出 = play + repo」的认知。 */
       downloadMergedBackupArchive(allPlays, tags, {
         repos: backupIncludeRepos ? allRepos : [],
+        continuations: mergedBackupIncludeAttachedMeta ? undefined : allContinuations,
+        keepAttachedMeta: mergedBackupIncludeAttachedMeta,
       });
       setBackupMessageTone('success');
+      const mergedLabel = mergedBackupIncludeAttachedMeta ? '合并备份' : '合并备份（纯净版）';
+      const extraLines: string[] = [];
+      if (backupIncludeRepos) {
+        extraLines.push(`；附带 ${repoCount} 条已审核 repo,按作者和分类再各一组`);
+      }
+      if (!mergedBackupIncludeAttachedMeta && approvedContinuationsCount > 0) {
+        extraLines.push(
+          `；附加 ${approvedContinuationsCount} 条已审核续写(按原 play 作者/分类分组)`,
+        );
+      }
       setBackupMessage(
-        `合并备份已导出，共 ${approvedCount} 篇已通过内容，按作者和分类分别成组${
-          backupIncludeRepos ? `；附带 ${repoCount} 条已审核 repo,按作者和分类再各一组` : ''
-        }。`,
+        `${mergedLabel}已导出，共 ${approvedCount} 篇已通过内容，按作者和分类分别成组${extraLines.join('')}。`,
       );
     } catch (reason) {
       setBackupMessageTone('error');
@@ -2376,9 +2392,12 @@ export function AdminReviewPage() {
   const handleExportContinuationsBackup = () => {
     try {
       const approvedCount = allContinuations.filter((item) => item.status === 'approved').length;
-      downloadContinuationsArchive(allContinuations);
+      downloadContinuationsArchive(allContinuations, '小剧场续写', {
+        keepAttachedMeta: mergedBackupIncludeAttachedMeta,
+      });
       setBackupMessageTone('success');
-      setBackupMessage(`续写已导出，共 ${approvedCount} 条已审核续写。`);
+      const label = mergedBackupIncludeAttachedMeta ? '续写已导出' : '续写已导出(纯净版)';
+      setBackupMessage(`${label}，共 ${approvedCount} 条已审核续写。`);
     } catch (reason) {
       setBackupMessageTone('error');
       setBackupMessage(reason instanceof Error ? reason.message : '导出续写失败');
@@ -6807,6 +6826,13 @@ export function AdminReviewPage() {
                     一份。
                   </span>
                   <span className="content-meta">审核日志不在这次 TXT 备份里。</span>
+                  <span className="content-meta">
+                    「合并导出」与「导出续写」都有「纯净版」格式：不勾选「合并导出时保留附带信息」时，
+                    记录块对齐批量上传格式（只保留 Title / Author / Category / Desc / Nickname /
+                    Summary，正文跟在后面），丢弃 Id / Status / 时间戳 / ReviewNote
+                    等数据库字段；合并导出还会多一个「续写/」子文件夹， 按原 play
+                    的作者/分类把续写再各成组，产物文件名带「-纯净版」后缀。
+                  </span>
                   {backupImportName ? (
                     <span className="content-meta">已选择 {backupImportName}</span>
                   ) : null}

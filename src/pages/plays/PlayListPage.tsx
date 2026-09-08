@@ -54,7 +54,6 @@ import {
 } from '../../services/play-text';
 import { createZipFromTextFiles } from '../../services/simple-zip';
 import { getCachedPublicPlays, playApi } from '../../services/play-api';
-import { downloadContinuationsArchive } from '../../services/play-backup';
 import { PlazaCalendarPanel } from './PlazaCalendarPanel';
 import { PlazaContinuationPanel } from './PlazaContinuationPanel';
 import { getPlayVersionKey, sortPlayVersions } from './play-versions';
@@ -67,6 +66,10 @@ import {
 } from '../../types/play';
 import { openVisitorChangelog } from '../../data/visitor-changelog';
 import { showFloatingToast } from '../../components/floating-toast-store';
+import { ExportContinuationsButton } from './ExportContinuationsButton';
+import { ExportAllButton } from './ExportAllButton';
+import { ExportFavoritesButton } from './ExportFavoritesButton';
+import { ExportSelectedButton } from './ExportSelectedButton';
 
 type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
 type RepoFilterMode = 'all' | 'with' | 'without';
@@ -1424,87 +1427,6 @@ export function PlayListPage() {
     );
   };
 
-  const exportPlays = (items: Play[], fileName: string, scopeLabel: string) => {
-    const exportItems = collectExportPlaySet(items, plays);
-    if (exportItems.length === 0) {
-      showFloatingToast(`当前没有可导出的${scopeLabel}`, 'error');
-      return;
-    }
-
-    const text = serializePlaysToBatchText(exportItems);
-    downloadTextFile(`${fileName}-${exportItems.length}篇.txt`, text);
-  };
-
-  const handleExportAll = () => {
-    const sourcePlays = blockDislikedOnExport
-      ? plays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
-      : plays;
-    if (sourcePlays.length === 0) {
-      showFloatingToast('当前没有可导出的内容', 'error');
-      return;
-    }
-    exportPlays(sourcePlays, '全部小剧场', '全部');
-  };
-
-  const handleExportFavorites = () => {
-    if (favoritePlays.length === 0) {
-      showFloatingToast('当前没有收藏的小剧场可导出', 'error');
-      return;
-    }
-    exportPlays(favoritePlays, '收藏小剧场', '收藏');
-  };
-
-  /* 广场「导出续写」:取当前 filteredPlays 下所有 play 的已审核续写,导出单独 zip。
-   * 异步,避免一次查询太多 play 时阻塞 UI。 */
-  const handleExportContinuations = async () => {
-    const sourcePlays = blockDislikedOnExport
-      ? filteredPlays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
-      : filteredPlays;
-    const playIds = sourcePlays.map((play) => play.id);
-
-    if (playIds.length === 0) {
-      showFloatingToast('当前没有可导出续写的小剧场', 'error');
-      return;
-    }
-
-    showFloatingToast(`正在整理 ${playIds.length} 篇小剧场下的续写…`);
-
-    try {
-      const continuations = await playApi.getApprovedContinuationsByPlayIds(playIds, 'asc');
-      if (continuations.length === 0) {
-        showFloatingToast('当前条件下没有可导出的续写', 'error');
-        return;
-      }
-      downloadContinuationsArchive(continuations, '续写');
-      showFloatingToast(`已导出 ${continuations.length} 条已审核续写。`);
-    } catch (reason) {
-      showFloatingToast(reason instanceof Error ? reason.message : '导出续写失败', 'error');
-    }
-  };
-
-  const handleExportSelected = () => {
-    if (selectionMode !== 'export') {
-      setSelectionMode('export');
-      return;
-    }
-
-    if (selectedPlays.length === 0) {
-      showFloatingToast('先选择要导出的内容', 'error');
-      return;
-    }
-
-    const sourcePlays = blockDislikedOnExport
-      ? selectedPlays.filter((play) => !isDislikedPlay(play.id, preferenceStore))
-      : selectedPlays;
-    if (sourcePlays.length === 0) {
-      showFloatingToast('选中内容全部被标记为不喜欢，已被屏蔽。请先取消不喜欢再导出。', 'error');
-      return;
-    }
-
-    exportPlays(sourcePlays, '已选小剧场', '已选');
-    setSelectionMode('idle');
-  };
-
   const exportGroupedPlays = (
     type: ExportTargetType,
     values: string[],
@@ -1999,20 +1921,18 @@ export function PlayListPage() {
                   >
                     更新日志
                   </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={handleExportAll}
-                    type="button"
-                  >
-                    导出全部
-                  </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={handleExportSelected}
-                    type="button"
-                  >
-                    {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
-                  </button>
+                  <ExportAllButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    plays={plays}
+                    preferenceStore={preferenceStore}
+                  />
+                  <ExportSelectedButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    preferenceStore={preferenceStore}
+                    selectedPlays={selectedPlays}
+                    selectionMode={selectionMode}
+                    setSelectionMode={setSelectionMode}
+                  />
                   <button
                     className="button secondary plaza-toolbar-button"
                     onClick={() => handleOpenExportModal('author')}
@@ -2020,13 +1940,11 @@ export function PlayListPage() {
                   >
                     导出作者
                   </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => void handleExportContinuations()}
-                    type="button"
-                  >
-                    导出续写
-                  </button>
+                  <ExportContinuationsButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    plays={filteredPlays}
+                    preferenceStore={preferenceStore}
+                  />
                   <button
                     className="button secondary plaza-toolbar-button"
                     onClick={() => handleOpenExportModal('category')}
@@ -2034,14 +1952,7 @@ export function PlayListPage() {
                   >
                     导出分类
                   </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    disabled={favoritePlays.length === 0}
-                    onClick={handleExportFavorites}
-                    type="button"
-                  >
-                    导出收藏
-                  </button>
+                  <ExportFavoritesButton favoritePlays={favoritePlays} />
                   <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
                     <input
                       checked={blockDislikedOnExport}
@@ -2132,20 +2043,18 @@ export function PlayListPage() {
                   role="group"
                   aria-label="广场手机端导出操作"
                 >
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={handleExportAll}
-                    type="button"
-                  >
-                    导出全部
-                  </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={handleExportSelected}
-                    type="button"
-                  >
-                    {selectionMode === 'export' ? `导出已选（${selectedIds.length}）` : '导出所选'}
-                  </button>
+                  <ExportAllButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    plays={plays}
+                    preferenceStore={preferenceStore}
+                  />
+                  <ExportSelectedButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    preferenceStore={preferenceStore}
+                    selectedPlays={selectedPlays}
+                    selectionMode={selectionMode}
+                    setSelectionMode={setSelectionMode}
+                  />
                   <button
                     className="button secondary plaza-toolbar-button"
                     onClick={() => handleOpenExportModal('author')}
@@ -2153,13 +2062,11 @@ export function PlayListPage() {
                   >
                     导出作者
                   </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    onClick={() => void handleExportContinuations()}
-                    type="button"
-                  >
-                    导出续写
-                  </button>
+                  <ExportContinuationsButton
+                    blockDislikedOnExport={blockDislikedOnExport}
+                    plays={filteredPlays}
+                    preferenceStore={preferenceStore}
+                  />
                   <button
                     className="button secondary plaza-toolbar-button"
                     onClick={() => handleOpenExportModal('category')}
@@ -2167,14 +2074,7 @@ export function PlayListPage() {
                   >
                     导出分类
                   </button>
-                  <button
-                    className="button secondary plaza-toolbar-button"
-                    disabled={favoritePlays.length === 0}
-                    onClick={handleExportFavorites}
-                    type="button"
-                  >
-                    导出收藏
-                  </button>
+                  <ExportFavoritesButton favoritePlays={favoritePlays} />
                   <label className="checkbox-chip checkbox-chip-wide plaza-block-disliked-export-chip">
                     <input
                       checked={blockDislikedOnExport}
