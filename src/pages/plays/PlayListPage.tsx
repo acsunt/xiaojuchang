@@ -541,6 +541,9 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   /* 菜单的位置（fixed 坐标系）。由 trigger 的 getBoundingClientRect 推算。 */
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  /* trigger 的实测宽度(用来给菜单做 minWidth,
+   * 不让菜单比 trigger 还窄)。与 menuPos 一起在 effect 里更新。 */
+  const [triggerWidth, setTriggerWidth] = useState<number>(0);
   const selectedOption = options.find((item) => item.value === value) ?? options[0];
 
   /* 打开时：基于 trigger 位置更新菜单 fixed 坐标。
@@ -572,8 +575,9 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
       setMenuPos({
         top: rect.bottom + 8,
         left: rect.left,
-        width: rect.width,
+        width: 0,
       });
+      setTriggerWidth(rect.width);
     };
 
     /* 同步先尝试一次,避免空白闪烁;
@@ -674,7 +678,10 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
             position: 'fixed',
             top: menuPos.top,
             left: menuPos.left,
-            width: menuPos.width,
+            /* 保留 trigger 宽度作为菜单最小宽度,保证菜单不会比 trigger 更窄;
+             * 实际宽度由 .custom-select-menu { min-width: max-content } 与
+             * 最长 option 的内容决定。 */
+            minWidth: triggerWidth ? `${triggerWidth}px` : undefined,
           }}
         >
           {options.map((option) => {

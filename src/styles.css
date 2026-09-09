@@ -711,6 +711,10 @@ select option {
   backdrop-filter: blur(18px);
   max-height: 60vh;
   overflow-y: auto;
+  /* 菜单宽度不再被 trigger 宽度约束,按内容自然撑开;
+   * 同时给出最小宽度(由 trigger 提供)避免窄于按钮,
+   * 以及最大宽度(可视区 - trigger.left)避免贴右出界。 */
+  min-width: max-content;
 }
 
 .custom-select-option {
@@ -721,6 +725,9 @@ select option {
   border-radius: 12px;
   background: transparent;
   color: var(--text);
+  /* 选项文字不折行：菜单宽度由最长 option 决定,
+   * 与 trigger 宽度脱钩；避免「上传时间倒序」这种 6 个字被截成两行的尴尬。 */
+  white-space: nowrap;
 }
 
 .custom-select-option:hover,
