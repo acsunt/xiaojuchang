@@ -547,7 +547,17 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
    * 用 fixed 定位而不是 absolute,是为了:
    *   1) 菜单可以逃离任意祖先 stacking context(尤其是 .play-card-shell { overflow: hidden }),
    *      不再被裁剪;
-   *   2) 菜单始终绘制在最高层(z-index: 9999),不会被卡片或兄弟元素遮挡。 */
+   *   2) 菜单始终绘制在最高层(z-index: 9999),不会被卡片或兄弟元素遮挡。
+   *
+   * ⚠️ 必须在 rAF 里再算一次坐标,而不是同步读取:
+   *   当 trigger 在 .plaza-pill-body 里,该 body 用
+   *     `grid-template-rows: 0fr → 1fr` 做 240ms 展开动画。
+   *   useEffect 跑时的同步 layout,grid 容器高度还没追上动画目标,
+   *   trigger 的 getBoundingClientRect 拿到的是动画中间位置,
+   *   fixed 菜单就会贴在 trigger 错误的位置、看起来「偏移到下面」。
+   *   在 requestAnimationFrame 末尾重读一次,能拿到动画落定后的真实坐标。
+   *   再额外监听 scroll/resize,把菜单贴回 trigger 跟随滚动。
+   */
   useEffect(() => {
     if (!open) {
       setMenuPos(null);
@@ -566,12 +576,49 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
       });
     };
 
+    /* 同步先尝试一次,避免空白闪烁;
+     * 再 rAF 再算一次,把动画过程中的位置误差修复掉;
+     * 再在动画结束 / 多次 rAF 里持续校准,直到 grid 容器高度稳定。 */
     updatePosition();
+    const frameHandles: number[] = [];
+    for (let index = 0; index < 4; index += 1) {
+      frameHandles.push(window.requestAnimationFrame(updatePosition));
+    }
+    let cleanupTransition: (() => void) | null = null;
+    /* 监听祖先 .plaza-pill-body 上的 grid 动画结束或任何子元素 transition/animation 结束,
+     * 再校准一次坐标 —— 这是最重要的一次,
+     * 因为只有在动画终止后 trigger 的最终位置才稳定。
+     *
+     * ⚠️ 注意: grid-template-rows: 0fr → 1fr 这类属性 transition
+     *   并不会触发 ancestor 自身的 "transitionend",
+     *   真正会冒泡上来的是内部子元素(opacity 等)的 transitionend。
+     *   这里同时监听:
+     *     - transitionend(任何属性,因为子元素 opacity / transform 都会触发)
+     *     - animationend
+     *     - 兜底 setTimeout 280ms 与 transition 时长对齐
+     *   让 grid 容器高度落定时,菜单必定贴在 trigger 真实位置上。 */
+    const rootElement = rootRef.current;
+    const ancestor = rootElement?.closest('.plaza-pill-body');
+    const handleAnyEnd = () => {
+      updatePosition();
+    };
+    if (ancestor) {
+      ancestor.addEventListener('transitionend', handleAnyEnd);
+      ancestor.addEventListener('animationend', handleAnyEnd);
+      cleanupTransition = () => {
+        ancestor.removeEventListener('transitionend', handleAnyEnd);
+        ancestor.removeEventListener('animationend', handleAnyEnd);
+      };
+    }
+    const fallbackTimer = window.setTimeout(handleAnyEnd, 320);
 
     window.addEventListener('scroll', updatePosition, true);
     window.addEventListener('resize', updatePosition);
 
     return () => {
+      frameHandles.forEach((handle) => window.cancelAnimationFrame(handle));
+      if (cleanupTransition) cleanupTransition();
+      window.clearTimeout(fallbackTimer);
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
@@ -852,11 +899,11 @@ export function PlayListPage() {
   /* 分组收起 v2：
    *   openToolbarGroup —— 工具栏内的"分组展开键",区域内互斥(null=全部收起)。
    *   openPanelGroup   —— 下方控制面板内的"分组展开键",区域内互斥。
-   *   openSearch       —— 搜索是右侧图标入口,不属于上述两个 key。
+   *   搜索是工具栏右侧图标入口,使用 openToolbarGroup === 'search' 互斥,
+   *   不再单独维护 openSearch 状态。
    *   randomPanelOpen  —— 随机抽选面板,沿用旧 state,行为独立。 */
   const [openToolbarGroup, setOpenToolbarGroup] = useState<string | null>(null);
   const [openPanelGroup, setOpenPanelGroup] = useState<string | null>(null);
-  const [openSearch, setOpenSearch] = useState(false);
   const toggleToolbarGroup = (group: string) =>
     setOpenToolbarGroup((current) => (current === group ? null : group));
   const togglePanelGroup = (group: string) =>
@@ -2125,6 +2172,7 @@ export function PlayListPage() {
                     type="button"
                   >
                     <Filter aria-hidden="true" strokeWidth={1.75} />
+                    <span className="plaza-pill-trigger-label">筛选</span>
                     <ChevronDown
                       aria-hidden="true"
                       strokeWidth={1.75}
@@ -2136,7 +2184,7 @@ export function PlayListPage() {
                     />
                   </button>
 
-                  {/* 二级菜单：导出(全部/所选/作者/续写/分类/收藏 + 屏蔽)。下载图标,椭圆胶囊入口。 */}
+                  {/* 二级菜单：导出(全部/所选/作者/续写/分类/收藏 + 屏蔽)。下载图标 + 文字，椭圆胶囊入口。 */}
                   <button
                     aria-expanded={openToolbarGroup === 'export'}
                     aria-label="导出"
@@ -2150,6 +2198,7 @@ export function PlayListPage() {
                     type="button"
                   >
                     <Download aria-hidden="true" strokeWidth={1.75} />
+                    <span className="plaza-pill-trigger-label">导出</span>
                     <ChevronDown
                       aria-hidden="true"
                       strokeWidth={1.75}
@@ -2183,6 +2232,24 @@ export function PlayListPage() {
                         transform: openToolbarGroup === 'more' ? 'rotate(180deg)' : 'rotate(0deg)',
                       }}
                     />
+                  </button>
+
+                  {/* 二级菜单:打开搜索。放大镜图标,纯图标入口,放到"更多"按钮右侧。
+                   * 展开的搜索表单对齐审核后台"后台搜索"纵向布局(label + input + 范围 chip)。
+                   * 行为上仍然与 toolbar 的二级菜单互斥(openToolbarGroup 单一 key)。 */}
+                  <button
+                    aria-expanded={openToolbarGroup === 'search'}
+                    aria-label={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
+                    className={
+                      openToolbarGroup === 'search'
+                        ? 'plaza-pill-trigger is-icon-only is-open'
+                        : 'plaza-pill-trigger is-icon-only'
+                    }
+                    onClick={() => toggleToolbarGroup('search')}
+                    title={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
+                    type="button"
+                  >
+                    <Search aria-hidden="true" strokeWidth={1.75} />
                   </button>
 
                   {/* 工具栏的二级菜单展开区：作为 .plaza-toolbar-v2 的直接子项,
@@ -2322,6 +2389,68 @@ export function PlayListPage() {
                       >
                         更新日志
                       </button>
+                    </div>
+                  </div>
+
+                  {/* 二级菜单:搜索表单,样式对齐审核后台的"后台搜索"。
+                   * 这里用纵向堆叠(label + input + 范围 chip)的表单外观,
+                   * 容器宽度使用表单浮层一致的 320-360px,而不是 placeholder 那种圆角胶囊。 */}
+                  <div
+                    aria-hidden={openToolbarGroup !== 'search'}
+                    className={
+                      openToolbarGroup === 'search'
+                        ? 'plaza-pill-body is-open plaza-search-body'
+                        : 'plaza-pill-body plaza-search-body'
+                    }
+                    role="region"
+                  >
+                    <div className="plaza-search-form">
+                      <label className="plaza-search-field">
+                        <span>搜索</span>
+                        <ClearableField
+                          visible={Boolean(keyword.trim())}
+                          onClear={() => {
+                            setKeyword('');
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <input
+                            autoFocus={openToolbarGroup === 'search'}
+                            placeholder="默认搜标题、作者、分类或正文"
+                            value={keyword}
+                            onChange={(event) => {
+                              setKeyword(event.target.value);
+                              setCurrentPage(1);
+                            }}
+                          />
+                        </ClearableField>
+                      </label>
+                      <div
+                        className="inline-actions wrap-mobile admin-search-field-row plaza-search-scope"
+                        role="group"
+                        aria-label="搜索范围"
+                      >
+                        {playSearchFieldOptions.map((item) => (
+                          <button
+                            aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
+                            className={
+                              isSearchFieldActive(playSearchFields, item.value)
+                                ? 'tab-chip active'
+                                : 'tab-chip'
+                            }
+                            key={item.value}
+                            onClick={() => {
+                              setPlaySearchFields((current) =>
+                                toggleSearchField(current, item.value),
+                              );
+                              setCurrentPage(1);
+                            }}
+                            type="button"
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -2524,8 +2653,10 @@ export function PlayListPage() {
                         : 'plaza-pill-trigger is-pill-icon'
                     }
                     onClick={() => {
+                      /* 切到下方面板分组时同步关闭工具栏搜索,
+                       * 避免两组二级菜单同时展开造成视觉混乱。 */
                       togglePanelGroup('display');
-                      setOpenSearch(false);
+                      setOpenToolbarGroup(null);
                     }}
                     type="button"
                   >
@@ -2551,8 +2682,10 @@ export function PlayListPage() {
                         : 'plaza-pill-trigger is-pill-icon'
                     }
                     onClick={() => {
+                      /* 切到下方面板分组时同步关闭工具栏搜索,
+                       * 避免两组二级菜单同时展开造成视觉混乱。 */
                       togglePanelGroup('bulk');
-                      setOpenSearch(false);
+                      setOpenToolbarGroup(null);
                     }}
                     type="button"
                   >
@@ -2565,25 +2698,6 @@ export function PlayListPage() {
                         transform: openPanelGroup === 'bulk' ? 'rotate(180deg)' : 'rotate(0deg)',
                       }}
                     />
-                  </button>
-
-                  {/* 二级菜单:打开搜索。放大镜图标,纯图标入口。 */}
-                  <button
-                    aria-expanded={openSearch}
-                    aria-label={openSearch ? '收起搜索' : '打开搜索'}
-                    className={
-                      openSearch
-                        ? 'plaza-pill-trigger is-icon-only is-open'
-                        : 'plaza-pill-trigger is-icon-only'
-                    }
-                    onClick={() => {
-                      setOpenSearch((current) => !current);
-                      setOpenPanelGroup(null);
-                    }}
-                    title={openSearch ? '收起搜索' : '打开搜索'}
-                    type="button"
-                  >
-                    <Search aria-hidden="true" strokeWidth={1.75} />
                   </button>
 
                   <div
@@ -2749,56 +2863,6 @@ export function PlayListPage() {
                           strokeWidth={1.75}
                         />
                       </button>
-                    </div>
-                  </div>
-
-                  <div
-                    aria-hidden={!openSearch}
-                    className={openSearch ? 'plaza-pill-body is-open' : 'plaza-pill-body'}
-                    role="region"
-                  >
-                    <div className="plaza-pill-grid">
-                      <div className="plaza-search-popover">
-                        <ClearableField
-                          visible={Boolean(keyword.trim())}
-                          onClear={() => {
-                            setKeyword('');
-                            setCurrentPage(1);
-                          }}
-                        >
-                          <input
-                            autoFocus={openSearch}
-                            placeholder="默认搜标题、作者、分类或正文"
-                            value={keyword}
-                            onChange={(event) => {
-                              setKeyword(event.target.value);
-                              setCurrentPage(1);
-                            }}
-                          />
-                        </ClearableField>
-                        <div className="plaza-search-fields" role="group" aria-label="搜索范围">
-                          {playSearchFieldOptions.map((item) => (
-                            <button
-                              aria-pressed={isSearchFieldActive(playSearchFields, item.value)}
-                              className={
-                                isSearchFieldActive(playSearchFields, item.value)
-                                  ? 'plaza-pill-subitem is-active'
-                                  : 'plaza-pill-subitem'
-                              }
-                              key={item.value}
-                              onClick={() => {
-                                setPlaySearchFields((current) =>
-                                  toggleSearchField(current, item.value),
-                                );
-                                setCurrentPage(1);
-                              }}
-                              type="button"
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>

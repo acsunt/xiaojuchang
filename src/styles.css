@@ -4311,34 +4311,79 @@ body.tag-sort-dragging {
   background: rgba(72, 213, 151, 0.08);
 }
 
-/* 审核后台「作者提交的修改」:每个字段一行,行内左右两个独立边框框。
- * 上一版 = parentPlay,当前版本 = selectedPlay,中间 12px 间距。 */
-.review-pending-edit-grid {
-  display: grid;
+/* 审核后台「作者提交的修改」:改为两个完整小剧场（上一版 + 当前版本）依次排开。
+ *   - .review-pending-edit-stack   —— 上下排列两张卡片，间距 12px。
+ *   - .review-pending-edit-play-card —— 复用 .diff-card 边框作为小剧场容器，
+ *     内部按"顶部状态 + 分类 / 标题 / 作者署名 / 简介 / 正文"完整呈现一份作品。
+ *   - .is-current                  —— 当前版本（待审核）轻微强调，使用强调色边框+微弱背景，便于一眼区分。
+ *   - .is-empty                    —— 原作品已删除时的占位卡，弱化样式 + 警告提示。 */
+.review-pending-edit-stack {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-}
-
-.review-pending-edit-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.review-pending-edit-card {
-  display: grid;
-  gap: 8px;
   min-width: 0;
 }
 
-.review-pending-edit-card p {
+.review-pending-edit-play-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.review-pending-edit-card-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.review-pending-edit-card-title {
+  margin: 0;
+  font-size: calc(18px * var(--text-scale, 1));
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.review-pending-edit-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text-soft);
+}
+
+.review-pending-edit-play-card .sub-copy {
+  margin: 0;
+}
+
+.review-pending-edit-play-card .preview-copy {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+.review-pending-edit-play-card.is-current {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent) inset,
+    0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.review-pending-edit-play-card.is-empty {
+  opacity: 0.85;
+}
+
 @media (max-width: 720px) {
-  .review-pending-edit-row {
-    grid-template-columns: 1fr;
+  .review-pending-edit-stack {
+    gap: 10px;
+  }
+
+  .review-pending-edit-card-title {
+    font-size: calc(17px * var(--text-scale, 1));
   }
 }
 
@@ -8558,6 +8603,16 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   gap: 4px;
 }
 
+/* 椭圆胶囊入口里的文字标签（如工具栏的"筛选 / 导出"）。
+ * 用 span 行内呈现，与按钮文字字号一致；让 .plaza-pill-trigger 内部
+ * 既能容下「图标 + 文字 + chevron」的组合，又能继承按钮字体。 */
+.plaza-pill-trigger-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 /* 页面 Tab 行：横向滚动、紧凑间距、纯文字不带背景激活态 */
 .plaza-page-tabs {
   display: inline-flex;
@@ -8956,6 +9011,42 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+/* ===== 工具栏搜索表单(.plaza-search-body 展开后内容) =====
+ * 视觉与审核后台「后台搜索」一致：纵向堆叠的 label(input + 上方文字)
+ * + 范围 chip 行，整体宽度撑满工具栏一行。
+ * 之所以走表单外观而不是胶囊，是为了和审核后台"后台搜索"对齐,
+ * 让管理员/游客一眼识别这是搜索浮层。 */
+.plaza-search-body .plaza-search-form {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.plaza-search-body .plaza-search-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.plaza-search-body .plaza-search-field > span {
+  font-size: calc(13px * var(--text-scale, 1));
+  color: var(--text-soft);
+}
+
+.plaza-search-body .plaza-search-field input {
+  width: 100%;
+  min-height: 38px;
+}
+
+.plaza-search-body .plaza-search-scope {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 /* "屏蔽不喜欢内容" 行：独立、不进分组，保持原 checkbox-chip 风格 */

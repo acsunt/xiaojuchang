@@ -1,4 +1,4 @@
-﻿import {
+import {
   Fragment,
   useCallback,
   useEffect,
@@ -6065,90 +6065,6 @@ export function AdminReviewPage() {
                       </div>
                     </div>
 
-                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现。
-                     * 每个字段独立成一行,行内左右两个边框框:
-                     *   左框 = 上一版(parentPlay),
-                     *   右框 = 当前版本(selectedPlay / 待改为)。
-                     * 审核 approve 把当前版本合入 parentPlay 并删除本条,
-                     * reject/offline 仅改本条 status,parentPlay 不动。 */}
-                    {selectedPlay.submissionType === 'modify' && selectedPlay.parentPlayId ? (
-                      <div className="stack-gap-md review-pending-edit-panel">
-                        <div className="content-head">
-                          <h3>作者提交的修改</h3>
-                          <span className="content-meta">
-                            {`作者于 ${new Date(selectedPlay.createdAt).toLocaleString('zh-CN')} 提交的修改草稿,审核通过后会覆盖到原作品`}
-                          </span>
-                        </div>
-                        <div className="review-pending-edit-grid">
-                          <div className="review-pending-edit-row">
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">上一版 · 标题</span>
-                              <p>{parentPlay?.title ?? '（原内容已删除）'}</p>
-                            </div>
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">当前版本 · 标题</span>
-                              <p>
-                                <strong>{selectedPlay.title}</strong>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="review-pending-edit-row">
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">上一版 · 分类</span>
-                              <p>{parentPlay?.category ?? '（原内容已删除）'}</p>
-                            </div>
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">当前版本 · 分类</span>
-                              <p>
-                                <strong>{selectedPlay.category}</strong>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="review-pending-edit-row">
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">上一版 · 署名</span>
-                              <p>{parentPlay?.authorName ?? '（原内容已删除）'}</p>
-                            </div>
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">当前版本 · 署名</span>
-                              <p>
-                                <strong>{selectedPlay.authorName}</strong>
-                              </p>
-                            </div>
-                          </div>
-                          <div className="review-pending-edit-row">
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">上一版 · 简介</span>
-                              <p>{parentPlay?.summary || '（空）'}</p>
-                            </div>
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">当前版本 · 简介</span>
-                              <p>{selectedPlay.summary || '（空）'}</p>
-                            </div>
-                          </div>
-                          <div className="review-pending-edit-row">
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">上一版 · 正文</span>
-                              <p style={{ whiteSpace: 'pre-wrap' }}>
-                                {parentPlay?.content || '（空）'}
-                              </p>
-                            </div>
-                            <div className="diff-card review-pending-edit-card">
-                              <span className="content-meta">当前版本 · 正文</span>
-                              <p style={{ whiteSpace: 'pre-wrap' }}>
-                                {selectedPlay.content || '（空）'}
-                              </p>
-                            </div>
-                          </div>
-                          {parentPlay ? null : (
-                            <p className="content-meta warning">
-                              未找到原内容(id {selectedPlay.parentPlayId}),审核通过时无法合入
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-
                     {/* 「与上一版文本对比」:独立面板,只有存在可对比的「上一版」才显示。
                      * 「上一版」的来源:
                      *   - 当 selectedPlay 是 modify 类型时,取 parentPlay
@@ -6156,7 +6072,8 @@ export function AdminReviewPage() {
                      *   - 否则按历史同名同作者的最新一条。
                      * 这样一个小剧场多次修改时,本面板始终展示「本次修改相对其直接基础版」,
                      * 不会被上次未通过的修改记录串进来。
-                     * 与「本次投稿类型」完全分离,不再混入「修改/新增衍生」判断。 */}
+                     * 与「本次投稿类型」完全分离,不再混入「修改/新增衍生」判断。
+                     * —— 放到「作者提交的修改」之上，方便审核员先看 diff 判断改动范围，再阅读两张完整小剧场。 */}
                     {previousSubmissionForDiff ? (
                       <div className="stack-gap-md diff-panel">
                         <div className="content-head">
@@ -6248,6 +6165,76 @@ export function AdminReviewPage() {
                                 </article>
                               );
                             })}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* 「作者提交的修改」:仅当 selectedPlay 是 modify 类型且有 parentPlayId 时出现。
+                     * 把每个字段左右对照换成两个完整的小剧场:
+                     *   上一版（parentPlay）—— 先列完整的一张（标题、分类、署名、简介、正文）；
+                     *   当前版本（selectedPlay / 待改为）—— 紧跟其后，再列一张相同结构的完整小剧场。
+                     * 审核 approve 把当前版本合入 parentPlay 并删除本条,
+                     * reject/offline 仅改本条 status,parentPlay 不动。 */}
+                    {selectedPlay.submissionType === 'modify' && selectedPlay.parentPlayId ? (
+                      <div className="stack-gap-md review-pending-edit-panel">
+                        <div className="content-head">
+                          <h3>作者提交的修改</h3>
+                          <span className="content-meta">
+                            {`作者于 ${new Date(selectedPlay.createdAt).toLocaleString('zh-CN')} 提交的修改草稿,审核通过后会覆盖到原作品`}
+                          </span>
+                        </div>
+                        <div className="review-pending-edit-stack">
+                          {/* 上一版：parentPlay；找不到时显示一条「原内容已删除」的占位小剧场。 */}
+                          {parentPlay ? (
+                            <article className="diff-card review-pending-edit-play-card">
+                              <div className="review-pending-edit-card-head">
+                                <span className="status-tag approved">上一版</span>
+                                <span className="content-meta">
+                                  {parentPlay.category || DEFAULT_CATEGORY}
+                                </span>
+                              </div>
+                              <h4 className="review-pending-edit-card-title">{parentPlay.title}</h4>
+                              <div className="review-pending-edit-card-meta">
+                                <span>作者 {parentPlay.authorName}</span>
+                              </div>
+                              {parentPlay.summary ? (
+                                <p className="sub-copy">{parentPlay.summary}</p>
+                              ) : (
+                                <p className="sub-copy content-meta">（无简介）</p>
+                              )}
+                              <p className="preview-copy">{parentPlay.content}</p>
+                            </article>
+                          ) : (
+                            <article className="diff-card review-pending-edit-play-card is-empty">
+                              <div className="review-pending-edit-card-head">
+                                <span className="status-tag approved">上一版</span>
+                              </div>
+                              <h4 className="review-pending-edit-card-title">（原内容已删除）</h4>
+                              <p className="content-meta warning">
+                                未找到原内容(id {selectedPlay.parentPlayId}),审核通过时无法合入
+                              </p>
+                            </article>
+                          )}
+
+                          {/* 当前版本：selectedPlay（本次待审核的修改草稿）。 */}
+                          <article className="diff-card review-pending-edit-play-card is-current">
+                            <div className="review-pending-edit-card-head">
+                              <span className="status-tag pending">当前版本</span>
+                              <span className="content-meta">
+                                {selectedPlay.category || DEFAULT_CATEGORY}
+                              </span>
+                            </div>
+                            <h4 className="review-pending-edit-card-title">{selectedPlay.title}</h4>
+                            <div className="review-pending-edit-card-meta">
+                              <span>作者 {selectedPlay.authorName}</span>
+                            </div>
+                            {selectedPlay.summary ? (
+                              <p className="sub-copy">{selectedPlay.summary}</p>
+                            ) : (
+                              <p className="sub-copy content-meta">（无简介）</p>
+                            )}
+                            <p className="preview-copy">{selectedPlay.content}</p>
+                          </article>
                         </div>
                       </div>
                     ) : null}
