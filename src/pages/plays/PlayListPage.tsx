@@ -1889,9 +1889,12 @@ export function PlayListPage() {
         >
           <svg
             aria-hidden="true"
-            viewBox="0 0 24 24"
-            fill="currentColor"
             className="marker-star-icon"
+            fill={favorite ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            strokeLinejoin="round"
+            strokeWidth={1.75}
+            viewBox="0 0 24 24"
           >
             <path d="M12 2l2.95 7.36L22 10l-5.92 4.43L18.18 22 12 17.77 5.82 22l2.1-7.57L2 10l7.05-.64L12 2z" />
           </svg>
@@ -1903,7 +1906,12 @@ export function PlayListPage() {
           title={disliked ? '取消不喜欢' : '不喜欢'}
           type="button"
         >
-          <HeartCrack aria-hidden="true" strokeWidth={1.75} className="marker-broken-heart-icon" />
+          <HeartCrack
+            aria-hidden="true"
+            className="marker-broken-heart-icon"
+            fill={disliked ? 'currentColor' : 'none'}
+            strokeWidth={1.75}
+          />
         </button>
       </div>
     );
@@ -1945,6 +1953,7 @@ export function PlayListPage() {
           {showPreferenceActions ? (
             <button
               aria-label={favorite ? '取消收藏' : '收藏'}
+              aria-pressed={favorite}
               className={`play-card-footer-icon play-marker-icon ${favorite ? 'is-active favorite' : ''}`}
               onClick={() => handleToggleFavorite(play.id)}
               title={favorite ? '取消收藏' : '收藏'}
@@ -1952,9 +1961,12 @@ export function PlayListPage() {
             >
               <svg
                 aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="currentColor"
                 className="marker-star-icon"
+                fill={favorite ? 'currentColor' : 'none'}
+                stroke="currentColor"
+                strokeLinejoin="round"
+                strokeWidth={1.75}
+                viewBox="0 0 24 24"
               >
                 <path d="M12 2l2.95 7.36L22 10l-5.92 4.43L18.18 22 12 17.77 5.82 22l2.1-7.57L2 10l7.05-.64L12 2z" />
               </svg>
@@ -1963,12 +1975,18 @@ export function PlayListPage() {
           {showPreferenceActions ? (
             <button
               aria-label={disliked ? '取消不喜欢' : '不喜欢'}
+              aria-pressed={disliked}
               className={`play-card-footer-icon play-marker-icon ${disliked ? 'is-active disliked' : ''}`}
               onClick={() => handleToggleDisliked(play.id)}
               title={disliked ? '取消不喜欢' : '不喜欢'}
               type="button"
             >
-              <HeartCrack aria-hidden="true" strokeWidth={1.75} />
+              <HeartCrack
+                aria-hidden="true"
+                className="marker-broken-heart-icon"
+                fill={disliked ? 'currentColor' : 'none'}
+                strokeWidth={1.75}
+              />
             </button>
           ) : null}
           {continuationCount > 0 ? (
@@ -2266,7 +2284,12 @@ export function PlayListPage() {
                         title={blockDislikedOnExport ? '导出时不再屏蔽不喜欢' : '导出时屏蔽不喜欢'}
                         type="button"
                       >
-                        <HeartCrack aria-hidden="true" strokeWidth={1.75} />
+                        <HeartCrack
+                          aria-hidden="true"
+                          className="marker-broken-heart-icon"
+                          fill={blockDislikedOnExport ? 'currentColor' : 'none'}
+                          strokeWidth={1.75}
+                        />
                       </button>
                     </div>
                   </PillGroup>
@@ -2691,7 +2714,14 @@ export function PlayListPage() {
                         }
                         type="button"
                       >
-                        <HeartCrack aria-hidden="true" strokeWidth={1.75} />
+                        <HeartCrack
+                          aria-hidden="true"
+                          className="marker-broken-heart-icon"
+                          fill={
+                            preferenceStore.settings.blockDislikedGlobally ? 'currentColor' : 'none'
+                          }
+                          strokeWidth={1.75}
+                        />
                       </button>
                     </div>
                   </PillGroup>

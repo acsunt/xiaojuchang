@@ -3694,31 +3694,58 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   display: block;
 }
 
-/* 续写 + repo：徽章数字叠在图标右下角 */
+/* 收藏：默认 outline + 黄色描边,激活后填充(fill=currentColor 由 JSX 控制) */
+.play-card-footer-icon.favorite {
+  color: #ffbe3c;
+}
+.play-card-footer-icon.favorite svg {
+  /* fill 由 inline fill prop 决定;此处保证 stroke 是黄色 */
+  stroke: #ffbe3c;
+}
+
+/* 不喜欢：默认 outline + 红色描边,激活后填充 */
+.play-card-footer-icon.disliked {
+  color: #c43347;
+}
+.play-card-footer-icon.disliked svg {
+  stroke: #c43347;
+}
+.play-card-footer-icon.disliked .marker-broken-heart-icon {
+  opacity: 1;
+  filter: none;
+}
+
+/* 续写 + repo：数字跟在图标右侧,透明底,跟图标同色 */
 .play-card-footer-icon-count {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 14px;
-  text-align: center;
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-left: 4px;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  min-width: 0;
+  height: auto;
+  border-radius: 0;
 }
 
+.play-card-footer-icon.continuation-icon,
+.play-card-footer-icon.repo-icon {
+  /* 数字与图标一起显示:让图标 + 数字整体左对齐 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  width: auto;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px 0 4px;
+}
+
+.play-card-footer-icon.continuation-icon:hover,
 .play-card-footer-icon.continuation-icon.is-active,
-.play-card-footer-icon.continuation-icon:hover {
-  color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
-}
-
-.play-card-footer-icon.repo-icon.is-active,
-.play-card-footer-icon.repo-icon:hover {
+.play-card-footer-icon.repo-icon:hover,
+.play-card-footer-icon.repo-icon.is-active {
   color: color-mix(in srgb, var(--accent) 96%, var(--text) 4%);
 }
 
@@ -3733,16 +3760,36 @@ body[data-style='default'][data-mode='day'] .repo-reject-note strong {
   color: #ffbe3c;
 }
 
-/* 不喜欢 (💔)：默认灰色 (opacity + grayscale)，激活时去掉滤镜恢复原色红心裂开 */
+/* 收藏 (随机卡片内的):默认 outline 黄色,激活后填充黄色。
+ * 旧实现是默认 fill=currentColor 永久实心;现在改 outline 默认,
+ * 激活态由 React 端 fill prop 决定。 */
+.play-marker-menu .play-marker-icon svg.marker-star-icon {
+  width: 28px;
+  height: 28px;
+}
+.play-marker-menu .play-marker-icon.favorite {
+  color: #ffbe3c;
+}
+.play-marker-menu .play-marker-icon.favorite svg.marker-star-icon {
+  stroke: #ffbe3c;
+}
+.play-marker-menu .play-marker-icon.disliked {
+  color: #c43347;
+}
+.play-marker-menu .play-marker-icon.disliked svg.marker-broken-heart-icon {
+  stroke: #c43347;
+  opacity: 1;
+  filter: none;
+}
+
+/* 不喜欢 (💔)：默认 outline 红色 (随机卡片和列表 footer 共用)。
+ * 旧版使用 emoji + grayscale 滤镜；现在改为 lucide HeartCrack outline + 红色描边,
+ * 激活后由 inline fill=currentColor 切换为实心。 */
 .play-marker-menu .play-marker-icon .marker-broken-heart-icon,
 .play-card-footer-icon .marker-broken-heart-icon {
   font-size: calc(20px * var(--text-scale, 1));
   line-height: 1;
-  opacity: 0.34;
-  filter: grayscale(100%);
-  transition:
-    opacity 160ms ease,
-    filter 160ms ease;
+  transition: fill 160ms ease;
   width: 1em;
   height: 1em;
   display: inline-block;
