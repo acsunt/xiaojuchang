@@ -8928,6 +8928,8 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   min-height: 34px;
   padding: 0 12px;
   font-size: calc(13px * var(--text-scale, 1));
+  /* 输入框宽度撑满搜索展开区整个宽度,和"铺满一行"的二级菜单风格一致 */
+  width: 100%;
   background: color-mix(in srgb, var(--panel) 96%, white 4%);
   color: var(--text);
   border: 1px solid var(--border);
@@ -9081,11 +9083,14 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 }
 
 /* ===== 下方面板：紧凑行（手机端） ===== */
+/* 桌面端用 wrap,让二级菜单(.plaza-pill-body)的 flex: 0 0 100% 生效,
+ * 自动换到下一行、撑满整片;trigger 们仍然通过 flex: 0 0 auto 单行排开,
+ * 放不下时由 wrap 处理 —— 这与 .plaza-toolbar-v2 的触发器行行为一致。 */
 .plaza-panel-row-tight {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .plaza-panel-row-tight > * {
@@ -9094,12 +9099,9 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 }
 
 @media (max-width: 720px) {
+  /* 基类 .plaza-panel-row-tight 已是 wrap;mobile 下保持,
+   * 让 trigger 装不下也能换行。 */
   .plaza-panel-row-tight {
-    /* 改成 wrap,让 body 在 mobile 下也能换到下一行整片;
-     * 但仍保留 nowrap 的初衷(显示设置/更多操作/搜索紧密排在一行)。
-     * 实际效果:3 个 trigger 用 flex: 0 0 auto 尽量单行排开,
-     * 装不下时再 wrap;body 是 flex: 0 0 100% 强制换行整片。 */
-    flex-wrap: wrap;
     gap: 6px;
   }
 
