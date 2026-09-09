@@ -9095,7 +9095,11 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 
 @media (max-width: 720px) {
   .plaza-panel-row-tight {
-    flex-wrap: nowrap;
+    /* 改成 wrap,让 body 在 mobile 下也能换到下一行整片;
+     * 但仍保留 nowrap 的初衷(显示设置/更多操作/搜索紧密排在一行)。
+     * 实际效果:3 个 trigger 用 flex: 0 0 auto 尽量单行排开,
+     * 装不下时再 wrap;body 是 flex: 0 0 100% 强制换行整片。 */
+    flex-wrap: wrap;
     gap: 6px;
   }
 
@@ -9113,11 +9117,14 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   }
 }
 
-/* 工具栏手机端：入口全在同一行，展开子项落下一行 */
+/* 工具栏手机端：trigger 紧密排在第一行，body 强制换到下一行整片 */
 @media (max-width: 720px) {
   .plaza-toolbar-v2 {
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    /* 改为 wrap,允许 .plaza-pill-body 通过 flex-basis: 100% 换到下一行整片;
+     * 不再使用 nowrap + overflow-x:auto 的横向滚动方案,
+     * 因为平铺模式下二级菜单需要换行展示,横向滚动会把它推到屏幕外。 */
+    flex-wrap: wrap;
+    overflow-x: visible;
     scrollbar-width: none;
   }
 
@@ -9125,11 +9132,10 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
     display: none;
   }
 
-  .plaza-toolbar-v2 > [class*='plaza-pill-group'] {
-    flex: 0 0 auto;
-  }
-
-  .plaza-toolbar-v2 > [class*='plaza-pill-group'] > .plaza-pill-grid {
+  /* mobile 下 trigger 们仍然尽量单行排开(flex: 0 0 auto);
+   * body 仍然继承桌面端的 flex: 0 0 100% 强制换行整片。 */
+  .plaza-toolbar-v2 > .plaza-pill-body {
+    flex: 0 0 100%;
     width: 100%;
   }
 }

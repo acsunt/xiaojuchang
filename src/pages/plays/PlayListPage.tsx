@@ -2510,35 +2510,6 @@ export function PlayListPage() {
               ) : null}
 
               {!toolbarCollapsed ? (
-                <div className="filter-summary wrap-mobile">
-                  <span>
-                    当前 {displayedRowCount} 篇，第 {currentPage} / {totalPages} 页
-                    {selectionMode !== 'idle' ? `，已选 ${selectedIds.length} 篇` : ''}
-                  </span>
-                  {selectionMode !== 'idle' ? (
-                    <button
-                      className="text-button"
-                      onClick={() =>
-                        setSelectedIds((current) => {
-                          if (allSelectedOnPage) {
-                            return current.filter(
-                              (id) => !pagedPlays.some((row) => row.latest.id === id),
-                            );
-                          }
-
-                          const next = new Set(current);
-                          pagedPlays.forEach((row) => next.add(row.latest.id));
-                          return [...next];
-                        })
-                      }
-                      type="button"
-                    >
-                      {allSelectedOnPage ? '清空本页选择' : '全选本页'}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              {!toolbarCollapsed ? (
                 <div className="plaza-panel-row plaza-panel-row-tight">
                   {/* 下方面板二级菜单触发器行:显示设置 / 更多操作 / 搜索 从左到右并列,
                    * 展开的二级菜单作为兄弟节点,通过 flex-basis: 100% 各自换到下一行、占满整片。
@@ -2830,6 +2801,36 @@ export function PlayListPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+              ) : null}
+
+              {!toolbarCollapsed ? (
+                <div className="filter-summary wrap-mobile">
+                  <span>
+                    当前 {displayedRowCount} 篇，第 {currentPage} / {totalPages} 页
+                    {selectionMode !== 'idle' ? `，已选 ${selectedIds.length} 篇` : ''}
+                  </span>
+                  {selectionMode !== 'idle' ? (
+                    <button
+                      className="text-button"
+                      onClick={() =>
+                        setSelectedIds((current) => {
+                          if (allSelectedOnPage) {
+                            return current.filter(
+                              (id) => !pagedPlays.some((row) => row.latest.id === id),
+                            );
+                          }
+
+                          const next = new Set(current);
+                          pagedPlays.forEach((row) => next.add(row.latest.id));
+                          return [...next];
+                        })
+                      }
+                      type="button"
+                    >
+                      {allSelectedOnPage ? '清空本页选择' : '全选本页'}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
 
