@@ -8752,6 +8752,9 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
+  /* 撑满父容器 .plaza-pill-body(已通过 flex: 0 0 100% 占满一行);
+   * 否则 .plaza-pill-grid 默认按内容收缩,会让输入框等内容看起来只占一小段 */
+  width: 100%;
   min-width: 0;
   padding: 8px 12px;
   background: color-mix(in srgb, var(--panel) 92%, white 8%);
