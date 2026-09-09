@@ -10,6 +10,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ConfettiCanvas, type ConfettiCanvasHandle } from '../../components/ConfettiCanvas';
 import {
@@ -669,41 +670,44 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
           ▾
         </span>
       </button>
-      {open && menuPos ? (
-        <div
-          className="custom-select-menu"
-          role="listbox"
-          aria-label={label}
-          style={{
-            position: 'fixed',
-            top: menuPos.top,
-            left: menuPos.left,
-            /* 保留 trigger 宽度作为菜单最小宽度,保证菜单不会比 trigger 更窄;
-             * 实际宽度由 .custom-select-menu { min-width: max-content } 与
-             * 最长 option 的内容决定。 */
-            minWidth: triggerWidth ? `${triggerWidth}px` : undefined,
-          }}
-        >
-          {options.map((option) => {
-            const active = option.value === value;
-            return (
-              <button
-                aria-selected={active}
-                className={active ? 'custom-select-option active' : 'custom-select-option'}
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                role="option"
-                type="button"
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+      {open && menuPos
+        ? createPortal(
+            <div
+              className="custom-select-menu"
+              role="listbox"
+              aria-label={label}
+              style={{
+                position: 'fixed',
+                top: menuPos.top,
+                left: menuPos.left,
+                /* 保留 trigger 宽度作为菜单最小宽度,保证菜单不会比 trigger 更窄;
+                 * 实际宽度由 .custom-select-menu { min-width: max-content } 与
+                 * 最长 option 的内容决定。 */
+                minWidth: triggerWidth ? `${triggerWidth}px` : undefined,
+              }}
+            >
+              {options.map((option) => {
+                const active = option.value === value;
+                return (
+                  <button
+                    aria-selected={active}
+                    className={active ? 'custom-select-option active' : 'custom-select-option'}
+                    key={option.value}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
