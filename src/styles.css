@@ -8686,6 +8686,47 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   z-index: 5;
 }
 
+/* ============================================================================
+ * 平铺模式下的二级菜单(广场页 v2):trigger 和 body 不再被 PillGroup 包裹,
+ * 而是分别作为父容器的 flex 子项直接排布。
+ *
+ * 期望行为:
+ *   - 工具栏 / 控制面板 row 里,所有 trigger 像普通按钮一样紧密排在第一行;
+ *   - 某个二级菜单展开时,其对应的 .plaza-pill-body 自动换到下一行、
+ *     撑满整行,不和任何 trigger 共享同一行。
+ *
+ * 实现:
+ *   - flex-basis: 100% + width: 100% 让 body 单独占满一行;
+ *   - 因为父容器是 flex-wrap: wrap,body 会自然换行;
+ *   - 隐藏态用 display: none,关闭时不留占位行。
+ * ========================================================================== */
+
+/* 工具栏:第一行所有 trigger 横向排列,展开的 body 自动换行到下一行整片 */
+.plaza-toolbar-v2 > .plaza-pill-body {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 控制面板 row:3 个 trigger(显示设置/更多操作/搜索)从左到右排在第一行,
+ * 展开的 body 自动换行到下一行整片 */
+.plaza-panel-row > .plaza-pill-body {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 平铺模式下,隐藏态的 body 不应作为 flex item 占一行(否则关闭时会留下
+ * 看不见的占位行,影响 flex-wrap 后的视觉间距判断)。
+ * 直接 display: none 即可 —— 因为 .plaza-pill-body.is-open 自身有
+ * display: grid,这里更高优先级的 display:none 会被 is-open 覆盖回来。 */
+.plaza-toolbar-v2 > .plaza-pill-body:not(.is-open),
+.plaza-panel-row > .plaza-pill-body:not(.is-open) {
+  display: none;
+}
+
 /* PillGroup 整体被打开时：再额外上一层 stacking 上下文，保证 overflow
  * 场景下展开区不会被裁剪。 */
 .plaza-pill-group.is-open {

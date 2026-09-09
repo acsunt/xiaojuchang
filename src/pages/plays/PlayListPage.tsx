@@ -655,13 +655,22 @@ function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
 }
 
 /* ============================================================================
- * PillGroup —— 胶囊按钮 + 原位展开的手风琴分组
+ * PillGroup —— 胶囊按钮 + 原位展开的手风琴分组(内部封装,有二级菜单的入口)
  *
  * 设计要点：
  *   - 仅负责"入口 + 展开区"两个区域的展示，状态由父组件传入(open)。
- *   - 展开走 grid-template-rows 0fr ↔ 1fr + opacity 的轻量过渡，
- *     不依赖具体子项高度，避免硬切。
- *   - 子选项按需由父组件传入，纯文字胶囊或图标型均可。
+ *   - 展开走 grid-template-rows 0fr ↔ 1fr + opacity 的轻量过渡,
+ *     不依赖具体子项高度,避免硬切。
+ *   - 子选项按需由父组件传入,纯文字胶囊或图标型均可。
+ *
+ * 当前使用情况:
+ *   - 当前广场页内"筛选/导出/更多/显示设置/更多操作/搜索"这 6 个有二级菜单
+ *     的入口,都已经不再用 PillGroup,而是直接平铺 button + 平级 .plaza-pill-body,
+ *     让二级菜单通过 flex-basis: 100% 换到下一行并占满整行(详见 styles.css)。
+ *   - PillGroup 暂时保留,只作为"未来如果有新场景需要 'trigger 和 body 同行、
+ *     body 原位展开' 的胶囊时"的复用封装;不要在广场页工具栏 / 控制面板
+ *     这两个位置再使用 PillGroup,因为这俩位置的业务诉求是'二级菜单占整行',
+ *     PillGroup 的行为(原位展开、不占整行)与此冲突。
  * ============================================================================ */
 type PillGroupVariant = 'inline' | 'block';
 
@@ -703,6 +712,11 @@ function PillGroup({
     </div>
   );
 }
+
+/* PillGroup 当前在广场页内未直接被引用(5 个有二级菜单的入口都改成平铺了),
+ * 但保留组件本身作为后续可复用的封装。TypeScript 不认下划线豁免,
+ * 用 void 标注"故意未消费",后续如果重新启用 PillGroup 删掉这一行即可。 */
+void PillGroup;
 
 export function PlayListPage() {
   const navigate = useNavigate();
@@ -2091,34 +2105,95 @@ export function PlayListPage() {
                     <Dices aria-hidden="true" strokeWidth={1.75} />
                   </button>
 
-                  {/* 筛选：分类 + 作者（漏斗图标，椭圆胶囊入口） */}
-                  <PillGroup
-                    variant="inline"
-                    open={openToolbarGroup === 'filter'}
-                    trigger={({ open: groupOpen }) => (
-                      <button
-                        aria-expanded={groupOpen}
-                        aria-label="筛选"
-                        title="筛选"
-                        className={
-                          groupOpen || categoryFilterOpen || authorFilterOpen
-                            ? 'plaza-pill-trigger is-pill-icon is-open'
-                            : 'plaza-pill-trigger is-pill-icon'
-                        }
-                        onClick={() => toggleToolbarGroup('filter')}
-                        type="button"
-                      >
-                        <Filter aria-hidden="true" strokeWidth={1.75} />
-                        <ChevronDown
-                          aria-hidden="true"
-                          strokeWidth={1.75}
-                          className="plaza-pill-chevron"
-                          style={{
-                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          }}
-                        />
-                      </button>
-                    )}
+                  {/* 工具栏内"有二级菜单"的入口：触发器按钮直接排在第一行,
+                   * 展开的二级菜单作为兄弟节点,通过 .plaza-pill-body { flex: 1 1 100% }
+                   * 强制换到下一行、撑满整行,和触发器们保持普通按钮那样的紧密排列。
+                   * 这里不封装 PillGroup,是因为 PillGroup 是 "trigger + body" 的胶囊形式,
+                   * 没法让 body 跳到 toolbar 容器的下一行。 */}
+
+                  {/* 二级菜单：筛选(分类 + 作者)。漏斗图标,椭圆胶囊入口。 */}
+                  <button
+                    aria-expanded={openToolbarGroup === 'filter'}
+                    aria-label="筛选"
+                    title="筛选"
+                    className={
+                      openToolbarGroup === 'filter' || categoryFilterOpen || authorFilterOpen
+                        ? 'plaza-pill-trigger is-pill-icon is-open'
+                        : 'plaza-pill-trigger is-pill-icon'
+                    }
+                    onClick={() => toggleToolbarGroup('filter')}
+                    type="button"
+                  >
+                    <Filter aria-hidden="true" strokeWidth={1.75} />
+                    <ChevronDown
+                      aria-hidden="true"
+                      strokeWidth={1.75}
+                      className="plaza-pill-chevron"
+                      style={{
+                        transform:
+                          openToolbarGroup === 'filter' ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </button>
+
+                  {/* 二级菜单：导出(全部/所选/作者/续写/分类/收藏 + 屏蔽)。下载图标,椭圆胶囊入口。 */}
+                  <button
+                    aria-expanded={openToolbarGroup === 'export'}
+                    aria-label="导出"
+                    title="导出"
+                    className={
+                      openToolbarGroup === 'export'
+                        ? 'plaza-pill-trigger is-pill-icon is-open'
+                        : 'plaza-pill-trigger is-pill-icon'
+                    }
+                    onClick={() => toggleToolbarGroup('export')}
+                    type="button"
+                  >
+                    <Download aria-hidden="true" strokeWidth={1.75} />
+                    <ChevronDown
+                      aria-hidden="true"
+                      strokeWidth={1.75}
+                      className="plaza-pill-chevron"
+                      style={{
+                        transform:
+                          openToolbarGroup === 'export' ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </button>
+
+                  {/* 二级菜单：更多(默认刷新 + 更新日志)。⋯ 图标,椭圆胶囊入口。 */}
+                  <button
+                    aria-expanded={openToolbarGroup === 'more'}
+                    aria-label="更多"
+                    title="更多"
+                    className={
+                      openToolbarGroup === 'more'
+                        ? 'plaza-pill-trigger is-pill-icon is-open'
+                        : 'plaza-pill-trigger is-pill-icon'
+                    }
+                    onClick={() => toggleToolbarGroup('more')}
+                    type="button"
+                  >
+                    <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
+                    <ChevronDown
+                      aria-hidden="true"
+                      strokeWidth={1.75}
+                      className="plaza-pill-chevron"
+                      style={{
+                        transform: openToolbarGroup === 'more' ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </button>
+
+                  {/* 工具栏的二级菜单展开区：作为 .plaza-toolbar-v2 的直接子项,
+                   * 通过 flex: 1 1 100% 强制换到下一行并占满整行。
+                   * 注意三段 body 都用同一个 group key 互斥,只会有一个 is-open。 */}
+                  <div
+                    aria-hidden={openToolbarGroup !== 'filter'}
+                    className={
+                      openToolbarGroup === 'filter' ? 'plaza-pill-body is-open' : 'plaza-pill-body'
+                    }
+                    role="region"
                   >
                     <div className="plaza-pill-grid is-tight">
                       <button
@@ -2144,36 +2219,14 @@ export function PlayListPage() {
                         作者
                       </button>
                     </div>
-                  </PillGroup>
+                  </div>
 
-                  {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 心碎斜杠图标（椭圆胶囊入口） */}
-                  <PillGroup
-                    variant="inline"
-                    open={openToolbarGroup === 'export'}
-                    trigger={({ open: groupOpen }) => (
-                      <button
-                        aria-expanded={groupOpen}
-                        aria-label="导出"
-                        title="导出"
-                        className={
-                          groupOpen
-                            ? 'plaza-pill-trigger is-pill-icon is-open'
-                            : 'plaza-pill-trigger is-pill-icon'
-                        }
-                        onClick={() => toggleToolbarGroup('export')}
-                        type="button"
-                      >
-                        <Download aria-hidden="true" strokeWidth={1.75} />
-                        <ChevronDown
-                          aria-hidden="true"
-                          strokeWidth={1.75}
-                          className="plaza-pill-chevron"
-                          style={{
-                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          }}
-                        />
-                      </button>
-                    )}
+                  <div
+                    aria-hidden={openToolbarGroup !== 'export'}
+                    className={
+                      openToolbarGroup === 'export' ? 'plaza-pill-body is-open' : 'plaza-pill-body'
+                    }
+                    role="region"
                   >
                     <div className="plaza-pill-grid is-tight">
                       <ExportAllButton
@@ -2241,36 +2294,14 @@ export function PlayListPage() {
                         />
                       </button>
                     </div>
-                  </PillGroup>
+                  </div>
 
-                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，椭圆胶囊入口） */}
-                  <PillGroup
-                    variant="inline"
-                    open={openToolbarGroup === 'more'}
-                    trigger={({ open: groupOpen }) => (
-                      <button
-                        aria-expanded={groupOpen}
-                        aria-label="更多"
-                        title="更多"
-                        className={
-                          groupOpen
-                            ? 'plaza-pill-trigger is-pill-icon is-open'
-                            : 'plaza-pill-trigger is-pill-icon'
-                        }
-                        onClick={() => toggleToolbarGroup('more')}
-                        type="button"
-                      >
-                        <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
-                        <ChevronDown
-                          aria-hidden="true"
-                          strokeWidth={1.75}
-                          className="plaza-pill-chevron"
-                          style={{
-                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          }}
-                        />
-                      </button>
-                    )}
+                  <div
+                    aria-hidden={openToolbarGroup !== 'more'}
+                    className={
+                      openToolbarGroup === 'more' ? 'plaza-pill-body is-open' : 'plaza-pill-body'
+                    }
+                    role="region"
                   >
                     <div className="plaza-pill-grid is-tight">
                       <button
@@ -2292,7 +2323,7 @@ export function PlayListPage() {
                         更新日志
                       </button>
                     </div>
-                  </PillGroup>
+                  </div>
                 </div>
 
                 {selectionMode === 'export' ? (
@@ -2479,118 +2510,6 @@ export function PlayListPage() {
               ) : null}
 
               {!toolbarCollapsed ? (
-                <PillGroup
-                  variant="inline"
-                  open={openPanelGroup === 'display'}
-                  trigger={({ open }) => (
-                    <button
-                      aria-expanded={open}
-                      aria-label="显示设置"
-                      title="显示设置"
-                      className={
-                        open
-                          ? 'plaza-pill-trigger is-pill-icon is-open'
-                          : 'plaza-pill-trigger is-pill-icon'
-                      }
-                      onClick={() => {
-                        togglePanelGroup('display');
-                        setOpenSearch(false);
-                      }}
-                      type="button"
-                    >
-                      <Cog aria-hidden="true" strokeWidth={1.75} />
-                      <ChevronDown
-                        aria-hidden="true"
-                        strokeWidth={1.75}
-                        className="plaza-pill-chevron"
-                        style={{
-                          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-                        }}
-                      />
-                    </button>
-                  )}
-                >
-                  <div className="plaza-pill-grid">
-                    <div className="plaza-toolbar-row-selects">
-                      <CustomSelect
-                        label="时间排序"
-                        onChange={(nextValue) => {
-                          setSortMode(nextValue as SortMode);
-                          setCurrentPage(1);
-                        }}
-                        options={sortModeOptions}
-                        value={sortMode}
-                      />
-                      <CustomSelect
-                        label="评论筛选"
-                        onChange={(nextValue) => {
-                          setActiveRepoFilter(nextValue as RepoFilterMode);
-                          setCurrentPage(1);
-                          try {
-                            window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue);
-                          } catch {
-                            /* ignore storage errors */
-                          }
-                        }}
-                        options={[
-                          { value: 'all', label: '全部' },
-                          { value: 'with', label: '有评论' },
-                          { value: 'without', label: '无评论' },
-                        ]}
-                        value={activeRepoFilter}
-                      />
-                      <CustomSelect
-                        label="评论排序"
-                        onChange={(nextValue) => {
-                          setRepoSortMode(nextValue as RepoSortMode);
-                          try {
-                            window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue);
-                          } catch {
-                            /* ignore storage errors */
-                          }
-                        }}
-                        options={[
-                          { value: 'none', label: '默认(时间)' },
-                          { value: 'count_desc', label: '评论数 ↓' },
-                          { value: 'count_asc', label: '评论数 ↑' },
-                          { value: 'first_desc', label: '首评时间 ↓' },
-                          { value: 'first_asc', label: '首评时间 ↑' },
-                          { value: 'last_desc', label: '最新评论 ↓' },
-                          { value: 'last_asc', label: '最新评论 ↑' },
-                        ]}
-                        value={repoSortMode}
-                      />
-                      <CustomSelect
-                        label="一行几个"
-                        onChange={(nextValue) => setColumns(Number(nextValue))}
-                        options={columnOptions}
-                        value={String(renderColumns)}
-                      />
-                    </div>
-                    <div className="toolbar-toggle-field">
-                      <span>列表操作</span>
-                      <div className="inline-actions wrap-mobile toolbar-toggle-row">
-                        <button
-                          className="plaza-pill-subitem"
-                          onClick={() => setShowPreview((current) => !current)}
-                          type="button"
-                        >
-                          {showPreview ? '收起正文' : '展开正文'}
-                        </button>
-                        <button
-                          className="plaza-pill-subitem"
-                          onClick={() => setShowPreferenceActions((current) => !current)}
-                          type="button"
-                        >
-                          {showPreferenceActions ? '收起标记' : '展开标记'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </PillGroup>
-              ) : null}
-
-              {!toolbarCollapsed ? (
                 <div className="filter-summary wrap-mobile">
                   <span>
                     当前 {displayedRowCount} 篇，第 {currentPage} / {totalPages} 页
@@ -2619,39 +2538,175 @@ export function PlayListPage() {
                   ) : null}
                 </div>
               ) : null}
-
               {!toolbarCollapsed ? (
-                <div className="plaza-panel-row is-split plaza-panel-row-tight">
-                  <PillGroup
-                    variant="inline"
-                    open={openPanelGroup === 'bulk'}
-                    trigger={({ open }) => (
-                      <button
-                        aria-expanded={open}
-                        aria-label="更多操作"
-                        title="更多操作"
-                        className={
-                          open
-                            ? 'plaza-pill-trigger is-pill-icon is-open'
-                            : 'plaza-pill-trigger is-pill-icon'
-                        }
-                        onClick={() => {
-                          togglePanelGroup('bulk');
-                          setOpenSearch(false);
-                        }}
-                        type="button"
-                      >
-                        <Layers aria-hidden="true" strokeWidth={1.75} />
-                        <ChevronDown
-                          aria-hidden="true"
-                          strokeWidth={1.75}
-                          className="plaza-pill-chevron"
-                          style={{
-                            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                <div className="plaza-panel-row plaza-panel-row-tight">
+                  {/* 下方面板二级菜单触发器行:显示设置 / 更多操作 / 搜索 从左到右并列,
+                   * 展开的二级菜单作为兄弟节点,通过 flex-basis: 100% 各自换到下一行、占满整片。
+                   * 设计要点同工具栏:trigger 与 trigger 之间不留二级菜单的空隙。 */}
+                  <button
+                    aria-expanded={openPanelGroup === 'display'}
+                    aria-label="显示设置"
+                    title="显示设置"
+                    className={
+                      openPanelGroup === 'display'
+                        ? 'plaza-pill-trigger is-pill-icon is-open'
+                        : 'plaza-pill-trigger is-pill-icon'
+                    }
+                    onClick={() => {
+                      togglePanelGroup('display');
+                      setOpenSearch(false);
+                    }}
+                    type="button"
+                  >
+                    <Cog aria-hidden="true" strokeWidth={1.75} />
+                    <ChevronDown
+                      aria-hidden="true"
+                      strokeWidth={1.75}
+                      className="plaza-pill-chevron"
+                      style={{
+                        transform: openPanelGroup === 'display' ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </button>
+
+                  {/* 二级菜单:更多操作(批量收藏/不喜欢 + 屏蔽)。堆叠图标,椭圆胶囊入口。 */}
+                  <button
+                    aria-expanded={openPanelGroup === 'bulk'}
+                    aria-label="更多操作"
+                    title="更多操作"
+                    className={
+                      openPanelGroup === 'bulk'
+                        ? 'plaza-pill-trigger is-pill-icon is-open'
+                        : 'plaza-pill-trigger is-pill-icon'
+                    }
+                    onClick={() => {
+                      togglePanelGroup('bulk');
+                      setOpenSearch(false);
+                    }}
+                    type="button"
+                  >
+                    <Layers aria-hidden="true" strokeWidth={1.75} />
+                    <ChevronDown
+                      aria-hidden="true"
+                      strokeWidth={1.75}
+                      className="plaza-pill-chevron"
+                      style={{
+                        transform: openPanelGroup === 'bulk' ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    />
+                  </button>
+
+                  {/* 二级菜单:打开搜索。放大镜图标,纯图标入口。 */}
+                  <button
+                    aria-expanded={openSearch}
+                    aria-label={openSearch ? '收起搜索' : '打开搜索'}
+                    className={
+                      openSearch
+                        ? 'plaza-pill-trigger is-icon-only is-open'
+                        : 'plaza-pill-trigger is-icon-only'
+                    }
+                    onClick={() => {
+                      setOpenSearch((current) => !current);
+                      setOpenPanelGroup(null);
+                    }}
+                    title={openSearch ? '收起搜索' : '打开搜索'}
+                    type="button"
+                  >
+                    <Search aria-hidden="true" strokeWidth={1.75} />
+                  </button>
+
+                  <div
+                    aria-hidden={openPanelGroup !== 'display'}
+                    className={
+                      openPanelGroup === 'display' ? 'plaza-pill-body is-open' : 'plaza-pill-body'
+                    }
+                    role="region"
+                  >
+                    <div className="plaza-pill-grid">
+                      <div className="plaza-toolbar-row-selects">
+                        <CustomSelect
+                          label="时间排序"
+                          onChange={(nextValue) => {
+                            setSortMode(nextValue as SortMode);
+                            setCurrentPage(1);
                           }}
+                          options={sortModeOptions}
+                          value={sortMode}
                         />
-                      </button>
-                    )}
+                        <CustomSelect
+                          label="评论筛选"
+                          onChange={(nextValue) => {
+                            setActiveRepoFilter(nextValue as RepoFilterMode);
+                            setCurrentPage(1);
+                            try {
+                              window.localStorage.setItem(PLAZA_REPO_FILTER_KEY, nextValue);
+                            } catch {
+                              /* ignore storage errors */
+                            }
+                          }}
+                          options={[
+                            { value: 'all', label: '全部' },
+                            { value: 'with', label: '有评论' },
+                            { value: 'without', label: '无评论' },
+                          ]}
+                          value={activeRepoFilter}
+                        />
+                        <CustomSelect
+                          label="评论排序"
+                          onChange={(nextValue) => {
+                            setRepoSortMode(nextValue as RepoSortMode);
+                            try {
+                              window.localStorage.setItem(PLAZA_REPO_SORT_KEY, nextValue);
+                            } catch {
+                              /* ignore storage errors */
+                            }
+                          }}
+                          options={[
+                            { value: 'none', label: '默认(时间)' },
+                            { value: 'count_desc', label: '评论数 ↓' },
+                            { value: 'count_asc', label: '评论数 ↑' },
+                            { value: 'first_desc', label: '首评时间 ↓' },
+                            { value: 'first_asc', label: '首评时间 ↑' },
+                            { value: 'last_desc', label: '最新评论 ↓' },
+                            { value: 'last_asc', label: '最新评论 ↑' },
+                          ]}
+                          value={repoSortMode}
+                        />
+                        <CustomSelect
+                          label="一行几个"
+                          onChange={(nextValue) => setColumns(Number(nextValue))}
+                          options={columnOptions}
+                          value={String(renderColumns)}
+                        />
+                      </div>
+                      <div className="toolbar-toggle-field">
+                        <span>列表操作</span>
+                        <div className="inline-actions wrap-mobile toolbar-toggle-row">
+                          <button
+                            className="plaza-pill-subitem"
+                            onClick={() => setShowPreview((current) => !current)}
+                            type="button"
+                          >
+                            {showPreview ? '收起正文' : '展开正文'}
+                          </button>
+                          <button
+                            className="plaza-pill-subitem"
+                            onClick={() => setShowPreferenceActions((current) => !current)}
+                            type="button"
+                          >
+                            {showPreferenceActions ? '收起标记' : '展开标记'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    aria-hidden={openPanelGroup !== 'bulk'}
+                    className={
+                      openPanelGroup === 'bulk' ? 'plaza-pill-body is-open' : 'plaza-pill-body'
+                    }
+                    role="region"
                   >
                     <div className="plaza-pill-grid is-tight">
                       <button
@@ -2724,29 +2779,12 @@ export function PlayListPage() {
                         />
                       </button>
                     </div>
-                  </PillGroup>
-                  <PillGroup
-                    variant="inline"
-                    open={openSearch}
-                    trigger={({ open }) => (
-                      <button
-                        aria-expanded={open}
-                        aria-label={open ? '收起搜索' : '打开搜索'}
-                        className={
-                          open
-                            ? 'plaza-pill-trigger is-icon-only is-open'
-                            : 'plaza-pill-trigger is-icon-only'
-                        }
-                        onClick={() => {
-                          setOpenSearch((current) => !current);
-                          setOpenPanelGroup(null);
-                        }}
-                        title={open ? '收起搜索' : '打开搜索'}
-                        type="button"
-                      >
-                        <Search aria-hidden="true" strokeWidth={1.75} />
-                      </button>
-                    )}
+                  </div>
+
+                  <div
+                    aria-hidden={!openSearch}
+                    className={openSearch ? 'plaza-pill-body is-open' : 'plaza-pill-body'}
+                    role="region"
                   >
                     <div className="plaza-pill-grid">
                       <div className="plaza-search-popover">
@@ -2791,7 +2829,7 @@ export function PlayListPage() {
                         </div>
                       </div>
                     </div>
-                  </PillGroup>
+                  </div>
                 </div>
               ) : null}
 
