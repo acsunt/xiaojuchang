@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { CalendarPlus, MessageSquare, Palette, PenLine, Upload, LayoutGrid } from 'lucide-react';
+import {
+  CalendarPlus,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  MessageSquare,
+  Palette,
+  PenLine,
+  Upload,
+  LayoutGrid,
+} from 'lucide-react';
 import { playApi } from './services/play-api';
 import { useUpdateNotifier } from './hooks/useUpdateNotifier';
 import { useThemeController } from './hooks/useThemeController';
@@ -339,11 +348,12 @@ export default function App() {
         <div className="header-actions">
           <nav className="top-nav">
             <button
+              aria-pressed={plazaToolbarCollapsed}
               aria-label={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
               className={
                 plazaToolbarCollapsed
-                  ? 'icon-button header-toolbar-toggle active'
-                  : 'icon-button header-toolbar-toggle'
+                  ? 'icon-button header-toolbar-toggle active header-toolbar-toggle-icon'
+                  : 'icon-button header-toolbar-toggle header-toolbar-toggle-icon'
               }
               onClick={() =>
                 setPlazaToolbarCollapsedState(setPlazaToolbarCollapsed(!plazaToolbarCollapsed))
@@ -351,7 +361,11 @@ export default function App() {
               title={plazaToolbarCollapsed ? '展开广场筛选和工具栏' : '折叠广场筛选和工具栏'}
               type="button"
             >
-              {plazaToolbarCollapsed ? '▸' : '▾'}
+              {plazaToolbarCollapsed ? (
+                <ChevronsUpDown aria-hidden="true" focusable="false" strokeWidth={1.75} />
+              ) : (
+                <ChevronsDownUp aria-hidden="true" focusable="false" strokeWidth={1.75} />
+              )}
             </button>
             <NavLink
               to="/repos"
@@ -404,12 +418,17 @@ export default function App() {
             ))}
           </nav>
           <button
-            className={themeDropdownOpen ? 'nav-pill active' : 'nav-pill'}
+            aria-label="主题"
+            className={
+              themeDropdownOpen
+                ? 'icon-button header-icon-nav active header-theme-toggle'
+                : 'icon-button header-icon-nav header-theme-toggle'
+            }
             onClick={() => setThemeDropdownOpen((current) => !current)}
+            title="主题"
             type="button"
           >
             <Palette aria-hidden="true" focusable="false" className="nav-pill-icon" />
-            <span>主题</span>
           </button>
         </div>
       </header>

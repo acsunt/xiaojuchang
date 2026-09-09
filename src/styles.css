@@ -1229,6 +1229,20 @@ body[data-style='default'][data-mode='day'] .button.danger {
   border-color: var(--border);
 }
 
+/* 与第二行工具栏折叠按钮一致:用 ChevronsUpDown / ChevronsDownUp 图标,
+ * 形状退回到 icon-button 尺寸(34×34 或 38×38),不再走文字按钮的 48px 宽。 */
+.header-toolbar-toggle.header-toolbar-toggle-icon {
+  width: 38px;
+  height: 38px;
+  min-width: 0;
+  padding: 0;
+}
+
+.header-toolbar-toggle.header-toolbar-toggle-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .header-toolbar-toggle.active {
   color: var(--text);
   background: rgba(89, 143, 255, 0.18);

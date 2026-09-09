@@ -2146,57 +2146,6 @@ export function PlayListPage() {
                     </div>
                   </PillGroup>
 
-                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，椭圆胶囊入口） */}
-                  <PillGroup
-                    variant="inline"
-                    open={openToolbarGroup === 'more'}
-                    trigger={({ open: groupOpen }) => (
-                      <button
-                        aria-expanded={groupOpen}
-                        aria-label="更多"
-                        title="更多"
-                        className={
-                          groupOpen
-                            ? 'plaza-pill-trigger is-pill-icon is-open'
-                            : 'plaza-pill-trigger is-pill-icon'
-                        }
-                        onClick={() => toggleToolbarGroup('more')}
-                        type="button"
-                      >
-                        <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
-                        <ChevronDown
-                          aria-hidden="true"
-                          strokeWidth={1.75}
-                          className="plaza-pill-chevron"
-                          style={{
-                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                          }}
-                        />
-                      </button>
-                    )}
-                  >
-                    <div className="plaza-pill-grid is-tight">
-                      <button
-                        className={
-                          autoRefreshOnNewPlays
-                            ? 'plaza-pill-subitem is-active'
-                            : 'plaza-pill-subitem'
-                        }
-                        onClick={handleToggleAutoRefresh}
-                        type="button"
-                      >
-                        {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
-                      </button>
-                      <button
-                        className="plaza-pill-subitem"
-                        onClick={openVisitorChangelog}
-                        type="button"
-                      >
-                        更新日志
-                      </button>
-                    </div>
-                  </PillGroup>
-
                   {/* 导出：全部/所选/作者/续写/分类/收藏 + 屏蔽(导出) 心碎斜杠图标（椭圆胶囊入口） */}
                   <PillGroup
                     variant="inline"
@@ -2290,6 +2239,57 @@ export function PlayListPage() {
                           fill={blockDislikedOnExport ? 'currentColor' : 'none'}
                           strokeWidth={1.75}
                         />
+                      </button>
+                    </div>
+                  </PillGroup>
+
+                  {/* 更多：默认不刷新 + 更新日志（⋯ 图标，椭圆胶囊入口） */}
+                  <PillGroup
+                    variant="inline"
+                    open={openToolbarGroup === 'more'}
+                    trigger={({ open: groupOpen }) => (
+                      <button
+                        aria-expanded={groupOpen}
+                        aria-label="更多"
+                        title="更多"
+                        className={
+                          groupOpen
+                            ? 'plaza-pill-trigger is-pill-icon is-open'
+                            : 'plaza-pill-trigger is-pill-icon'
+                        }
+                        onClick={() => toggleToolbarGroup('more')}
+                        type="button"
+                      >
+                        <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
+                        <ChevronDown
+                          aria-hidden="true"
+                          strokeWidth={1.75}
+                          className="plaza-pill-chevron"
+                          style={{
+                            transform: groupOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          }}
+                        />
+                      </button>
+                    )}
+                  >
+                    <div className="plaza-pill-grid is-tight">
+                      <button
+                        className={
+                          autoRefreshOnNewPlays
+                            ? 'plaza-pill-subitem is-active'
+                            : 'plaza-pill-subitem'
+                        }
+                        onClick={handleToggleAutoRefresh}
+                        type="button"
+                      >
+                        {autoRefreshOnNewPlays ? '默认刷新' : '默认不刷新'}
+                      </button>
+                      <button
+                        className="plaza-pill-subitem"
+                        onClick={openVisitorChangelog}
+                        type="button"
+                      >
+                        更新日志
                       </button>
                     </div>
                   </PillGroup>
