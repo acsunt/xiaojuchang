@@ -158,6 +158,9 @@ select option {
 
 .clearable-field input,
 .clearable-field textarea {
+  /* 撑满外层 .clearable-field(grid 单元的 1fr),
+   * 否则 input 默认 width: auto,会按 placeholder/自身内容定宽,看起来很窄 */
+  width: 100%;
   padding-right: 46px;
 }
 
