@@ -2303,8 +2303,17 @@ export function AdminReviewPage() {
   );
 
   const removePlayStateLocally = useCallback((playId: string) => {
-    setAllPlays((current) => current.filter((play) => play.id !== playId));
-    setPlays((current) => current.filter((play) => play.id !== playId));
+    const detachChild = (play: Play): Play =>
+      play.parentPlayId === playId
+        ? {
+            ...play,
+            parentPlayId: null,
+            submissionType: play.submissionType === 'modify' ? 'original' : play.submissionType,
+          }
+        : play;
+
+    setAllPlays((current) => current.filter((play) => play.id !== playId).map(detachChild));
+    setPlays((current) => current.filter((play) => play.id !== playId).map(detachChild));
   }, []);
 
   const markPlaysApprovedLocally = useCallback((playIds: string[]) => {

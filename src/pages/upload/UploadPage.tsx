@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   countPlayBatchItems,
@@ -95,6 +95,12 @@ const formatLocalTime = (value: string) => {
   return new Date(timestamp).toLocaleString();
 };
 
+const compareCategoryNames = (left: string, right: string) =>
+  left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' });
+
+const sortTagsByName = (items: Tag[]) =>
+  [...items].sort((left, right) => compareCategoryNames(left.name, right.name));
+
 const ClearableField = ({
   children,
   onClear,
@@ -152,6 +158,9 @@ export function UploadPage() {
   const [categoryTagsOpen, setCategoryTagsOpen] = useState(() =>
     readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true),
   );
+  const [categorySuggestOpen, setCategorySuggestOpen] = useState(false);
+  const [categoryHighlightIndex, setCategoryHighlightIndex] = useState(-1);
+  const categoryFieldRef = useRef<HTMLDivElement | null>(null);
   const [authorHistory, setAuthorHistory] = useState<string[]>([]);
   const [submissionHistory, setSubmissionHistory] = useState<BrowserSubmissionRecord[]>([]);
   const [editingHistoryId, setEditingHistoryId] = useState('');
@@ -280,6 +289,25 @@ export function UploadPage() {
     [batchItemCount, submitting],
   );
 
+  const sortedTags = useMemo(() => sortTagsByName(tags), [tags]);
+  const categoryKeyword = form.category.trim();
+  const categorySuggestions = useMemo(() => {
+    if (!categoryKeyword) {
+      return [];
+    }
+    const keyword = categoryKeyword.toLowerCase();
+    return sortedTags.filter((tag) => tag.name.toLowerCase().includes(keyword));
+  }, [categoryKeyword, sortedTags]);
+  const visibleCategorySuggestions = categorySuggestOpen ? categorySuggestions : [];
+  const highlightedCategorySuggestion =
+    categoryHighlightIndex >= 0 ? visibleCategorySuggestions[categoryHighlightIndex] : undefined;
+
+  const pickCategory = (name: string) => {
+    setForm((current) => ({ ...current, category: name }));
+    setCategorySuggestOpen(false);
+    setCategoryHighlightIndex(-1);
+  };
+
   useEffect(() => {
     const loadTags = async () => {
       try {
@@ -333,6 +361,26 @@ export function UploadPage() {
 
     window.localStorage.setItem(UPLOAD_CATEGORY_TAGS_OPEN_KEY, String(categoryTagsOpen));
   }, [categoryTagsOpen]);
+
+  useEffect(() => {
+    if (!categorySuggestOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!categoryFieldRef.current?.contains(event.target as Node)) {
+        setCategorySuggestOpen(false);
+        setCategoryHighlightIndex(-1);
+      }
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    return () => window.removeEventListener('mousedown', handlePointerDown);
+  }, [categorySuggestOpen]);
+
+  useEffect(() => {
+    setCategoryHighlightIndex(-1);
+  }, [categoryKeyword]);
 
   const syncLocalHistory = (authorName: string) => {
     setAuthorHistory(rememberAuthorName(authorName));
@@ -652,7 +700,7 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>分类</span>
-                  {tags.length > 0 && !lockTitleAndCategory ? (
+                  {sortedTags.length > 0 && !lockTitleAndCategory ? (
                     <button
                       className="text-button field-inline-action"
                       onClick={() => setCategoryTagsOpen((current) => !current)}
@@ -662,52 +710,123 @@ export function UploadPage() {
                     </button>
                   ) : null}
                 </div>
-                <ClearableField
-                  onClear={() => setForm((current) => ({ ...current, category: '' }))}
-                  visible={Boolean(form.category) && !lockTitleAndCategory}
-                >
-                  <input
-                    list="category-tags"
-                    value={form.category}
-                    readOnly={lockTitleAndCategory}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, category: event.target.value }))
-                    }
-                    placeholder={`可自定义分类，不填会自动记为 ${DEFAULT_CATEGORY}`}
-                  />
-                </ClearableField>
-              </label>
-              {tags.length > 0 && !lockTitleAndCategory ? (
-                <>
-                  <datalist id="category-tags">
-                    {tags.map((tag) => (
-                      <option key={tag.id} value={tag.name} />
-                    ))}
-                  </datalist>
-                  {categoryTagsOpen ? (
-                    <div className="tag-cloud compact-tag-cloud">
-                      {tags.map((tag) => {
+                <div className="category-suggest-field" ref={categoryFieldRef}>
+                  <ClearableField
+                    onClear={() => {
+                      setForm((current) => ({ ...current, category: '' }));
+                      setCategorySuggestOpen(false);
+                      setCategoryHighlightIndex(-1);
+                    }}
+                    visible={Boolean(form.category) && !lockTitleAndCategory}
+                  >
+                    <input
+                      value={form.category}
+                      readOnly={lockTitleAndCategory}
+                      autoComplete="off"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={visibleCategorySuggestions.length > 0}
+                      aria-controls="category-suggest-list"
+                      onFocus={() => {
+                        if (!lockTitleAndCategory && categoryKeyword) {
+                          setCategorySuggestOpen(true);
+                        }
+                      }}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setForm((current) => ({ ...current, category: nextValue }));
+                        setCategorySuggestOpen(nextValue.trim().length > 0);
+                      }}
+                      onKeyDown={(event) => {
+                        if (lockTitleAndCategory) {
+                          return;
+                        }
+                        if (event.key === 'ArrowDown') {
+                          if (visibleCategorySuggestions.length === 0) {
+                            return;
+                          }
+                          event.preventDefault();
+                          setCategorySuggestOpen(true);
+                          setCategoryHighlightIndex((current) =>
+                            current < visibleCategorySuggestions.length - 1 ? current + 1 : 0,
+                          );
+                          return;
+                        }
+                        if (event.key === 'ArrowUp') {
+                          if (visibleCategorySuggestions.length === 0) {
+                            return;
+                          }
+                          event.preventDefault();
+                          setCategorySuggestOpen(true);
+                          setCategoryHighlightIndex((current) =>
+                            current > 0 ? current - 1 : visibleCategorySuggestions.length - 1,
+                          );
+                          return;
+                        }
+                        if (event.key === 'Enter' && highlightedCategorySuggestion) {
+                          event.preventDefault();
+                          pickCategory(highlightedCategorySuggestion.name);
+                          return;
+                        }
+                        if (event.key === 'Escape') {
+                          setCategorySuggestOpen(false);
+                          setCategoryHighlightIndex(-1);
+                        }
+                      }}
+                      placeholder={`可自定义分类，不填会自动记为 ${DEFAULT_CATEGORY}`}
+                    />
+                  </ClearableField>
+                  {visibleCategorySuggestions.length > 0 ? (
+                    <ul className="category-suggest-list" id="category-suggest-list" role="listbox">
+                      {visibleCategorySuggestions.map((tag, index) => {
                         const active = form.category === tag.name;
+                        const highlighted = index === categoryHighlightIndex;
 
                         return (
-                          <button
-                            key={tag.id}
-                            className={active ? 'tag-chip active' : 'tag-chip'}
-                            onClick={() =>
-                              setForm((current) => ({
-                                ...current,
-                                category: current.category === tag.name ? '' : tag.name,
-                              }))
-                            }
-                            type="button"
-                          >
-                            {tag.name}
-                          </button>
+                          <li key={tag.id}>
+                            <button
+                              className={
+                                highlighted
+                                  ? 'category-suggest-item is-highlighted'
+                                  : 'category-suggest-item'
+                              }
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => pickCategory(tag.name)}
+                              role="option"
+                              aria-selected={active || highlighted}
+                              type="button"
+                            >
+                              {tag.name}
+                            </button>
+                          </li>
                         );
                       })}
-                    </div>
+                    </ul>
                   ) : null}
-                </>
+                </div>
+              </label>
+              {sortedTags.length > 0 && !lockTitleAndCategory && categoryTagsOpen ? (
+                <div className="tag-cloud compact-tag-cloud">
+                  {sortedTags.map((tag) => {
+                    const active = form.category === tag.name;
+
+                    return (
+                      <button
+                        key={tag.id}
+                        className={active ? 'tag-chip active' : 'tag-chip'}
+                        onClick={() =>
+                          setForm((current) => ({
+                            ...current,
+                            category: current.category === tag.name ? '' : tag.name,
+                          }))
+                        }
+                        type="button"
+                      >
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
               ) : null}
               <label>
                 <div className="field-label-row">

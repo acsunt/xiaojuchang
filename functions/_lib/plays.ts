@@ -6,16 +6,12 @@ import {
   parseContinuationStatus,
   validPlayStatuses,
   type ContinuationStatus,
+  type PlayRecord,
   type PlayStatus,
   type RepoStatus,
   type ReviewAction,
 } from './http';
-import {
-  chunkItems,
-  D1_BACKUP_INSERT_CHUNK_SIZE,
-  D1_BULK_REVIEW_PLAY_CHUNK_SIZE,
-  D1_SELECT_CHUNK_SIZE,
-} from './db-utils';
+import { chunkItems, D1_BACKUP_INSERT_CHUNK_SIZE, D1_SELECT_CHUNK_SIZE } from './db-utils';
 import { ensureTagByName } from './tags';
 import { parseRepoStatus } from './repos';
 
@@ -115,6 +111,196 @@ const ensurePlay = async (db: D1Database, id: string) => {
   return play;
 };
 
+const isModificationPlay = (play: Pick<PlayRecord, 'submissionType' | 'parentPlayId'>) =>
+  play.submissionType === 'modify' || Boolean(play.parentPlayId);
+
+type MergeModificationOptions = {
+  timestamp?: string;
+  reviewLog?: {
+    operator: string;
+    note: string;
+  };
+};
+
+/* 把一条「修改稿」合入原文:
+ * - 原文还在:覆盖原文字段,删掉修改稿,保留原文 id;
+ * - 原文已不在:把修改稿升级成独立原文,避免新版一起消失。
+ * 审核通过、批量通过、以及修复「已通过但仍当独立作品展示」的历史数据都走这里。 */
+const mergeModificationIntoParent = async (
+  db: D1Database,
+  currentPlay: PlayRecord,
+  options?: MergeModificationOptions,
+) => {
+  const timestamp = options?.timestamp ?? now();
+  const nextTitle = currentPlay.title.trim();
+  const nextAuthorName = currentPlay.authorName.trim();
+  const nextCategory = currentPlay.category.trim();
+  const nextSummary = normalizeImportedSummary(currentPlay.summary);
+  const nextContent = currentPlay.content.trim();
+  if (!nextTitle) throw new Error('标题不能为空');
+  if (!nextAuthorName) throw new Error('署名不能为空');
+  if (!nextContent) throw new Error('正文不能为空');
+  await ensureTagByName(db, nextCategory || currentPlay.category);
+
+  const parentPlay = currentPlay.parentPlayId
+    ? await getAdminPlayById(db, currentPlay.parentPlayId)
+    : null;
+  const resolvedCategory = nextCategory || parentPlay?.category || currentPlay.category;
+
+  if (!parentPlay) {
+    const stmts = [
+      db
+        .prepare(
+          `UPDATE plays
+           SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
+               status = 'approved', submission_type = 'original', parent_play_id = NULL,
+               review_note = COALESCE(review_note, ?),
+               reviewed_at = COALESCE(reviewed_at, ?),
+               updated_at = ?
+           WHERE id = ?`,
+        )
+        .bind(
+          nextTitle,
+          nextAuthorName,
+          resolvedCategory,
+          nextSummary,
+          nextContent,
+          options?.reviewLog?.note ?? currentPlay.reviewNote ?? '无备注',
+          currentPlay.reviewedAt ?? timestamp,
+          timestamp,
+          currentPlay.id,
+        ),
+    ];
+    if (options?.reviewLog) {
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            makeId('review'),
+            currentPlay.id,
+            'approve',
+            options.reviewLog.operator,
+            `[修改] ${options.reviewLog.note}`,
+            timestamp,
+          ),
+      );
+    }
+    await db.batch(stmts);
+    return ensurePlay(db, currentPlay.id);
+  }
+
+  const stmts = [
+    db
+      .prepare(
+        `UPDATE plays
+         SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
+             updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(
+        nextTitle,
+        nextAuthorName,
+        resolvedCategory,
+        nextSummary,
+        nextContent,
+        timestamp,
+        parentPlay.id,
+      ),
+    db
+      .prepare(
+        `UPDATE plays
+         SET title = ?, category = ?, updated_at = ?
+         WHERE author_name = ? AND title = ? AND category = ? AND id <> ? AND id <> ?`,
+      )
+      .bind(
+        nextTitle,
+        resolvedCategory,
+        timestamp,
+        parentPlay.authorName,
+        parentPlay.title,
+        parentPlay.category,
+        parentPlay.id,
+        currentPlay.id,
+      ),
+  ];
+  if (options?.reviewLog) {
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          makeId('review'),
+          parentPlay.id,
+          'approve',
+          options.reviewLog.operator,
+          `[修改] ${options.reviewLog.note}`,
+          timestamp,
+        ),
+    );
+  }
+  /* 先断开外键再删修改稿,避免 SQLite ON DELETE CASCADE 把刚覆盖好的原文一起删掉。 */
+  stmts.push(
+    db
+      .prepare(
+        `UPDATE plays
+         SET parent_play_id = NULL
+         WHERE id = ?`,
+      )
+      .bind(currentPlay.id),
+  );
+  stmts.push(db.prepare(`DELETE FROM plays WHERE id = ?`).bind(currentPlay.id));
+  await db.batch(stmts);
+  return ensurePlay(db, parentPlay.id);
+};
+
+const healApprovedModifications = async (db: D1Database) => {
+  const supported = await ensureModifyColumns(db);
+  if (!supported) {
+    return;
+  }
+
+  const result = await db
+    .prepare(
+      `SELECT * FROM plays
+       WHERE status = 'approved'
+         AND (submission_type = 'modify' OR parent_play_id IS NOT NULL)
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all<Record<string, unknown>>();
+  if (result.results.length === 0) {
+    return;
+  }
+
+  for (const row of result.results) {
+    await mergeModificationIntoParent(db, normalizePlay(row));
+  }
+};
+
+const detachChildPlays = async (db: D1Database, playId: string) => {
+  const supported = await ensureModifyColumns(db);
+  if (!supported) {
+    return;
+  }
+  /* 删原文前先把挂在它下面的修改稿升级成独立作品,避免 CASCADE 把新版一起删掉。 */
+  await db
+    .prepare(
+      `UPDATE plays
+       SET parent_play_id = NULL,
+           submission_type = CASE
+             WHEN submission_type = 'modify' THEN 'original'
+             ELSE submission_type
+           END
+       WHERE parent_play_id = ?`,
+    )
+    .bind(playId)
+    .run();
+};
+
 export const normalizeImportedSummary = (value: string) => {
   const normalized = value.trim();
   return normalized === '导入数据' || normalized === '无简介' ? '' : normalized;
@@ -155,11 +341,19 @@ const normalizeBackupPlayDraft = (draft: BackupPlayDraft): BackupPlayDraft => {
 };
 
 export const listPublicPlays = async (db: D1Database) => {
+  await healApprovedModifications(db);
+  const modifySupported = await ensureModifyColumns(db);
   const result = await db
     .prepare(
-      `SELECT * FROM plays
-       WHERE status = 'approved'
-       ORDER BY updated_at DESC`,
+      modifySupported
+        ? `SELECT * FROM plays
+           WHERE status = 'approved'
+             AND (submission_type IS NULL OR submission_type <> 'modify')
+             AND parent_play_id IS NULL
+           ORDER BY updated_at DESC`
+        : `SELECT * FROM plays
+           WHERE status = 'approved'
+           ORDER BY updated_at DESC`,
     )
     .all<Record<string, unknown>>();
 
@@ -167,11 +361,19 @@ export const listPublicPlays = async (db: D1Database) => {
 };
 
 export const getPublicPlayById = async (db: D1Database, id: string) => {
+  await healApprovedModifications(db);
+  const modifySupported = await ensureModifyColumns(db);
   const row = await db
     .prepare(
-      `SELECT * FROM plays
-       WHERE id = ? AND status = 'approved'
-       LIMIT 1`,
+      modifySupported
+        ? `SELECT * FROM plays
+           WHERE id = ? AND status = 'approved'
+             AND (submission_type IS NULL OR submission_type <> 'modify')
+             AND parent_play_id IS NULL
+           LIMIT 1`
+        : `SELECT * FROM plays
+           WHERE id = ? AND status = 'approved'
+           LIMIT 1`,
     )
     .bind(id)
     .first<Record<string, unknown>>();
@@ -270,6 +472,7 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
 };
 
 export const listAdminPlays = async (db: D1Database, status?: PlayStatus) => {
+  await healApprovedModifications(db);
   const statement = status
     ? db
         .prepare(
@@ -345,6 +548,7 @@ export const deletePlay = async (db: D1Database, playId: string) => {
     return false;
   }
 
+  await detachChildPlays(db, playId);
   await db.batch([
     db.prepare(`DELETE FROM review_logs WHERE play_id = ?`).bind(playId),
     db.prepare(`DELETE FROM plays WHERE id = ?`).bind(playId),
@@ -374,7 +578,7 @@ export const updateAdminPlay = async (
   }
   /* modification (submission_type='modify') 不允许后台直接编辑,
    * 必须先 approve / reject 处理,避免改动被覆盖到错误对象。 */
-  if (currentPlay.submissionType === 'modify') {
+  if (isModificationPlay(currentPlay)) {
     throw new Error('修改草稿请先通过审核或拒绝,不要直接编辑');
   }
 
@@ -935,79 +1139,12 @@ export const reviewPlay = async (
   /* 「修改」投稿独立分支:approve 把 modification 字段合入原 play 并删除本条,
    * reject / offline 仅修改本条 status。inline edit 不允许走 modify 路径
    * (admin 看到 diff 直接通过即可,不需要再手动覆盖一次)。 */
-  if (currentPlay.submissionType === 'modify') {
+  if (isModificationPlay(currentPlay)) {
     if (input.action === 'approve') {
-      if (!currentPlay.parentPlayId) {
-        throw new Error('修改草稿缺少 parent_play_id,无法合入');
-      }
-      const parentPlay = await getAdminPlayById(db, currentPlay.parentPlayId);
-      if (!parentPlay) {
-        throw new Error('原内容不存在,无法合入修改');
-      }
-      const nextTitle = currentPlay.title.trim();
-      const nextAuthorName = currentPlay.authorName.trim();
-      const nextCategory = currentPlay.category.trim() || parentPlay.category;
-      const nextSummary = normalizeImportedSummary(currentPlay.summary);
-      const nextContent = currentPlay.content.trim();
-      if (!nextTitle) throw new Error('标题不能为空');
-      if (!nextAuthorName) throw new Error('署名不能为空');
-      if (!nextContent) throw new Error('正文不能为空');
-      await ensureTagByName(db, nextCategory);
-
-      const stmts = [
-        /* 原 play 字段被合入 + 同系列跟随。 */
-        db
-          .prepare(
-            `UPDATE plays
-             SET title = ?, author_name = ?, category = ?, summary = ?, content = ?,
-                 updated_at = ?
-             WHERE id = ?`,
-          )
-          .bind(
-            nextTitle,
-            nextAuthorName,
-            nextCategory,
-            nextSummary,
-            nextContent,
-            timestamp,
-            currentPlay.parentPlayId,
-          ),
-        /* 写审核日志(挂在原 play 上,方便回看是谁改的)。 */
-        db
-          .prepare(
-            `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            makeId('review'),
-            currentPlay.parentPlayId,
-            'approve',
-            input.operator,
-            `[修改] ${reviewNote}`,
-            timestamp,
-          ),
-        /* 同系列下其他作品 title/category 跟随。 */
-        db
-          .prepare(
-            `UPDATE plays
-             SET title = ?, category = ?, updated_at = ?
-             WHERE author_name = ? AND title = ? AND category = ? AND id <> ? AND id <> ?`,
-          )
-          .bind(
-            nextTitle,
-            nextCategory,
-            timestamp,
-            parentPlay.authorName,
-            parentPlay.title,
-            parentPlay.category,
-            currentPlay.parentPlayId,
-            input.playId,
-          ),
-        /* modification 自身删除(连同 review_logs 外键级联)。 */
-        db.prepare(`DELETE FROM plays WHERE id = ?`).bind(input.playId),
-      ];
-      await db.batch(stmts);
-      return ensurePlay(db, currentPlay.parentPlayId);
+      return mergeModificationIntoParent(db, currentPlay, {
+        timestamp,
+        reviewLog: { operator: input.operator, note: reviewNote },
+      });
     }
     /* reject / offline:仅修改本条 modification status,原 play 不动。 */
     await db
@@ -1158,38 +1295,49 @@ export const bulkReviewPlays = async (
   const reviewNote = input.note || '无备注';
   const mappedStatus: PlayStatus =
     input.action === 'approve' ? 'approved' : input.action === 'reject' ? 'rejected' : 'offline';
+  const playById = new Map(existingPlays.map((play) => [play.id, play]));
+  const finalUpdatedIds: string[] = [];
 
-  if (mappedStatus === 'approved') {
-    for (const play of existingPlays.filter((play) => updatedIds.includes(play.id))) {
+  for (const playId of updatedIds) {
+    const play = playById.get(playId);
+    if (!play) {
+      continue;
+    }
+    if (input.action === 'approve' && isModificationPlay(play)) {
+      await mergeModificationIntoParent(db, play, {
+        timestamp,
+        reviewLog: { operator: input.operator, note: reviewNote },
+      });
+      finalUpdatedIds.push(playId);
+      continue;
+    }
+
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE plays
+           SET status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .bind(mappedStatus, reviewNote, timestamp, timestamp, playId),
+      db
+        .prepare(
+          `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(makeId('review'), playId, input.action, input.operator, reviewNote, timestamp),
+    ]);
+    if (mappedStatus === 'approved') {
       await ensureTagByName(db, play.category);
     }
-  }
-
-  for (const playIdChunk of chunkItems(updatedIds, D1_BULK_REVIEW_PLAY_CHUNK_SIZE)) {
-    await db.batch(
-      playIdChunk.flatMap((playId) => [
-        db
-          .prepare(
-            `UPDATE plays
-             SET status = ?, review_note = ?, reviewed_at = ?, updated_at = ?
-             WHERE id = ?`,
-          )
-          .bind(mappedStatus, reviewNote, timestamp, timestamp, playId),
-        db
-          .prepare(
-            `INSERT INTO review_logs (id, play_id, action, operator, note, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(makeId('review'), playId, input.action, input.operator, reviewNote, timestamp),
-      ]),
-    );
+    finalUpdatedIds.push(playId);
   }
 
   return {
     action: input.action,
-    updatedIds,
+    updatedIds: finalUpdatedIds,
     skippedIds,
-    updatedCount: updatedIds.length,
+    updatedCount: finalUpdatedIds.length,
     skippedCount: skippedIds.length,
   };
 };

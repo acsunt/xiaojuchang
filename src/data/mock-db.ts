@@ -241,6 +241,114 @@ const applySeriesRename = (
     return play;
   });
 };
+
+const isModificationPlay = (play: Pick<Play, 'submissionType' | 'parentPlayId'>) =>
+  play.submissionType === 'modify' || Boolean(play.parentPlayId);
+
+const mergeModificationIntoParent = (
+  plays: Play[],
+  currentPlay: Play,
+  timestamp: string,
+): { plays: Play[]; merged: Play } => {
+  const nextTitle = currentPlay.title.trim();
+  const nextAuthorName = currentPlay.authorName.trim();
+  const nextCategory = currentPlay.category.trim();
+  const nextSummary = normalizeImportedSummary(currentPlay.summary);
+  const nextContent = currentPlay.content.trim();
+  if (!nextTitle) throw new Error('标题不能为空');
+  if (!nextAuthorName) throw new Error('署名不能为空');
+  if (!nextContent) throw new Error('正文不能为空');
+
+  const parentPlay = currentPlay.parentPlayId
+    ? (plays.find((play) => play.id === currentPlay.parentPlayId) ?? null)
+    : null;
+  const resolvedCategory = nextCategory || parentPlay?.category || currentPlay.category;
+  ensureTagName(resolvedCategory);
+
+  if (!parentPlay) {
+    const promoted: Play = {
+      ...currentPlay,
+      title: nextTitle,
+      authorName: nextAuthorName,
+      category: resolvedCategory,
+      summary: nextSummary,
+      content: nextContent,
+      status: 'approved',
+      submissionType: 'original',
+      parentPlayId: null,
+      reviewedAt: currentPlay.reviewedAt ?? timestamp,
+      reviewNote: currentPlay.reviewNote ?? '无备注',
+      updatedAt: timestamp,
+    };
+    return {
+      plays: plays.map((play) => (play.id === currentPlay.id ? promoted : play)),
+      merged: promoted,
+    };
+  }
+
+  let nextPlays = plays.map((play) =>
+    play.id === parentPlay.id
+      ? {
+          ...play,
+          title: nextTitle,
+          authorName: nextAuthorName,
+          category: resolvedCategory,
+          summary: nextSummary,
+          content: nextContent,
+          updatedAt: timestamp,
+        }
+      : play,
+  );
+  nextPlays = applySeriesRename(
+    nextPlays,
+    {
+      authorName: parentPlay.authorName,
+      title: parentPlay.title,
+      category: parentPlay.category,
+    },
+    { title: nextTitle, category: resolvedCategory },
+    timestamp,
+  );
+  nextPlays = nextPlays.filter((play) => play.id !== currentPlay.id);
+  const merged = nextPlays.find((play) => play.id === parentPlay.id);
+  if (!merged) {
+    throw new Error('原内容写入后读取失败');
+  }
+  return { plays: nextPlays, merged };
+};
+
+const healApprovedModifications = (plays: Play[]) => {
+  const approvedModifications = plays
+    .filter((play) => isModificationPlay(play) && play.status === 'approved')
+    .sort(
+      (left, right) =>
+        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+    );
+  if (approvedModifications.length === 0) {
+    return plays;
+  }
+
+  let nextPlays = plays;
+  let changed = false;
+  for (const play of approvedModifications) {
+    if (!nextPlays.some((item) => item.id === play.id)) {
+      continue;
+    }
+    const merged = mergeModificationIntoParent(nextPlays, play, play.updatedAt || now());
+    nextPlays = merged.plays;
+    changed = true;
+  }
+  return changed ? nextPlays : plays;
+};
+
+const persistHealedPlays = (plays: Play[]) => {
+  const healed = healApprovedModifications(plays);
+  if (healed !== plays) {
+    setPlays(healed);
+  }
+  return healed;
+};
+
 const getReviewLogs = () => readStore<ReviewLog[]>(REVIEW_LOG_STORE_KEY, seedReviewLogs);
 const setReviewLogs = (logs: ReviewLog[]) => writeStore(REVIEW_LOG_STORE_KEY, logs);
 const getRepoReviewLogs = () =>
@@ -390,13 +498,24 @@ const normalizeBackupTag = (tag: Tag): Tag => {
 
 export const mockDb = {
   getPublicPlays() {
-    return getPlays()
-      .filter((play) => play.status === 'approved')
+    return persistHealedPlays(getPlays())
+      .filter(
+        (play) =>
+          play.status === 'approved' && play.submissionType !== 'modify' && !play.parentPlayId,
+      )
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
 
   getPublicPlayById(id: string) {
-    return getPlays().find((play) => play.id === id && play.status === 'approved') ?? null;
+    return (
+      persistHealedPlays(getPlays()).find(
+        (play) =>
+          play.id === id &&
+          play.status === 'approved' &&
+          play.submissionType !== 'modify' &&
+          !play.parentPlayId,
+      ) ?? null
+    );
   },
 
   getTags() {
@@ -597,7 +716,9 @@ export const mockDb = {
   },
 
   getAdminPlays(status?: PlayStatus) {
-    const plays = getPlays().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const plays = persistHealedPlays(getPlays()).sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt),
+    );
     return status ? plays.filter((play) => play.status === status) : plays;
   },
 
@@ -841,7 +962,19 @@ export const mockDb = {
       throw new Error('内容不存在');
     }
 
-    setPlays(getPlays().filter((play) => play.id !== playId));
+    setPlays(
+      getPlays()
+        .filter((play) => play.id !== playId)
+        .map((play) =>
+          play.parentPlayId === playId
+            ? {
+                ...play,
+                parentPlayId: null,
+                submissionType: play.submissionType === 'modify' ? 'original' : play.submissionType,
+              }
+            : play,
+        ),
+    );
     setReviewLogs(getReviewLogs().filter((log) => log.playId !== playId));
   },
 
@@ -943,62 +1076,25 @@ export const mockDb = {
     const timestamp = now();
 
     /* 「修改」投稿独立分支:approve 合入原 play + 删本条;reject/offline 仅改状态。 */
-    if (currentPlay.submissionType === 'modify') {
+    if (isModificationPlay(currentPlay)) {
       if (action === 'approve') {
-        if (!currentPlay.parentPlayId) {
-          throw new Error('修改草稿缺少 parent_play_id,无法合入');
-        }
-        const parentPlay = this.getAdminPlayById(currentPlay.parentPlayId);
-        if (!parentPlay) {
-          throw new Error('原内容不存在,无法合入修改');
-        }
-        const nextTitle = currentPlay.title.trim();
-        const nextAuthorName = currentPlay.authorName.trim();
-        const nextCategory = currentPlay.category.trim() || parentPlay.category;
-        const nextSummary = normalizeImportedSummary(currentPlay.summary);
-        const nextContent = currentPlay.content.trim();
-        if (!nextTitle) throw new Error('标题不能为空');
-        if (!nextAuthorName) throw new Error('署名不能为空');
-        if (!nextContent) throw new Error('正文不能为空');
-        ensureTagName(nextCategory);
-        let nextPlays: Play[] = getPlays().map((play) => {
-          if (play.id === currentPlay.parentPlayId) {
-            return {
-              ...play,
-              title: nextTitle,
-              authorName: nextAuthorName,
-              category: nextCategory,
-              summary: nextSummary,
-              content: nextContent,
-              updatedAt: timestamp,
-            };
-          }
-          return play;
-        });
-        nextPlays = applySeriesRename(
-          nextPlays,
-          {
-            authorName: parentPlay.authorName,
-            title: parentPlay.title,
-            category: parentPlay.category,
-          },
-          { title: nextTitle, category: nextCategory },
+        const { plays: nextPlays, merged } = mergeModificationIntoParent(
+          getPlays(),
+          currentPlay,
           timestamp,
         );
-        /* 删除 modification 自身。 */
-        nextPlays = nextPlays.filter((play) => play.id !== playId);
         setPlays(nextPlays);
         const reviewLog: ReviewLog = {
           id: makeId('review'),
-          playId: currentPlay.parentPlayId,
+          playId: merged.id,
           action: 'approve',
           operator: session.username,
           note: `[修改] ${note || '无备注'}`,
           createdAt: timestamp,
-          playTitle: nextTitle,
+          playTitle: merged.title,
         };
         setReviewLogs([reviewLog, ...getReviewLogs()]);
-        return nextPlays.find((play) => play.id === currentPlay.parentPlayId) ?? null;
+        return merged;
       }
       /* reject / offline:仅修改本条 status。 */
       const updatedRow: Play = {
@@ -1703,53 +1799,69 @@ export const mockDb = {
     const timestamp = now();
     const reviewNote = note || '无备注';
     const idSet = new Set(normalizedIds);
-    const currentPlays = getPlays();
-    const updatedIds = currentPlays.filter((play) => idSet.has(play.id)).map((play) => play.id);
-    const skippedIds = normalizedIds.filter((id) => !updatedIds.includes(id));
+    let currentPlays = getPlays();
+    const existingIds = currentPlays.filter((play) => idSet.has(play.id)).map((play) => play.id);
+    const skippedIds = normalizedIds.filter((id) => !existingIds.includes(id));
     const mappedStatus: PlayStatus =
       action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'offline';
+    const nextLogs: ReviewLog[] = [];
+    const finalUpdatedIds: string[] = [];
 
-    if (mappedStatus === 'approved') {
-      currentPlays
-        .filter((play) => idSet.has(play.id))
-        .forEach((play) => ensureTagName(play.category));
-    }
+    for (const playId of existingIds) {
+      const play = currentPlays.find((item) => item.id === playId);
+      if (!play) {
+        continue;
+      }
+      if (action === 'approve' && isModificationPlay(play)) {
+        const merged = mergeModificationIntoParent(currentPlays, play, timestamp);
+        currentPlays = merged.plays;
+        nextLogs.push({
+          id: makeId('review'),
+          playId: merged.merged.id,
+          action,
+          operator: session.username,
+          note: `[修改] ${reviewNote}`,
+          createdAt: timestamp,
+          playTitle: merged.merged.title,
+        });
+        finalUpdatedIds.push(playId);
+        continue;
+      }
 
-    if (updatedIds.length > 0) {
-      const updatedIdSet = new Set(updatedIds);
-      const nextPlays = currentPlays.map((play) =>
-        updatedIdSet.has(play.id)
+      ensureTagName(play.category);
+      currentPlays = currentPlays.map((item) =>
+        item.id === playId
           ? {
-              ...play,
+              ...item,
               status: mappedStatus,
               reviewNote,
               reviewedAt: timestamp,
               updatedAt: timestamp,
             }
-          : play,
+          : item,
       );
-      const nextLogs = [
-        ...updatedIds.map((playId): ReviewLog => ({
-          id: makeId('review'),
-          playId,
-          action,
-          operator: session.username,
-          note: reviewNote,
-          createdAt: timestamp,
-          playTitle: currentPlays.find((play) => play.id === playId)?.title,
-        })),
-        ...getReviewLogs(),
-      ];
+      nextLogs.push({
+        id: makeId('review'),
+        playId,
+        action,
+        operator: session.username,
+        note: reviewNote,
+        createdAt: timestamp,
+        playTitle: play.title,
+      });
+      finalUpdatedIds.push(playId);
+    }
 
-      setPlays(nextPlays);
-      setReviewLogs(nextLogs);
+    if (finalUpdatedIds.length > 0) {
+      setPlays(currentPlays);
+      setReviewLogs([...nextLogs, ...getReviewLogs()]);
     }
 
     return {
       action,
-      updatedIds,
+      updatedIds: finalUpdatedIds,
       skippedIds,
-      updatedCount: updatedIds.length,
+      updatedCount: finalUpdatedIds.length,
       skippedCount: skippedIds.length,
     };
   },
