@@ -6035,6 +6035,14 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
   box-shadow: none;
 }
 
+.searchable-category-select .clearable-field .searchable-category-input {
+  padding-right: 46px;
+}
+
+.move-category-source-list {
+  max-height: min(52vh, 520px);
+}
+
 .searchable-category-input:focus,
 .searchable-category-select.open .searchable-category-input {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border) 48%);

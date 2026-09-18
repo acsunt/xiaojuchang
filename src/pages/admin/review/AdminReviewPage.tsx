@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAdminUpdateNotifier } from '../../../hooks/useUpdateNotifier';
 import { UpdatePromptModal } from '../../../components/UpdatePromptModal';
@@ -167,8 +168,9 @@ function SearchableCategorySelect({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
-  /* 菜单 fixed 坐标系 (与 CustomSelect 同款改造:避免被父级 stacking context 遮挡) */
+  /* 菜单挂到 document.body + fixed 坐标，避免被审核面板 overflow / stacking context 裁掉。 */
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
@@ -182,7 +184,18 @@ function SearchableCategorySelect({
       if (!rect) {
         return;
       }
-      setMenuPos({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+      const viewportPadding = 12;
+      const maxHeight = Math.min(260, window.innerHeight - viewportPadding * 2);
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+      const openUpward = spaceBelow < 160 && rect.top > spaceBelow;
+      const top = openUpward
+        ? Math.max(viewportPadding, rect.top - maxHeight - 8)
+        : rect.bottom + 8;
+      setMenuPos({
+        top,
+        left: rect.left,
+        width: rect.width,
+      });
     };
 
     updatePosition();
@@ -201,9 +214,11 @@ function SearchableCategorySelect({
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+      setOpen(false);
     };
 
     const handleEscape = (event: globalThis.KeyboardEvent) => {
@@ -235,54 +250,70 @@ function SearchableCategorySelect({
       }
       ref={rootRef}
     >
-      <input
-        ref={inputRef}
-        className="searchable-category-input"
-        onChange={(event) => {
-          onChange(event.target.value);
+      <ClearableField
+        onClear={() => {
+          onChange('');
           setOpen(true);
+          inputRef.current?.focus();
         }}
-        onFocus={() => setOpen(true)}
-        placeholder={placeholder}
-        value={value}
-      />
-      {open && menuPos ? (
-        <div
-          className="custom-select-menu searchable-category-menu"
-          role="listbox"
-          aria-label="选择分类"
-          style={{
-            position: 'fixed',
-            top: menuPos.top,
-            left: menuPos.left,
-            width: menuPos.width,
+        visible={Boolean(value)}
+      >
+        <input
+          ref={inputRef}
+          autoComplete="off"
+          className="searchable-category-input"
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
           }}
-        >
-          {filtered.length > 0 ? (
-            filtered.map((option) => (
-              <button
-                aria-selected={option === value}
-                className={
-                  option === value ? 'custom-select-option active' : 'custom-select-option'
-                }
-                key={option}
-                onClick={() => {
-                  onChange(option);
-                  setOpen(false);
-                }}
-                role="option"
-                type="button"
-              >
-                {option}
-              </button>
-            ))
-          ) : (
-            <div className="searchable-category-empty">
-              {value.trim() ? '没有匹配的分类，回车保存为自定义分类' : '暂无分类，直接输入可自定义'}
-            </div>
-          )}
-        </div>
-      ) : null}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          value={value}
+        />
+      </ClearableField>
+      {open && menuPos && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="custom-select-menu searchable-category-menu"
+              ref={menuRef}
+              role="listbox"
+              aria-label="选择分类"
+              style={{
+                position: 'fixed',
+                top: menuPos.top,
+                left: menuPos.left,
+                width: menuPos.width,
+              }}
+            >
+              {filtered.length > 0 ? (
+                filtered.map((option) => (
+                  <button
+                    aria-selected={option === value}
+                    className={
+                      option === value ? 'custom-select-option active' : 'custom-select-option'
+                    }
+                    key={option}
+                    onClick={() => {
+                      onChange(option);
+                      setOpen(false);
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {option}
+                  </button>
+                ))
+              ) : (
+                <div className="searchable-category-empty">
+                  {value.trim()
+                    ? '没有匹配的分类，可直接使用当前输入作为自定义分类'
+                    : '暂无分类，直接输入可自定义'}
+                </div>
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -560,6 +591,16 @@ type AdminPanel =
   | 'similar'
   | 'moveCategory';
 type AuditLogCategory = 'plays' | 'repos' | 'continuations';
+type MoveCategorySortMode = 'name' | 'count';
+
+const MOVE_CATEGORY_SORT_STORAGE_KEY = 'mini-theater:admin-move-category-sort';
+const readMoveCategorySortMode = (): MoveCategorySortMode => {
+  if (typeof window === 'undefined') {
+    return 'name';
+  }
+  const saved = window.localStorage.getItem(MOVE_CATEGORY_SORT_STORAGE_KEY);
+  return saved === 'count' || saved === 'name' ? saved : 'name';
+};
 
 type SubmissionDiffItem = {
   label: string;
@@ -1123,6 +1164,15 @@ export function AdminReviewPage() {
   const [moveCategoryMessage, setMoveCategoryMessage] = useState('');
   const [moveCategoryError, setMoveCategoryError] = useState('');
   const [moveSourceCategories, setMoveSourceCategories] = useState<string[]>([]);
+  const [moveSourceKeyword, setMoveSourceKeyword] = useState('');
+  const [moveCategorySortMode, setMoveCategorySortModeState] =
+    useState<MoveCategorySortMode>(readMoveCategorySortMode);
+  const setMoveCategorySortMode = (next: MoveCategorySortMode) => {
+    setMoveCategorySortModeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(MOVE_CATEGORY_SORT_STORAGE_KEY, next);
+    }
+  };
   const [moveTargetCategory, setMoveTargetCategory] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState('');
@@ -1734,12 +1784,20 @@ export function AdminReviewPage() {
       const name = play.category?.trim() || DEFAULT_CATEGORY;
       counts.set(name, (counts.get(name) ?? 0) + 1);
     });
-    return [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort(
-        (left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'),
-      );
+    return [...counts.entries()].map(([name, count]) => ({ name, count }));
   }, [allPlays]);
+  const visibleMoveCategoryStats = useMemo(() => {
+    const normalizedKeyword = moveSourceKeyword.trim().toLowerCase();
+    const filtered = normalizedKeyword
+      ? moveCategoryStats.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
+      : moveCategoryStats;
+    return [...filtered].sort((left, right) => {
+      if (moveCategorySortMode === 'count') {
+        return right.count - left.count || left.name.localeCompare(right.name, 'zh-CN');
+      }
+      return left.name.localeCompare(right.name, 'zh-CN');
+    });
+  }, [moveCategorySortMode, moveCategoryStats, moveSourceKeyword]);
   const moveCategoryTargetIds = useMemo(() => {
     if (moveSourceCategories.length === 0) {
       return [];
@@ -6711,44 +6769,84 @@ export function AdminReviewPage() {
                       <strong>源分类</strong>
                       <span className="content-meta">
                         当前已加载 {allPlays.length} 篇，共 {moveCategoryStats.length} 个分类
+                        {moveSourceKeyword.trim()
+                          ? `，匹配 ${visibleMoveCategoryStats.length} 个`
+                          : ''}
                       </span>
                     </div>
-                    <div className="plaza-export-modal-list">
-                      {moveCategoryStats.map((item) => {
-                        const checked = moveSourceCategories.includes(item.name);
-                        return (
-                          <label
-                            className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
-                            key={item.name}
-                          >
-                            <input
-                              checked={checked}
-                              onChange={() =>
-                                setMoveSourceCategories((current) =>
-                                  current.includes(item.name)
-                                    ? current.filter((value) => value !== item.name)
-                                    : [...current, item.name],
-                                )
-                              }
-                              type="checkbox"
-                            />
-                            <span>
-                              {item.name} · {item.count} 篇
-                            </span>
-                          </label>
-                        );
-                      })}
+                    <ClearableField
+                      onClear={() => setMoveSourceKeyword('')}
+                      visible={Boolean(moveSourceKeyword)}
+                    >
+                      <input
+                        onChange={(event) => setMoveSourceKeyword(event.target.value)}
+                        placeholder="搜索源分类"
+                        value={moveSourceKeyword}
+                      />
+                    </ClearableField>
+                    <div
+                      className="inline-actions wrap-mobile"
+                      role="group"
+                      aria-label="源分类排序"
+                    >
+                      <button
+                        className={moveCategorySortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setMoveCategorySortMode('name')}
+                        type="button"
+                      >
+                        按名称首字母
+                      </button>
+                      <button
+                        className={
+                          moveCategorySortMode === 'count' ? 'tab-chip active' : 'tab-chip'
+                        }
+                        onClick={() => setMoveCategorySortMode('count')}
+                        type="button"
+                      >
+                        按小剧场数量
+                      </button>
+                    </div>
+                    <div className="plaza-export-modal-list move-category-source-list">
+                      {visibleMoveCategoryStats.length > 0 ? (
+                        visibleMoveCategoryStats.map((item) => {
+                          const checked = moveSourceCategories.includes(item.name);
+                          return (
+                            <label
+                              className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                              key={item.name}
+                            >
+                              <input
+                                checked={checked}
+                                onChange={() =>
+                                  setMoveSourceCategories((current) =>
+                                    current.includes(item.name)
+                                      ? current.filter((value) => value !== item.name)
+                                      : [...current, item.name],
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                              <span>
+                                {item.name} · {item.count} 篇
+                              </span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <div className="content-meta">没有匹配的源分类</div>
+                      )}
                     </div>
 
                     <div className="stack-gap-sm">
                       <strong>目标分类</strong>
                       <span className="content-meta">
-                        留空则归入「未分类」（{DEFAULT_CATEGORY}）
+                        输入即可搜索现有分类，也可直接使用当前输入作为自定义分类；留空则归入「未分类」（
+                        {DEFAULT_CATEGORY}）
                       </span>
                     </div>
                     <SearchableCategorySelect
                       options={moveCategoryStats.map((item) => item.name)}
-                      placeholder={DEFAULT_CATEGORY}
+                      placeholder="搜索或输入目标分类"
                       value={moveTargetCategory}
                       onChange={setMoveTargetCategory}
                     />
@@ -6769,6 +6867,7 @@ export function AdminReviewPage() {
                         disabled={moveCategoryBusy}
                         onClick={() => {
                           setMoveSourceCategories([]);
+                          setMoveSourceKeyword('');
                           setMoveTargetCategory('');
                           setMoveCategoryError('');
                           setMoveCategoryMessage('');
