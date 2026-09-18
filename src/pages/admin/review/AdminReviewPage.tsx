@@ -174,7 +174,7 @@ function SearchableCategorySelect({
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !value.trim()) {
       setMenuPos(null);
       return;
     }
@@ -206,7 +206,7 @@ function SearchableCategorySelect({
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
     };
-  }, [open]);
+  }, [open, value]);
 
   useEffect(() => {
     if (!open) {
@@ -237,14 +237,16 @@ function SearchableCategorySelect({
   }, [open]);
 
   const trimmed = value.trim().toLowerCase();
-  const filtered = trimmed
+  const hasQuery = trimmed.length > 0;
+  const filtered = hasQuery
     ? options.filter((option) => option.toLowerCase().includes(trimmed))
-    : options;
+    : [];
+  const menuOpen = open && hasQuery;
 
   return (
     <div
       className={
-        open
+        menuOpen
           ? 'custom-select open searchable-category-select'
           : 'custom-select searchable-category-select'
       }
@@ -253,7 +255,7 @@ function SearchableCategorySelect({
       <ClearableField
         onClear={() => {
           onChange('');
-          setOpen(true);
+          setOpen(false);
           inputRef.current?.focus();
         }}
         visible={Boolean(value)}
@@ -263,15 +265,20 @@ function SearchableCategorySelect({
           autoComplete="off"
           className="searchable-category-input"
           onChange={(event) => {
-            onChange(event.target.value);
-            setOpen(true);
+            const nextValue = event.target.value;
+            onChange(nextValue);
+            setOpen(nextValue.trim().length > 0);
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            if (value.trim()) {
+              setOpen(true);
+            }
+          }}
           placeholder={placeholder}
           value={value}
         />
       </ClearableField>
-      {open && menuPos && typeof document !== 'undefined'
+      {menuOpen && menuPos && typeof document !== 'undefined'
         ? createPortal(
             <div
               className="custom-select-menu searchable-category-menu"
@@ -305,9 +312,7 @@ function SearchableCategorySelect({
                 ))
               ) : (
                 <div className="searchable-category-empty">
-                  {value.trim()
-                    ? '没有匹配的分类，可直接使用当前输入作为自定义分类'
-                    : '暂无分类，直接输入可自定义'}
+                  没有匹配的分类，可直接使用当前输入作为自定义分类
                 </div>
               )}
             </div>,
