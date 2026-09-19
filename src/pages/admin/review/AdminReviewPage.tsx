@@ -1165,6 +1165,7 @@ export function AdminReviewPage() {
   const [tagSortDraft, setTagSortDraft] = useState<Tag[]>([]);
   const [tagSortSnapshot, setTagSortSnapshot] = useState<Tag[]>([]);
   const [tagKeyword, setTagKeyword] = useState('');
+  const [emptyTagDeleteOpen, setEmptyTagDeleteOpen] = useState(false);
   const [tagLibrarySortMode, setTagLibrarySortModeState] =
     useState<TagLibrarySortMode>(readTagLibrarySortMode);
   const setTagLibrarySortMode = (next: TagLibrarySortMode) => {
@@ -1819,6 +1820,12 @@ export function AdminReviewPage() {
       return left.name.localeCompare(right.name, 'zh-CN');
     });
   }, [moveCategorySortMode, moveCategoryStats, moveSourceKeyword]);
+  const moveTargetCategoryOptions = useMemo(() => {
+    const selectedSourceSet = new Set(moveSourceCategories);
+    return moveCategoryStats
+      .map((item) => item.name)
+      .filter((name) => !selectedSourceSet.has(name));
+  }, [moveCategoryStats, moveSourceCategories]);
   const moveCategoryTargetIds = useMemo(() => {
     if (moveSourceCategories.length === 0) {
       return [];
@@ -2235,6 +2242,13 @@ export function AdminReviewPage() {
       return left.name.localeCompare(right.name, 'zh-CN');
     });
   }, [isTagSorting, tagKeyword, tagLibrarySortMode, tagPlayCountMap, tagSortDraft, tags]);
+  const emptyPlayTags = useMemo(
+    () =>
+      [...tags]
+        .filter((tag) => (tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0) === 0)
+        .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')),
+    [tagPlayCountMap, tags],
+  );
 
   useEffect(() => {
     if (!selectedPlay) {
@@ -3750,6 +3764,49 @@ export function AdminReviewPage() {
     } catch (reason) {
       setTagMessageTone('error');
       setTagMessage(reason instanceof Error ? reason.message : '标签删除失败');
+    } finally {
+      setTagSaving(false);
+    }
+  };
+
+  const handleDeleteEmptyPlayTags = async () => {
+    if (emptyPlayTags.length === 0) {
+      setEmptyTagDeleteOpen(false);
+      return;
+    }
+
+    const targetTags = [...emptyPlayTags];
+    setTagSaving(true);
+    setTagMessage('');
+    setEmptyTagDeleteOpen(false);
+    try {
+      let deleted = 0;
+      let failed = 0;
+      for (const tag of targetTags) {
+        try {
+          await playApi.deleteAdminTag(tag.id);
+          deleted += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+
+      if (editingTagId && targetTags.some((tag) => tag.id === editingTagId)) {
+        cancelEditTag();
+      }
+      await loadTags();
+      await load(selectedStatus, { silent: true });
+
+      if (failed > 0) {
+        setTagMessageTone('error');
+        setTagMessage(`已删除 ${deleted} 个 0 篇标签，另有 ${failed} 个删除失败`);
+      } else {
+        setTagMessageTone('success');
+        setTagMessage(`已删除 ${deleted} 个 0 篇小剧场标签`);
+      }
+    } catch (reason) {
+      setTagMessageTone('error');
+      setTagMessage(reason instanceof Error ? reason.message : '删除 0 篇标签失败');
     } finally {
       setTagSaving(false);
     }
@@ -6908,7 +6965,7 @@ export function AdminReviewPage() {
                       </span>
                     </div>
                     <SearchableCategorySelect
-                      options={moveCategoryStats.map((item) => item.name)}
+                      options={moveTargetCategoryOptions}
                       placeholder="搜索或输入目标分类"
                       value={moveTargetCategory}
                       onChange={setMoveTargetCategory}
@@ -7867,14 +7924,26 @@ export function AdminReviewPage() {
                     placeholder="输入新标签名"
                   />
                 </label>
-                <button
-                  className="button primary"
-                  disabled={tagSaving || isTagSorting}
-                  onClick={() => void handleCreateTag()}
-                  type="button"
-                >
-                  新增标签
-                </button>
+                <div className="inline-actions wrap-mobile tag-library-create-row">
+                  <button
+                    className="button primary"
+                    disabled={tagSaving || isTagSorting}
+                    onClick={() => void handleCreateTag()}
+                    type="button"
+                  >
+                    新增标签
+                  </button>
+                  <button
+                    className="button danger"
+                    disabled={
+                      tagSaving || isTagSorting || !hasLoadedAllPlays || emptyPlayTags.length === 0
+                    }
+                    onClick={() => setEmptyTagDeleteOpen(true)}
+                    type="button"
+                  >
+                    删除0篇小剧场标签
+                  </button>
+                </div>
 
                 <label className="tag-library-search">
                   <span>搜索标签</span>
@@ -8065,6 +8134,63 @@ export function AdminReviewPage() {
           ) : null}
         </section>
       </section>
+
+      {emptyTagDeleteOpen ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (!tagSaving) {
+              setEmptyTagDeleteOpen(false);
+            }
+          }}
+        >
+          <div
+            aria-labelledby="empty-tag-delete-title"
+            aria-modal="true"
+            className="modal-panel stack-gap-md empty-tag-delete-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <h3 id="empty-tag-delete-title" className="modal-title">
+              删除0篇小剧场标签
+            </h3>
+            <p className="sub-copy">
+              共 {emptyPlayTags.length}{' '}
+              个标签当前没有对应小剧场。确认后会从词表中删除，不影响现有内容。
+            </p>
+            {emptyPlayTags.length > 0 ? (
+              <div className="plaza-export-modal-list empty-tag-delete-list">
+                {emptyPlayTags.map((tag) => (
+                  <div className="empty-tag-delete-item" key={tag.id}>
+                    {tag.name}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="content-meta">当前没有 0 篇小剧场标签。</div>
+            )}
+            <div className="inline-actions modal-action-row">
+              <button
+                className="button secondary"
+                disabled={tagSaving}
+                onClick={() => setEmptyTagDeleteOpen(false)}
+                type="button"
+              >
+                取消
+              </button>
+              <button
+                className="button danger"
+                disabled={tagSaving || emptyPlayTags.length === 0}
+                onClick={() => void handleDeleteEmptyPlayTags()}
+                type="button"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {backupRestoreConfirmOpen ? (
         <div className="modal-overlay" role="presentation" onClick={handleCancelRestoreBackup}>

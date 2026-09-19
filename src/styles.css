@@ -4203,6 +4203,25 @@ body.tag-sort-dragging {
   align-items: center;
 }
 
+.tag-library-create-row {
+  align-items: stretch;
+}
+
+.empty-tag-delete-modal {
+  max-width: min(560px, calc(100vw - 32px));
+}
+
+.empty-tag-delete-list {
+  max-height: min(360px, 50vh);
+}
+
+.empty-tag-delete-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .drag-toggle-button {
   min-width: 112px;
 }
@@ -5062,8 +5081,15 @@ body[data-mode='night'] .diff-segment-added {
   }
 
   .tag-card-actions .button,
-  .tag-library-title-row .button {
+  .tag-library-title-row .button,
+  .tag-library-create-row .button {
     width: auto;
+  }
+
+  .tag-library-create-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .tag-card-actions {
