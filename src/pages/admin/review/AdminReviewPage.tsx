@@ -597,15 +597,21 @@ type AdminPanel =
   | 'moveCategory';
 type AuditLogCategory = 'plays' | 'repos' | 'continuations';
 type MoveCategorySortMode = 'name' | 'count';
+type TagLibrarySortMode = 'name' | 'count';
 
 const MOVE_CATEGORY_SORT_STORAGE_KEY = 'mini-theater:admin-move-category-sort';
-const readMoveCategorySortMode = (): MoveCategorySortMode => {
+const TAG_LIBRARY_SORT_STORAGE_KEY = 'mini-theater:admin-tag-library-sort';
+const readStoredNameCountSortMode = (storageKey: string): MoveCategorySortMode => {
   if (typeof window === 'undefined') {
     return 'name';
   }
-  const saved = window.localStorage.getItem(MOVE_CATEGORY_SORT_STORAGE_KEY);
+  const saved = window.localStorage.getItem(storageKey);
   return saved === 'count' || saved === 'name' ? saved : 'name';
 };
+const readMoveCategorySortMode = (): MoveCategorySortMode =>
+  readStoredNameCountSortMode(MOVE_CATEGORY_SORT_STORAGE_KEY);
+const readTagLibrarySortMode = (): TagLibrarySortMode =>
+  readStoredNameCountSortMode(TAG_LIBRARY_SORT_STORAGE_KEY);
 
 type SubmissionDiffItem = {
   label: string;
@@ -1158,6 +1164,15 @@ export function AdminReviewPage() {
   const [isTagSorting, setIsTagSorting] = useState(false);
   const [tagSortDraft, setTagSortDraft] = useState<Tag[]>([]);
   const [tagSortSnapshot, setTagSortSnapshot] = useState<Tag[]>([]);
+  const [tagKeyword, setTagKeyword] = useState('');
+  const [tagLibrarySortMode, setTagLibrarySortModeState] =
+    useState<TagLibrarySortMode>(readTagLibrarySortMode);
+  const setTagLibrarySortMode = (next: TagLibrarySortMode) => {
+    setTagLibrarySortModeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TAG_LIBRARY_SORT_STORAGE_KEY, next);
+    }
+  };
   const [draggingTagId, setDraggingTagId] = useState('');
   const [isMobileReviewViewport, setIsMobileReviewViewport] = useState(false);
   const [isMobilePendingExpanded, setIsMobilePendingExpanded] = useState(false);
@@ -1166,6 +1181,7 @@ export function AdminReviewPage() {
   const [isMobileRepoExpanded, setIsMobileRepoExpanded] = useState(false);
   const [showJumpButton, setShowJumpButton] = useState(true);
   const [moveCategoryBusy, setMoveCategoryBusy] = useState(false);
+  const [moveCategoryProgress, setMoveCategoryProgress] = useState<BulkReviewProgress | null>(null);
   const [moveCategoryMessage, setMoveCategoryMessage] = useState('');
   const [moveCategoryError, setMoveCategoryError] = useState('');
   const [moveSourceCategories, setMoveSourceCategories] = useState<string[]>([]);
@@ -2187,7 +2203,38 @@ export function AdminReviewPage() {
    * 避免管理员误以为导入了 repo / 续写 / 标签(后端改造另起 PR)。 */
   const backupRestoreAvailable = isAdminBackupLocalOnly();
 
-  const displayTags = isTagSorting ? tagSortDraft : tags;
+  const tagPlayCountMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    allPlays.forEach((play) => {
+      const name = play.category?.trim();
+      if (!name) {
+        return;
+      }
+      const key = name.toLowerCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return counts;
+  }, [allPlays]);
+  const displayTags = useMemo(() => {
+    const source = isTagSorting ? tagSortDraft : tags;
+    if (isTagSorting) {
+      return source;
+    }
+
+    const normalizedKeyword = tagKeyword.trim().toLowerCase();
+    const filtered = normalizedKeyword
+      ? source.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword))
+      : source;
+
+    return [...filtered].sort((left, right) => {
+      if (tagLibrarySortMode === 'count') {
+        const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
+        const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
+        return rightCount - leftCount || left.name.localeCompare(right.name, 'zh-CN');
+      }
+      return left.name.localeCompare(right.name, 'zh-CN');
+    });
+  }, [isTagSorting, tagKeyword, tagLibrarySortMode, tagPlayCountMap, tagSortDraft, tags]);
 
   useEffect(() => {
     if (!selectedPlay) {
@@ -3881,20 +3928,28 @@ export function AdminReviewPage() {
       return;
     }
 
+    const targetIds = [...moveCategoryTargetIds];
+    const progressLabel = `正在移动到「${label}」`;
     setMoveCategoryBusy(true);
     setMoveCategoryError('');
     setMoveCategoryMessage('');
+    setMoveCategoryProgress({ completed: 0, total: targetIds.length, label: progressLabel });
 
     let completed = 0;
     let failed = 0;
     try {
-      for (const playId of moveCategoryTargetIds) {
+      for (const playId of targetIds) {
         try {
           await playApi.updateAdminPlay(playId, { category: targetCategory });
           completed += 1;
         } catch {
           failed += 1;
         }
+        setMoveCategoryProgress({
+          completed: completed + failed,
+          total: targetIds.length,
+          label: progressLabel,
+        });
       }
 
       await Promise.all([load(selectedStatus, { silent: true }), loadAllPlays()]);
@@ -4228,7 +4283,10 @@ export function AdminReviewPage() {
                   }
                   onClick={() => {
                     setActivePanel(panel.value);
-                    if (panel.value === 'moveCategory' && !hasLoadedAllPlays) {
+                    if (
+                      (panel.value === 'moveCategory' || panel.value === 'tags') &&
+                      !hasLoadedAllPlays
+                    ) {
                       void loadAllPlays();
                     }
                   }}
@@ -6856,17 +6914,28 @@ export function AdminReviewPage() {
                       onChange={setMoveTargetCategory}
                     />
 
-                    <div className="inline-actions wrap-mobile">
-                      <button
-                        className="button primary"
-                        disabled={moveCategoryBusy || moveCategoryTargetIds.length === 0}
-                        onClick={() => void handleBulkMoveCategory()}
-                        type="button"
-                      >
-                        {moveCategoryBusy
-                          ? '移动中…'
-                          : `移动 ${moveCategoryTargetIds.length} 篇到「${moveTargetCategory.trim() || DEFAULT_CATEGORY}」`}
-                      </button>
+                    <div className="stack-gap-sm admin-bulk-review-progress-block">
+                      {moveCategoryProgress ? (
+                        <div className="admin-bulk-review-progress" role="status">
+                          <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                            <strong>{moveCategoryProgress.label}</strong>
+                            <span className="content-meta">
+                              已完成 {moveCategoryProgress.completed} / {moveCategoryProgress.total}
+                            </span>
+                          </div>
+                          <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                            <div
+                              className="admin-bulk-review-progress-fill"
+                              style={{
+                                width: `${moveCategoryProgress.total === 0 ? 0 : (moveCategoryProgress.completed / moveCategoryProgress.total) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="inline-actions move-category-action-row">
                       <button
                         className="button ghost"
                         disabled={moveCategoryBusy}
@@ -6876,10 +6945,21 @@ export function AdminReviewPage() {
                           setMoveTargetCategory('');
                           setMoveCategoryError('');
                           setMoveCategoryMessage('');
+                          setMoveCategoryProgress(null);
                         }}
                         type="button"
                       >
                         重置
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={moveCategoryBusy || moveCategoryTargetIds.length === 0}
+                        onClick={() => void handleBulkMoveCategory()}
+                        type="button"
+                      >
+                        {moveCategoryBusy
+                          ? `移动中 ${moveCategoryProgress?.completed ?? 0}/${moveCategoryProgress?.total ?? moveCategoryTargetIds.length}`
+                          : `移动 ${moveCategoryTargetIds.length} 篇到「${moveTargetCategory.trim() || DEFAULT_CATEGORY}」`}
                       </button>
                     </div>
 
@@ -7796,6 +7876,18 @@ export function AdminReviewPage() {
                   新增标签
                 </button>
 
+                <label className="tag-library-search">
+                  <span>搜索标签</span>
+                  <ClearableField onClear={() => setTagKeyword('')} visible={Boolean(tagKeyword)}>
+                    <input
+                      disabled={isTagSorting}
+                      onChange={(event) => setTagKeyword(event.target.value)}
+                      placeholder="搜索标签"
+                      value={tagKeyword}
+                    />
+                  </ClearableField>
+                </label>
+
                 {tagMessage ? (
                   <div className={`feedback ${tagMessageTone}`}>{tagMessage}</div>
                 ) : null}
@@ -7824,12 +7916,34 @@ export function AdminReviewPage() {
                       </button>
                     ) : null}
                   </div>
-                  <span className="content-meta">共 {displayTags.length} 个</span>
+                  <span className="content-meta">
+                    共 {tags.length} 个{tagKeyword.trim() ? `，匹配 ${displayTags.length} 个` : ''}
+                    {hasLoadedAllPlays ? '' : ' · 正在统计小剧场数量'}
+                  </span>
+                </div>
+                <div className="inline-actions wrap-mobile" role="group" aria-label="标签排序">
+                  <button
+                    className={tagLibrarySortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
+                    disabled={isTagSorting}
+                    onClick={() => setTagLibrarySortMode('name')}
+                    type="button"
+                  >
+                    按标签首字母
+                  </button>
+                  <button
+                    className={tagLibrarySortMode === 'count' ? 'tab-chip active' : 'tab-chip'}
+                    disabled={isTagSorting}
+                    onClick={() => setTagLibrarySortMode('count')}
+                    type="button"
+                  >
+                    按小剧场数量
+                  </button>
                 </div>
 
                 <div className={isTagSorting ? 'tag-admin-list is-sorting' : 'tag-admin-list'}>
                   {displayTags.map((tag) => {
                     const editing = editingTagId === tag.id;
+                    const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
 
                     return (
                       <article
@@ -7885,6 +7999,7 @@ export function AdminReviewPage() {
                                 #{tag.sortOrder + 1}
                               </span>
                               <strong>{tag.name}</strong>
+                              <span className="content-meta">{playCount} 篇</span>
                             </div>
                             {!isTagSorting ? (
                               <span className="content-meta">
@@ -7940,7 +8055,9 @@ export function AdminReviewPage() {
                     );
                   })}
                   {displayTags.length === 0 ? (
-                    <div className="empty-panel">当前还没有可用标签。</div>
+                    <div className="empty-panel">
+                      {tags.length === 0 ? '当前还没有可用标签。' : '没有匹配的标签。'}
+                    </div>
                   ) : null}
                 </div>
               </section>
