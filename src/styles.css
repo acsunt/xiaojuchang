@@ -4790,9 +4790,24 @@ body[data-mode='night'] .diff-segment-added {
     gap: 4px;
   }
 
+  .header-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .header-actions::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   .top-nav {
-    flex-wrap: wrap;
-    row-gap: 6px;
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 0;
+    overflow-x: visible;
   }
 
   .app-header,
@@ -4805,16 +4820,22 @@ body[data-mode='night'] .diff-segment-added {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 36px;
-    padding: 7px 10px;
-    font-size: calc(13px * var(--text-scale, 1));
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: calc(12.5px * var(--text-scale, 1));
     min-width: 0;
     line-height: 1.2;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
-  .header-theme-toggle {
-    width: 42px;
-    min-width: 42px;
+  .header-theme-toggle,
+  .header-toolbar-toggle.header-toolbar-toggle-icon,
+  .header-icon-nav {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
   }
 
   .card-grid,
@@ -5169,14 +5190,24 @@ body[data-mode='night'] .diff-segment-added {
   }
 
   .app-header {
-    flex-wrap: wrap;
-    gap: 12px;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
 
   .header-actions {
     width: 100%;
     max-width: 100%;
-    gap: 6px;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .header-actions::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 
   .sidebar-head {
@@ -5339,13 +5370,14 @@ body[data-mode='night'] .diff-segment-added {
   }
 
   .top-nav {
-    width: auto;
+    width: max-content;
+    min-width: 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    gap: 4px;
+    overflow-x: visible;
     padding-top: 8px;
     padding-right: 8px;
     /* 孟菲斯 / 等距插画 / 渐变风格 等主题的按钮有 5-8px 的下方阴影,
@@ -5357,13 +5389,13 @@ body[data-mode='night'] .diff-segment-added {
     margin-bottom: -12px;
   }
 
-  .top-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .header-theme-toggle {
-    width: 42px;
-    min-width: 42px;
+  .header-theme-toggle,
+  .header-toolbar-toggle.header-toolbar-toggle-icon,
+  .header-icon-nav {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
     border-radius: 999px;
   }
 
@@ -8892,7 +8924,7 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 
 /* 工具栏:第一行所有 trigger 横向排列,展开的 body 自动换行到下一行整片 */
 .plaza-toolbar-v2 > .plaza-pill-body {
-  flex: 0 0 100%;
+  flex: 0 0 auto;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -9056,29 +9088,26 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   scrollbar-width: none;
 }
 
-.plaza-top-nav-row > .plaza-page-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.plaza-top-nav-row > .plaza-top-nav-trailing {
+.plaza-top-nav-row > .plaza-pill-group.is-inline:last-child {
   margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
-/* 工具栏容器 —— 在 hero-panel 内横向排列各入口 */
+/* 工具栏容器 —— 触发器单独成行，二级菜单在下方整行展开 */
 .plaza-toolbar-v2 {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
-  flex-wrap: wrap;
   min-width: 0;
 }
 
-.plaza-toolbar-v2 > .plaza-pill-group.is-block {
+.plaza-toolbar-triggers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
   width: 100%;
-  margin-top: 4px;
 }
 
 /* 下方控制面板整体栅格 */
@@ -9262,6 +9291,61 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
   flex-wrap: wrap;
 }
 
+@media (max-width: 720px) {
+  .app-header {
+    flex-wrap: nowrap;
+  }
+
+  .header-actions,
+  .top-nav {
+    flex-wrap: nowrap;
+  }
+
+  .header-actions {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .header-actions::-webkit-scrollbar,
+  .top-nav::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .header-actions {
+    width: 100%;
+    max-width: 100%;
+    gap: 4px;
+  }
+
+  .top-nav {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 0;
+    overflow-x: visible;
+    gap: 4px;
+  }
+
+  .top-nav .nav-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: calc(12.5px * var(--text-scale, 1));
+  }
+
+  .header-theme-toggle,
+  .header-toolbar-toggle.header-toolbar-toggle-icon,
+  .header-icon-nav {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    flex: 0 0 auto;
+  }
+}
+
 .header-icon-nav {
   display: inline-flex;
   align-items: center;
@@ -9350,22 +9434,42 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 /* 工具栏手机端：trigger 紧密排在第一行，body 强制换到下一行整片 */
 @media (max-width: 720px) {
   .plaza-toolbar-v2 {
-    /* 改为 wrap,允许 .plaza-pill-body 通过 flex-basis: 100% 换到下一行整片;
-     * 不再使用 nowrap + overflow-x:auto 的横向滚动方案,
-     * 因为平铺模式下二级菜单需要换行展示,横向滚动会把它推到屏幕外。 */
-    flex-wrap: wrap;
+    gap: 6px;
     overflow-x: visible;
+  }
+
+  .plaza-toolbar-triggers {
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
     scrollbar-width: none;
+    -ms-overflow-style: none;
   }
 
-  .plaza-toolbar-v2::-webkit-scrollbar {
+  .plaza-toolbar-triggers::-webkit-scrollbar {
     display: none;
+    width: 0;
+    height: 0;
   }
 
-  /* mobile 下 trigger 们仍然尽量单行排开(flex: 0 0 auto);
-   * body 仍然继承桌面端的 flex: 0 0 100% 强制换行整片。 */
+  .plaza-toolbar-triggers > .plaza-pill-trigger {
+    flex: 0 0 auto;
+  }
+
+  .plaza-toolbar-triggers .plaza-pill-trigger.is-icon-only {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  .plaza-toolbar-triggers .plaza-pill-trigger.is-pill-icon {
+    min-height: 30px;
+    padding: 0 8px;
+    gap: 2px;
+  }
+
   .plaza-toolbar-v2 > .plaza-pill-body {
-    flex: 0 0 100%;
+    flex: 0 0 auto;
     width: 100%;
   }
 }

@@ -2123,145 +2123,148 @@ export function PlayListPage() {
               <div className="stack-gap-sm plaza-toolbar-stack">
                 {/* 工具栏 v2：随机 / 折叠独立，分组入口按"区域内互斥"展开 */}
                 <div className="plaza-toolbar-v2" role="group" aria-label="广场操作工具栏">
-                  {/* 折叠：开关，独立，最左侧，纯图标（合并/展开箭头类） */}
-                  <button
-                    aria-pressed={controlsCollapsed}
-                    aria-label={
-                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
-                    }
-                    className={
-                      controlsCollapsed
-                        ? 'plaza-pill-trigger is-icon-only is-open'
-                        : 'plaza-pill-trigger is-icon-only'
-                    }
-                    onClick={() => setControlsCollapsed((current) => !current)}
-                    title={
-                      controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
-                    }
-                    type="button"
-                  >
-                    {controlsCollapsed ? (
-                      <ChevronsUpDown aria-hidden="true" strokeWidth={1.75} />
-                    ) : (
-                      <ChevronsDownUp aria-hidden="true" strokeWidth={1.75} />
-                    )}
-                  </button>
+                  <div className="plaza-toolbar-triggers">
+                    {/* 折叠：开关，独立，最左侧，纯图标（合并/展开箭头类） */}
+                    <button
+                      aria-pressed={controlsCollapsed}
+                      aria-label={
+                        controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                      }
+                      className={
+                        controlsCollapsed
+                          ? 'plaza-pill-trigger is-icon-only is-open'
+                          : 'plaza-pill-trigger is-icon-only'
+                      }
+                      onClick={() => setControlsCollapsed((current) => !current)}
+                      title={
+                        controlsCollapsed ? '展开搜索、时间排序和筛选' : '折叠搜索、时间排序和筛选'
+                      }
+                      type="button"
+                    >
+                      {controlsCollapsed ? (
+                        <ChevronsUpDown aria-hidden="true" strokeWidth={1.75} />
+                      ) : (
+                        <ChevronsDownUp aria-hidden="true" strokeWidth={1.75} />
+                      )}
+                    </button>
 
-                  {/* 随机：核心操作，纯图标 + 骰子，与其它工具栏入口统一透明底。 */}
-                  <button
-                    aria-pressed={randomPanelOpen}
-                    className={
-                      randomPanelOpen
-                        ? 'plaza-pill-trigger is-icon-only is-open'
-                        : 'plaza-pill-trigger is-icon-only'
-                    }
-                    onClick={() => setRandomPanelOpen((current) => !current)}
-                    title={randomPanelOpen ? '收起随机' : '随机抽一篇'}
-                    aria-label={randomPanelOpen ? '收起随机' : '随机抽一篇'}
-                    type="button"
-                  >
-                    <Dices aria-hidden="true" strokeWidth={1.75} />
-                  </button>
+                    {/* 随机：核心操作，纯图标 + 骰子，与其它工具栏入口统一透明底。 */}
+                    <button
+                      aria-pressed={randomPanelOpen}
+                      className={
+                        randomPanelOpen
+                          ? 'plaza-pill-trigger is-icon-only is-open'
+                          : 'plaza-pill-trigger is-icon-only'
+                      }
+                      onClick={() => setRandomPanelOpen((current) => !current)}
+                      title={randomPanelOpen ? '收起随机' : '随机抽一篇'}
+                      aria-label={randomPanelOpen ? '收起随机' : '随机抽一篇'}
+                      type="button"
+                    >
+                      <Dices aria-hidden="true" strokeWidth={1.75} />
+                    </button>
 
-                  {/* 工具栏内"有二级菜单"的入口：触发器按钮直接排在第一行,
-                   * 展开的二级菜单作为兄弟节点,通过 .plaza-pill-body { flex: 1 1 100% }
-                   * 强制换到下一行、撑满整行,和触发器们保持普通按钮那样的紧密排列。
-                   * 这里不封装 PillGroup,是因为 PillGroup 是 "trigger + body" 的胶囊形式,
-                   * 没法让 body 跳到 toolbar 容器的下一行。 */}
+                    {/* 工具栏内"有二级菜单"的入口：触发器按钮直接排在第一行,
+                     * 展开的二级菜单作为兄弟节点,通过 .plaza-pill-body { flex: 1 1 100% }
+                     * 强制换到下一行、撑满整行,和触发器们保持普通按钮那样的紧密排列。
+                     * 这里不封装 PillGroup,是因为 PillGroup 是 "trigger + body" 的胶囊形式,
+                     * 没法让 body 跳到 toolbar 容器的下一行。 */}
 
-                  {/* 二级菜单：筛选(分类 + 作者)。漏斗图标,椭圆胶囊入口。 */}
-                  <button
-                    aria-expanded={openToolbarGroup === 'filter'}
-                    aria-label="筛选"
-                    title="筛选"
-                    className={
-                      openToolbarGroup === 'filter' || categoryFilterOpen || authorFilterOpen
-                        ? 'plaza-pill-trigger is-pill-icon is-open'
-                        : 'plaza-pill-trigger is-pill-icon'
-                    }
-                    onClick={() => toggleToolbarGroup('filter')}
-                    type="button"
-                  >
-                    <Filter aria-hidden="true" strokeWidth={1.75} />
-                    <span className="plaza-pill-trigger-label">筛选</span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      strokeWidth={1.75}
-                      className="plaza-pill-chevron"
-                      style={{
-                        transform:
-                          openToolbarGroup === 'filter' ? 'rotate(180deg)' : 'rotate(0deg)',
-                      }}
-                    />
-                  </button>
+                    {/* 二级菜单：筛选(分类 + 作者)。漏斗图标,椭圆胶囊入口。 */}
+                    <button
+                      aria-expanded={openToolbarGroup === 'filter'}
+                      aria-label="筛选"
+                      title="筛选"
+                      className={
+                        openToolbarGroup === 'filter' || categoryFilterOpen || authorFilterOpen
+                          ? 'plaza-pill-trigger is-pill-icon is-open'
+                          : 'plaza-pill-trigger is-pill-icon'
+                      }
+                      onClick={() => toggleToolbarGroup('filter')}
+                      type="button"
+                    >
+                      <Filter aria-hidden="true" strokeWidth={1.75} />
+                      <span className="plaza-pill-trigger-label">筛选</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        strokeWidth={1.75}
+                        className="plaza-pill-chevron"
+                        style={{
+                          transform:
+                            openToolbarGroup === 'filter' ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      />
+                    </button>
 
-                  {/* 二级菜单：导出(全部/所选/作者/续写/分类/收藏 + 屏蔽)。下载图标 + 文字，椭圆胶囊入口。 */}
-                  <button
-                    aria-expanded={openToolbarGroup === 'export'}
-                    aria-label="导出"
-                    title="导出"
-                    className={
-                      openToolbarGroup === 'export'
-                        ? 'plaza-pill-trigger is-pill-icon is-open'
-                        : 'plaza-pill-trigger is-pill-icon'
-                    }
-                    onClick={() => toggleToolbarGroup('export')}
-                    type="button"
-                  >
-                    <Download aria-hidden="true" strokeWidth={1.75} />
-                    <span className="plaza-pill-trigger-label">导出</span>
-                    <ChevronDown
-                      aria-hidden="true"
-                      strokeWidth={1.75}
-                      className="plaza-pill-chevron"
-                      style={{
-                        transform:
-                          openToolbarGroup === 'export' ? 'rotate(180deg)' : 'rotate(0deg)',
-                      }}
-                    />
-                  </button>
+                    {/* 二级菜单：导出(全部/所选/作者/续写/分类/收藏 + 屏蔽)。下载图标 + 文字，椭圆胶囊入口。 */}
+                    <button
+                      aria-expanded={openToolbarGroup === 'export'}
+                      aria-label="导出"
+                      title="导出"
+                      className={
+                        openToolbarGroup === 'export'
+                          ? 'plaza-pill-trigger is-pill-icon is-open'
+                          : 'plaza-pill-trigger is-pill-icon'
+                      }
+                      onClick={() => toggleToolbarGroup('export')}
+                      type="button"
+                    >
+                      <Download aria-hidden="true" strokeWidth={1.75} />
+                      <span className="plaza-pill-trigger-label">导出</span>
+                      <ChevronDown
+                        aria-hidden="true"
+                        strokeWidth={1.75}
+                        className="plaza-pill-chevron"
+                        style={{
+                          transform:
+                            openToolbarGroup === 'export' ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      />
+                    </button>
 
-                  {/* 二级菜单：更多(默认刷新 + 更新日志)。⋯ 图标,椭圆胶囊入口。 */}
-                  <button
-                    aria-expanded={openToolbarGroup === 'more'}
-                    aria-label="更多"
-                    title="更多"
-                    className={
-                      openToolbarGroup === 'more'
-                        ? 'plaza-pill-trigger is-pill-icon is-open'
-                        : 'plaza-pill-trigger is-pill-icon'
-                    }
-                    onClick={() => toggleToolbarGroup('more')}
-                    type="button"
-                  >
-                    <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
-                    <ChevronDown
-                      aria-hidden="true"
-                      strokeWidth={1.75}
-                      className="plaza-pill-chevron"
-                      style={{
-                        transform: openToolbarGroup === 'more' ? 'rotate(180deg)' : 'rotate(0deg)',
-                      }}
-                    />
-                  </button>
+                    {/* 二级菜单：更多(默认刷新 + 更新日志)。⋯ 图标,椭圆胶囊入口。 */}
+                    <button
+                      aria-expanded={openToolbarGroup === 'more'}
+                      aria-label="更多"
+                      title="更多"
+                      className={
+                        openToolbarGroup === 'more'
+                          ? 'plaza-pill-trigger is-pill-icon is-open'
+                          : 'plaza-pill-trigger is-pill-icon'
+                      }
+                      onClick={() => toggleToolbarGroup('more')}
+                      type="button"
+                    >
+                      <MoreHorizontal aria-hidden="true" strokeWidth={1.75} />
+                      <ChevronDown
+                        aria-hidden="true"
+                        strokeWidth={1.75}
+                        className="plaza-pill-chevron"
+                        style={{
+                          transform:
+                            openToolbarGroup === 'more' ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      />
+                    </button>
 
-                  {/* 二级菜单:打开搜索。放大镜图标,纯图标入口,放到"更多"按钮右侧。
-                   * 展开的搜索表单对齐审核后台"后台搜索"纵向布局(label + input + 范围 chip)。
-                   * 行为上仍然与 toolbar 的二级菜单互斥(openToolbarGroup 单一 key)。 */}
-                  <button
-                    aria-expanded={openToolbarGroup === 'search'}
-                    aria-label={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
-                    className={
-                      openToolbarGroup === 'search'
-                        ? 'plaza-pill-trigger is-icon-only is-open'
-                        : 'plaza-pill-trigger is-icon-only'
-                    }
-                    onClick={() => toggleToolbarGroup('search')}
-                    title={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
-                    type="button"
-                  >
-                    <Search aria-hidden="true" strokeWidth={1.75} />
-                  </button>
+                    {/* 二级菜单:打开搜索。放大镜图标,纯图标入口,放到"更多"按钮右侧。
+                     * 展开的搜索表单对齐审核后台"后台搜索"纵向布局(label + input + 范围 chip)。
+                     * 行为上仍然与 toolbar 的二级菜单互斥(openToolbarGroup 单一 key)。 */}
+                    <button
+                      aria-expanded={openToolbarGroup === 'search'}
+                      aria-label={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
+                      className={
+                        openToolbarGroup === 'search'
+                          ? 'plaza-pill-trigger is-icon-only is-open'
+                          : 'plaza-pill-trigger is-icon-only'
+                      }
+                      onClick={() => toggleToolbarGroup('search')}
+                      title={openToolbarGroup === 'search' ? '收起搜索' : '打开搜索'}
+                      type="button"
+                    >
+                      <Search aria-hidden="true" strokeWidth={1.75} />
+                    </button>
+                  </div>
 
                   {/* 工具栏的二级菜单展开区：作为 .plaza-toolbar-v2 的直接子项,
                    * 通过 flex: 1 1 100% 强制换到下一行并占满整行。
