@@ -33,7 +33,7 @@ jobs:
         run: npm run format:check
 
       - name: Type-check
-        run: npx tsc -b
+        run: npm run type-check
 
       - name: Run tests
         run: npm run test

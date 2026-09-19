@@ -6960,8 +6960,7 @@ export function AdminReviewPage() {
                     <div className="stack-gap-sm">
                       <strong>目标分类</strong>
                       <span className="content-meta">
-                        输入即可搜索现有分类，也可直接使用当前输入作为自定义分类；留空则归入「未分类」（
-                        {DEFAULT_CATEGORY}）
+                        输入搜索现有分类，或当前输入作为自定义分类；留空归入「未分类」
                       </span>
                     </div>
                     <SearchableCategorySelect
