@@ -6875,8 +6875,7 @@ export function AdminReviewPage() {
                     <p className="eyebrow">Bulk Move Category</p>
                     <h3>批量移动分类</h3>
                     <p className="sub-copy">
-                      勾选一个或多个源分类，把其中已加载的全部小剧场整体移动到目标分类（留空代表未分类）。仅在已加载全部
-                      plays 后可用，第一次进入会自动加载。
+                      勾选源分类，把其中的小剧场移动到目标分类（留空代表未分类）。
                     </p>
                   </div>
                 </div>
