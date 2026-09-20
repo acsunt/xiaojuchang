@@ -2682,9 +2682,12 @@ export function PlayListPage() {
                         <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
                           <button
                             className={
-                              activeCategories.length === 0 ? 'tab-chip active' : 'tab-chip'
+                              !categoryCombinationsOpen && activeCategories.length === 0
+                                ? 'tab-chip active'
+                                : 'tab-chip'
                             }
                             onClick={() => {
+                              setCategoryCombinationsOpen(false);
                               setActiveCategories([]);
                               setCurrentPage(1);
                             }}
@@ -2693,9 +2696,15 @@ export function PlayListPage() {
                             全部分类 {categoryScopedPlays.length}
                           </button>
                           <button
-                            aria-expanded={categoryCombinationsOpen}
+                            aria-pressed={categoryCombinationsOpen}
                             className={categoryCombinationsOpen ? 'tab-chip active' : 'tab-chip'}
-                            onClick={() => setCategoryCombinationsOpen((current) => !current)}
+                            onClick={() => {
+                              if (!categoryCombinationsOpen) {
+                                setActiveCategories([]);
+                                setCurrentPage(1);
+                              }
+                              setCategoryCombinationsOpen(true);
+                            }}
                             type="button"
                           >
                             已有分类组合 {categoryCombinations.length}
@@ -2707,7 +2716,9 @@ export function PlayListPage() {
                             </span>
                           ) : (
                             <span className="content-meta">
-                              可多选，筛选同时包含这些标签的小剧场
+                              {categoryCombinationsOpen
+                                ? '点选一组已有分类组合来筛选'
+                                : '可多选，筛选同时包含这些标签的小剧场'}
                             </span>
                           )}
                         </div>
@@ -2743,48 +2754,49 @@ export function PlayListPage() {
                               <span className="content-meta">当前没有含多个标签的小剧场</span>
                             )}
                           </div>
-                        ) : null}
-                        {plazaCategoryGroups.map((node) => (
-                          <div
-                            className="category-hierarchy-group"
-                            key={node.group?.id ?? node.children[0]?.name ?? 'ungrouped'}
-                          >
-                            {node.group ? (
-                              <div className="category-hierarchy-group-row">
-                                <span className="category-hierarchy-group-label">
-                                  {node.group.name}{' '}
-                                  {categoryStats.find((item) => item.name === node.group?.name)
-                                    ?.count ?? 0}
-                                </span>
+                        ) : (
+                          plazaCategoryGroups.map((node) => (
+                            <div
+                              className="category-hierarchy-group"
+                              key={node.group?.id ?? node.children[0]?.name ?? 'ungrouped'}
+                            >
+                              {node.group ? (
+                                <div className="category-hierarchy-group-row">
+                                  <span className="category-hierarchy-group-label">
+                                    {node.group.name}{' '}
+                                    {categoryStats.find((item) => item.name === node.group?.name)
+                                      ?.count ?? 0}
+                                  </span>
+                                </div>
+                              ) : node.children.some((item) => item.name !== DEFAULT_CATEGORY) ? (
+                                <div className="category-hierarchy-group-row">
+                                  <span className="category-hierarchy-group-label">未归入大类</span>
+                                </div>
+                              ) : null}
+                              <div className="category-hierarchy-children">
+                                {node.children.map((item) => (
+                                  <button
+                                    key={item.name}
+                                    className={
+                                      activeCategories.includes(item.name)
+                                        ? 'tab-chip active'
+                                        : 'tab-chip'
+                                    }
+                                    onClick={() => {
+                                      setActiveCategories((current) =>
+                                        toggleCategorySelection(current, item.name),
+                                      );
+                                      setCurrentPage(1);
+                                    }}
+                                    type="button"
+                                  >
+                                    {item.name} {item.count}
+                                  </button>
+                                ))}
                               </div>
-                            ) : node.children.some((item) => item.name !== DEFAULT_CATEGORY) ? (
-                              <div className="category-hierarchy-group-row">
-                                <span className="category-hierarchy-group-label">未归入大类</span>
-                              </div>
-                            ) : null}
-                            <div className="category-hierarchy-children">
-                              {node.children.map((item) => (
-                                <button
-                                  key={item.name}
-                                  className={
-                                    activeCategories.includes(item.name)
-                                      ? 'tab-chip active'
-                                      : 'tab-chip'
-                                  }
-                                  onClick={() => {
-                                    setActiveCategories((current) =>
-                                      toggleCategorySelection(current, item.name),
-                                    );
-                                    setCurrentPage(1);
-                                  }}
-                                  type="button"
-                                >
-                                  {item.name} {item.count}
-                                </button>
-                              ))}
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     </div>
                   ) : null}
