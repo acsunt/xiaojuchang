@@ -10,9 +10,16 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ConfettiCanvas, type ConfettiCanvasHandle } from '../../components/ConfettiCanvas';
+import { CustomSelect } from '../../components/CustomSelect';
+import {
+  DEFAULT_PLAY_TIME_SORT_MODE,
+  PLAY_TIME_SORT_OPTIONS,
+  comparePlaysByTimeSort,
+  isPlayTimeSortMode,
+  type PlayTimeSortMode,
+} from '../../types/play-sort';
 import {
   getConfettiPrefs,
   setConfettiEnabled,
@@ -98,7 +105,7 @@ import {
   Search,
 } from 'lucide-react';
 
-type SortMode = 'updated_desc' | 'updated_asc' | 'created_desc' | 'created_asc';
+type SortMode = PlayTimeSortMode;
 type RepoFilterMode = 'all' | 'with' | 'without';
 type RepoSortMode =
   'none' | 'count_desc' | 'count_asc' | 'first_desc' | 'first_asc' | 'last_desc' | 'last_asc';
@@ -476,13 +483,6 @@ const ClearableField = ({
   </div>
 );
 
-type CustomSelectProps = {
-  label: string;
-  value: string;
-  options: SelectOption[];
-  onChange: (value: string) => void;
-};
-
 function ExportPickerModal({
   items,
   onClose,
@@ -577,182 +577,6 @@ function ExportPickerModal({
   );
 }
 
-function CustomSelect({ label, value, options, onChange }: CustomSelectProps) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  /* 菜单的位置（fixed 坐标系）。由 trigger 的 getBoundingClientRect 推算。 */
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  /* trigger 的实测宽度(用来给菜单做 minWidth,
-   * 不让菜单比 trigger 还窄)。与 menuPos 一起在 effect 里更新。 */
-  const [triggerWidth, setTriggerWidth] = useState<number>(0);
-  const selectedOption = options.find((item) => item.value === value) ?? options[0];
-
-  /* 打开时：基于 trigger 位置更新菜单 fixed 坐标。
-   * 用 fixed 定位而不是 absolute,是为了:
-   *   1) 菜单可以逃离任意祖先 stacking context(尤其是 .play-card-shell { overflow: hidden }),
-   *      不再被裁剪;
-   *   2) 菜单始终绘制在最高层(z-index: 9999),不会被卡片或兄弟元素遮挡。
-   *
-   * ⚠️ 必须在 rAF 里再算一次坐标,而不是同步读取:
-   *   当 trigger 在 .plaza-pill-body 里,该 body 用
-   *     `grid-template-rows: 0fr → 1fr` 做 240ms 展开动画。
-   *   useEffect 跑时的同步 layout,grid 容器高度还没追上动画目标,
-   *   trigger 的 getBoundingClientRect 拿到的是动画中间位置,
-   *   fixed 菜单就会贴在 trigger 错误的位置、看起来「偏移到下面」。
-   *   在 requestAnimationFrame 末尾重读一次,能拿到动画落定后的真实坐标。
-   *   再额外监听 scroll/resize,把菜单贴回 trigger 跟随滚动。
-   */
-  useEffect(() => {
-    if (!open) {
-      setMenuPos(null);
-      return;
-    }
-
-    const updatePosition = () => {
-      const rect = triggerRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
-      setMenuPos({
-        top: rect.bottom + 8,
-        left: rect.left,
-        width: 0,
-      });
-      setTriggerWidth(rect.width);
-    };
-
-    /* 同步先尝试一次,避免空白闪烁;
-     * 再 rAF 再算一次,把动画过程中的位置误差修复掉;
-     * 再在动画结束 / 多次 rAF 里持续校准,直到 grid 容器高度稳定。 */
-    updatePosition();
-    const frameHandles: number[] = [];
-    for (let index = 0; index < 4; index += 1) {
-      frameHandles.push(window.requestAnimationFrame(updatePosition));
-    }
-    let cleanupTransition: (() => void) | null = null;
-    /* 监听祖先 .plaza-pill-body 上的 grid 动画结束或任何子元素 transition/animation 结束,
-     * 再校准一次坐标 —— 这是最重要的一次,
-     * 因为只有在动画终止后 trigger 的最终位置才稳定。
-     *
-     * ⚠️ 注意: grid-template-rows: 0fr → 1fr 这类属性 transition
-     *   并不会触发 ancestor 自身的 "transitionend",
-     *   真正会冒泡上来的是内部子元素(opacity 等)的 transitionend。
-     *   这里同时监听:
-     *     - transitionend(任何属性,因为子元素 opacity / transform 都会触发)
-     *     - animationend
-     *     - 兜底 setTimeout 280ms 与 transition 时长对齐
-     *   让 grid 容器高度落定时,菜单必定贴在 trigger 真实位置上。 */
-    const rootElement = rootRef.current;
-    const ancestor = rootElement?.closest('.plaza-pill-body');
-    const handleAnyEnd = () => {
-      updatePosition();
-    };
-    if (ancestor) {
-      ancestor.addEventListener('transitionend', handleAnyEnd);
-      ancestor.addEventListener('animationend', handleAnyEnd);
-      cleanupTransition = () => {
-        ancestor.removeEventListener('transitionend', handleAnyEnd);
-        ancestor.removeEventListener('animationend', handleAnyEnd);
-      };
-    }
-    const fallbackTimer = window.setTimeout(handleAnyEnd, 320);
-
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    return () => {
-      frameHandles.forEach((handle) => window.cancelAnimationFrame(handle));
-      if (cleanupTransition) cleanupTransition();
-      window.clearTimeout(fallbackTimer);
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    const handleEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [open]);
-
-  return (
-    <div className={open ? 'custom-select open' : 'custom-select'} ref={rootRef}>
-      <span>{label}</span>
-      <button
-        aria-expanded={open}
-        className="custom-select-trigger"
-        onClick={() => setOpen((current) => !current)}
-        ref={triggerRef}
-        type="button"
-      >
-        <span>{selectedOption?.label ?? ''}</span>
-        <span aria-hidden="true" className="custom-select-chevron">
-          ▾
-        </span>
-      </button>
-      {open && menuPos
-        ? createPortal(
-            <div
-              className="custom-select-menu"
-              role="listbox"
-              aria-label={label}
-              style={{
-                position: 'fixed',
-                top: menuPos.top,
-                left: menuPos.left,
-                /* 保留 trigger 宽度作为菜单最小宽度,保证菜单不会比 trigger 更窄;
-                 * 实际宽度由 .custom-select-menu { min-width: max-content } 与
-                 * 最长 option 的内容决定。 */
-                minWidth: triggerWidth ? `${triggerWidth}px` : undefined,
-              }}
-            >
-              {options.map((option) => {
-                const active = option.value === value;
-                return (
-                  <button
-                    aria-selected={active}
-                    className={active ? 'custom-select-option active' : 'custom-select-option'}
-                    key={option.value}
-                    onClick={() => {
-                      onChange(option.value);
-                      setOpen(false);
-                    }}
-                    role="option"
-                    type="button"
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
-  );
-}
-
 /* ============================================================================
  * PillGroup —— 胶囊按钮 + 原位展开的手风琴分组(内部封装,有二级菜单的入口)
  *
@@ -830,12 +654,8 @@ export function PlayListPage() {
   const [keyword, setKeyword] = useState(() => readPlazaSearchKeyword());
   const [playSearchFields, setPlaySearchFields] = useState<PlaySearchField[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
-    const saved = readPlazaString(PLAZA_SORT_MODE_KEY, 'created_desc');
-    return (['updated_desc', 'updated_asc', 'created_desc', 'created_asc'] as SortMode[]).includes(
-      saved as SortMode,
-    )
-      ? (saved as SortMode)
-      : 'created_desc';
+    const saved = readPlazaString(PLAZA_SORT_MODE_KEY, DEFAULT_PLAY_TIME_SORT_MODE);
+    return isPlayTimeSortMode(saved) ? saved : DEFAULT_PLAY_TIME_SORT_MODE;
   });
   const [activeRepoFilter, setActiveRepoFilter] = useState<RepoFilterMode>(
     () => readPlazaString(PLAZA_REPO_FILTER_KEY, 'all') as RepoFilterMode,
@@ -1450,8 +1270,6 @@ export function PlayListPage() {
       return matchesPlayKeyword(play, normalizedKeyword, playSearchFields);
     });
 
-    const field = sortMode.startsWith('created') ? 'createdAt' : 'updatedAt';
-
     return [...nextItems].sort((left, right) => {
       if (repoSortMode !== 'none') {
         const l = repoCountMap.get(left.id);
@@ -1482,8 +1300,7 @@ export function PlayListPage() {
         }
       }
 
-      const result = left[field].localeCompare(right[field]);
-      return sortMode.endsWith('_asc') ? result : -result;
+      return comparePlaysByTimeSort(left, right, sortMode);
     });
   }, [
     activeAuthor,
@@ -1682,12 +1499,7 @@ export function PlayListPage() {
     if (viewportMode === 'tablet') return [1, 2, 3];
     return [1, 2, 3, 4];
   }, [viewportMode]);
-  const sortModeOptions: SelectOption[] = [
-    { value: 'updated_desc', label: '更新时间倒序' },
-    { value: 'updated_asc', label: '更新时间正序' },
-    { value: 'created_desc', label: '上传时间倒序' },
-    { value: 'created_asc', label: '上传时间正序' },
-  ];
+  const sortModeOptions: SelectOption[] = PLAY_TIME_SORT_OPTIONS;
   const columnOptions: SelectOption[] = availableColumnOptions.map((count) => ({
     value: String(count),
     label: `${count} 个`,

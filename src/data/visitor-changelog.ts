@@ -11,6 +11,14 @@ export const OPEN_CHANGELOG_EVENT = 'mini-theater:open-changelog';
 
 export const visitorChangelog: ChangelogVersion[] = [
   {
+    version: '1.7',
+    added: [],
+    improved: [
+      '广场列表默认按上传时间倒序排列；时间排序选项改为：上传时间倒序、上传时间正序、更新时间倒序、更新时间正序。',
+    ],
+    fixed: ['广场「显示设置」里的时间排序、评论筛选、评论排序、一行几个，展开后选项可以正常点选。'],
+  },
+  {
     version: '1.6',
     added: [
       '顶部新增「主题」按钮，点开可选 16 套主题：默认 / 极简主义 / 新拟态 / 玻璃拟态 / 商务简约 / 渐变风格 / 孟菲斯 / 赛博朋克 / 瑞士风格 / 杂志排版 / 手绘插画 / 等距插画 / 复古怀旧 / 未来科技 / 温暖治愈 / 粗野主义。',

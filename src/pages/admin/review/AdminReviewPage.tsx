@@ -37,7 +37,15 @@ import {
   type DuplicateScanProgress,
   type DuplicateScanScope,
 } from '../../../services/admin-duplicate-review';
+import { CustomSelect } from '../../../components/CustomSelect';
 import { isAdminBackupLocalOnly, playApi } from '../../../services/play-api';
+import {
+  DEFAULT_PLAY_TIME_SORT_MODE,
+  PLAY_TIME_SORT_OPTIONS,
+  comparePlaysByTimeSort,
+  isPlayTimeSortMode,
+  type PlayTimeSortMode,
+} from '../../../types/play-sort';
 import {
   getAdminReviewDiffFlat,
   setAdminReviewDiffFlat,
@@ -821,6 +829,7 @@ const ADMIN_PANEL_STORAGE_KEY = 'mini-theater:admin-review-panel';
 const ADMIN_PLAY_STATUS_KEY = 'mini-theater:admin-review-play-status';
 const ADMIN_REPO_STATUS_KEY = 'mini-theater:admin-review-repo-status';
 const ADMIN_CONTINUATION_STATUS_KEY = 'mini-theater:admin-review-continuation-status';
+const ADMIN_PLAY_TIME_SORT_KEY = 'mini-theater:admin-review-play-time-sort';
 const readStoredNameCountSortMode = (storageKey: string): MoveCategorySortMode => {
   if (typeof window === 'undefined') {
     return 'name';
@@ -834,6 +843,13 @@ const readTagLibrarySortMode = (): TagLibrarySortMode =>
   readStoredNameCountSortMode(TAG_LIBRARY_SORT_STORAGE_KEY);
 const readMergeSourceSortMode = (): MoveCategorySortMode =>
   readStoredNameCountSortMode(MERGE_SOURCE_SORT_STORAGE_KEY);
+const readAdminPlayTimeSortMode = (): PlayTimeSortMode => {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PLAY_TIME_SORT_MODE;
+  }
+  const saved = window.localStorage.getItem(ADMIN_PLAY_TIME_SORT_KEY);
+  return saved && isPlayTimeSortMode(saved) ? saved : DEFAULT_PLAY_TIME_SORT_MODE;
+};
 
 type SubmissionDiffItem = {
   label: string;
@@ -1395,6 +1411,14 @@ export function AdminReviewPage() {
     const raw = Number(window.localStorage.getItem(ADMIN_CURRENT_PAGE_KEY));
     return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 1;
   };
+  const [playTimeSortMode, setPlayTimeSortModeState] =
+    useState<PlayTimeSortMode>(readAdminPlayTimeSortMode);
+  const setPlayTimeSortMode = (next: PlayTimeSortMode) => {
+    setPlayTimeSortModeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ADMIN_PLAY_TIME_SORT_KEY, next);
+    }
+  };
   const [adminPageSize, setAdminPageSizeState] = useState(() => readAdminPageSize());
   const [adminPageSizeInput, setAdminPageSizeInput] = useState(() => String(readAdminPageSize()));
   const [adminCurrentPage, setAdminCurrentPageState] = useState(() => readAdminCurrentPage());
@@ -1934,13 +1958,14 @@ export function AdminReviewPage() {
   );
   const filteredPlays = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
-    if (!normalizedKeyword) {
-      return plays;
-    }
+    const source = !normalizedKeyword
+      ? plays
+      : (hasLoadedAllPlays ? allPlays : plays).filter((play) =>
+          matchesPlayKeyword(play, normalizedKeyword, playSearchFields),
+        );
 
-    const source = hasLoadedAllPlays ? allPlays : plays;
-    return source.filter((play) => matchesPlayKeyword(play, normalizedKeyword, playSearchFields));
-  }, [allPlays, hasLoadedAllPlays, keyword, playSearchFields, plays]);
+    return [...source].sort((left, right) => comparePlaysByTimeSort(left, right, playTimeSortMode));
+  }, [allPlays, hasLoadedAllPlays, keyword, playSearchFields, playTimeSortMode, plays]);
   const currentPlayListCount = useMemo(() => {
     if (!hasLoadedAllPlays) {
       return filteredPlays.length;
@@ -2950,7 +2975,7 @@ export function AdminReviewPage() {
   // selectedStatus 或 keyword 变化时，列表重置回第一页
   useEffect(() => {
     setAdminCurrentPage(1);
-  }, [selectedStatus, keyword, playSearchFields]);
+  }, [selectedStatus, keyword, playSearchFields, playTimeSortMode]);
 
   useEffect(() => {
     if (!successMessage) {
@@ -5160,6 +5185,13 @@ export function AdminReviewPage() {
                   </button>
                 ))}
               </div>
+
+              <CustomSelect
+                label="时间排序"
+                onChange={(nextValue) => setPlayTimeSortMode(nextValue as PlayTimeSortMode)}
+                options={PLAY_TIME_SORT_OPTIONS}
+                value={playTimeSortMode}
+              />
 
               <label>
                 <span>后台搜索</span>

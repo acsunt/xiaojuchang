@@ -699,8 +699,9 @@ select option {
 .custom-select-menu {
   position: fixed;
   /* 用 fixed 定位(JS 计算坐标),脱离任意父级 stacking context;
-   * z-index 升到 1300,确保不被卡片网格 / app-header 等任何祖先遮挡。 */
-  z-index: 1300;
+   * z-index 升到 20000,确保不被卡片网格 / app-header / 广场面板遮挡。 */
+  z-index: 20000;
+  pointer-events: auto;
   display: grid;
   gap: 6px;
   padding: 8px;
@@ -1914,6 +1915,15 @@ body[data-style='default'][data-mode='day'] .button.danger {
 
 .review-sidebar-mobile-compact .sidebar-head-admin {
   gap: 12px;
+}
+
+.review-sidebar .custom-select {
+  width: 100%;
+  gap: 6px;
+}
+
+.review-sidebar .custom-select > span {
+  color: var(--text-soft);
 }
 
 .review-main-wide {
