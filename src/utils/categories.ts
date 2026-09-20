@@ -211,7 +211,13 @@ export const collectPlayCategoryCombinations = (
 
   plays.forEach((play) => {
     const names = sortCategoryNamesByTagOrder(
-      splitPlayCategories(play.category).filter((name) => !groupNames.has(name)),
+      splitPlayCategories(play.category).filter((name) => {
+        if (!name || name === DEFAULT_CATEGORY || groupNames.has(name)) {
+          return false;
+        }
+        const matched = findTagByName(tags, name);
+        return !matched || isLeafTag(matched);
+      }),
       tags,
     );
     if (names.length < 2) {
@@ -228,6 +234,7 @@ export const collectPlayCategoryCombinations = (
   });
 
   return [...counts.values()]
+    .filter((item) => item.names.length >= 2)
     .map((item) => ({
       names: item.names,
       label: item.names.join(' · '),

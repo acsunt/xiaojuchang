@@ -1378,7 +1378,10 @@ export function PlayListPage() {
   }, [categoryStats, tags]);
 
   const categoryCombinations = useMemo(
-    () => collectPlayCategoryCombinations(categoryScopedPlays, tags),
+    () =>
+      collectPlayCategoryCombinations(categoryScopedPlays, tags).filter(
+        (item) => item.names.length >= 2,
+      ),
     [categoryScopedPlays, tags],
   );
 
@@ -2711,29 +2714,31 @@ export function PlayListPage() {
                         {categoryCombinationsOpen ? (
                           <div className="plaza-category-combinations">
                             {categoryCombinations.length > 0 ? (
-                              categoryCombinations.map((item) => {
-                                const active = isSameCategorySelection(
-                                  activeCategories,
-                                  item.names,
-                                );
-                                return (
-                                  <button
-                                    key={item.label}
-                                    className={active ? 'tab-chip active' : 'tab-chip'}
-                                    onClick={() => {
-                                      setActiveCategories((current) =>
-                                        isSameCategorySelection(current, item.names)
-                                          ? []
-                                          : item.names,
-                                      );
-                                      setCurrentPage(1);
-                                    }}
-                                    type="button"
-                                  >
-                                    {item.label} {item.count}
-                                  </button>
-                                );
-                              })
+                              categoryCombinations
+                                .filter((item) => item.names.length >= 2)
+                                .map((item) => {
+                                  const active = isSameCategorySelection(
+                                    activeCategories,
+                                    item.names,
+                                  );
+                                  return (
+                                    <button
+                                      key={item.label}
+                                      className={active ? 'tab-chip active' : 'tab-chip'}
+                                      onClick={() => {
+                                        setActiveCategories((current) =>
+                                          isSameCategorySelection(current, item.names)
+                                            ? []
+                                            : item.names,
+                                        );
+                                        setCurrentPage(1);
+                                      }}
+                                      type="button"
+                                    >
+                                      {item.label} {item.count}
+                                    </button>
+                                  );
+                                })
                             ) : (
                               <span className="content-meta">当前没有含多个标签的小剧场</span>
                             )}

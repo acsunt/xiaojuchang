@@ -4665,6 +4665,8 @@ export function AdminReviewPage() {
       setMoveCategoryMessage(
         `已移动 ${completed} 篇到「${label}」${failed > 0 ? `，${failed} 篇失败` : ''}`,
       );
+      setMoveSourceCategories([]);
+      setMoveTargetCategories([]);
     } finally {
       setMoveCategoryBusy(false);
     }
@@ -4724,6 +4726,8 @@ export function AdminReviewPage() {
       setTagCategoryMessage(
         `已给 ${completed} 篇追加「${label}」${failed > 0 ? `，${failed} 篇失败` : ''}`,
       );
+      setTagSourceCategories([]);
+      setTagTargetCategories([]);
     } finally {
       setTagCategoryBusy(false);
     }
