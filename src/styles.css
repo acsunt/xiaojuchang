@@ -1181,7 +1181,9 @@ label span,
   border-color: var(--border);
 }
 
-.button.secondary.active {
+.button.secondary.active,
+.button.ghost.active,
+.drag-toggle-button.active {
   color: var(--text);
   background: rgba(89, 143, 255, 0.18);
   border-color: transparent;
@@ -1436,6 +1438,13 @@ body[data-style='default'][data-mode='day'] .button.danger {
   background: color-mix(in srgb, var(--panel) 90%, white 10%);
 }
 
+.tag-admin-card {
+  padding: 6px 10px;
+  border-radius: 12px;
+  min-height: 0;
+  gap: 4px;
+}
+
 .play-card,
 .review-card,
 .stat-card-rich,
@@ -1444,10 +1453,14 @@ body[data-style='default'][data-mode='day'] .button.danger {
 .process-panel,
 .info-panel,
 .feature-side,
-.field-note-panel,
-.tag-admin-card {
+.field-note-panel {
   display: grid;
   gap: 8px;
+}
+
+.tag-admin-card {
+  display: grid;
+  gap: 4px;
 }
 
 .play-card.selected {
@@ -2410,9 +2423,8 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 14px;
 }
 
-.plaza-category-hierarchy > .category-hierarchy-group + .category-hierarchy-group {
-  border-top: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
-  padding-top: 12px;
+.plaza-category-group-chip {
+  font-weight: 700;
 }
 
 .category-hierarchy {
@@ -2446,7 +2458,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 .tag-admin-group-block {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .tag-admin-group-card {
@@ -2455,12 +2467,43 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 .tag-admin-child-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   padding-left: 12px;
+}
+
+.tag-admin-list.is-sorting-group .tag-admin-group-block {
+  gap: 0;
 }
 
 .tag-card-head {
   align-items: center;
+  min-height: 32px;
+}
+
+.tag-kind-label {
+  flex: 0 0 auto;
+  font-size: calc(12px * var(--text-scale, 1));
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+.tag-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: calc(14px * var(--text-scale, 1));
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tag-admin-card.is-sorting:not(.is-draggable) {
+  opacity: 0.62;
+}
+
+.tag-card-count {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .tag-card-head.is-editing {
@@ -2472,10 +2515,15 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 .tag-card-title-group {
   min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .tag-card-inline-actions {
-  display: none;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .tag-card-edit-actions {
@@ -4309,7 +4357,8 @@ body.tag-sort-dragging {
 }
 
 .drag-toggle-button {
-  min-width: 112px;
+  min-width: 0;
+  padding: 0 12px;
 }
 
 .tag-card-head {
@@ -4317,11 +4366,16 @@ body.tag-sort-dragging {
 }
 
 .tag-drag-handle {
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px dashed var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 86%, var(--accent) 8%);
   color: var(--text-soft);
   touch-action: none;
   user-select: none;
@@ -4329,8 +4383,18 @@ body.tag-sort-dragging {
   cursor: grab;
 }
 
+.tag-drag-handle:active {
+  cursor: grabbing;
+}
+
+.tag-drag-handle-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
 .tag-card-actions {
-  justify-content: flex-start;
+  display: none;
 }
 
 .diff-panel,
@@ -4862,10 +4926,14 @@ body[data-mode='night'] .diff-segment-added {
   .play-card,
   .review-card,
   .repo-card,
-  .log-item,
-  .tag-admin-card {
+  .log-item {
     padding: 12px;
     border-radius: 14px;
+  }
+
+  .tag-admin-card {
+    padding: 5px 8px;
+    border-radius: 10px;
   }
 
   .header-actions,
@@ -5283,10 +5351,14 @@ body[data-mode='night'] .diff-segment-added {
   .review-main,
   .empty-panel,
   .field-note-panel,
-  .feature-panel,
-  .tag-admin-card {
+  .feature-panel {
     padding: 14px;
     border-radius: 16px;
+  }
+
+  .tag-admin-card {
+    padding: 5px 8px;
+    border-radius: 10px;
   }
 
   .app-header {
@@ -7816,27 +7888,66 @@ body:not([data-style='default']) .button.primary {
   );
 }
 
-/* hover 反馈：去掉硬编码 hover 背景，改为透明度 */
+/* 未选中按钮：压低填充，和默认主题一样先让底色退到后面 */
+body:not([data-style='default']) .tab-chip,
+body:not([data-style='default']) .tag-chip,
+body:not([data-style='default']) .nav-pill,
+body:not([data-style='default']) .button.secondary,
+body:not([data-style='default']) .button.ghost,
+body:not([data-style='default']) .plaza-tab-chip,
+body:not([data-style='default']) .plaza-status-tab {
+  background-color: color-mix(
+    in srgb,
+    var(--btn-bg-color, var(--card-bg, transparent)) 38%,
+    transparent
+  );
+  background-image: none;
+  color: var(--sp-text-secondary, var(--btn-color, var(--sp-text, #1a1a1a)));
+  box-shadow: none;
+  opacity: 1;
+}
+
+/* hover 反馈：未选中只轻微提亮，不和选中态抢对比 */
 body:not([data-style='default']) .button:hover,
 body:not([data-style='default']) .text-button:hover,
 body:not([data-style='default']) .icon-button:hover,
 body:not([data-style='default']) .tag-chip:hover,
 body:not([data-style='default']) .nav-pill:hover,
-body:not([data-style='default']) .tab-chip:hover {
-  opacity: 0.85;
+body:not([data-style='default']) .tab-chip:hover,
+body:not([data-style='default']) .plaza-status-tab:hover {
+  opacity: 0.92;
 }
 
-/* active 状态：保留变量控制，去掉 inset box-shadow */
+/* 选中按钮：用主题强调色铺底 + 描边，严格区别于未选中 */
 body:not([data-style='default']) .button.active,
+body:not([data-style='default']) .button.secondary.active,
 body:not([data-style='default']) .nav-pill.active,
-body:not([data-style='default']) .tab-chip.active {
-  background-color: var(--btn-bg-color, var(--card-bg, transparent));
-  color: var(--btn-color, var(--sp-text, #1a1a1a));
-  /* 非默认主题下用 accent 描边作为「被选中」的明确标记,
-   * 避免被主题按钮底色吞掉。 */
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--accent, #6c8cff) 65%, transparent),
-    var(--btn-shadow, none);
+body:not([data-style='default']) .tab-chip.active,
+body:not([data-style='default']) .tag-chip.active,
+body:not([data-style='default']) .plaza-tab-chip.active,
+body:not([data-style='default']) .plaza-status-tab.is-active {
+  background-color: color-mix(
+    in srgb,
+    var(--accent, #6c8cff) 22%,
+    var(--btn-bg-color, var(--card-bg, transparent))
+  );
+  background-image: none;
+  color: var(--heading-color, var(--sp-text, #1a1a1a));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #6c8cff) 72%, transparent);
+  opacity: 1;
+}
+
+body:not([data-style='default'])
+  .plaza-category-hierarchy
+  > .category-hierarchy-group
+  + .category-hierarchy-group {
+  border-top: 1px solid
+    color-mix(
+      in srgb,
+      var(--accent, #6c8cff) 32%,
+      var(--sp-border, var(--card-border, var(--border, #d8d8d8)))
+    );
+  padding-top: 12px;
 }
 
 /* ---------- 输入框 / 文本域 / select ---------- */
@@ -8123,13 +8234,25 @@ body[data-style='brutalism'][data-mode='night'] .toggle-btn:hover {
   border-color: #000;
 }
 
-/* brutalism 夜间：active 状态的标签/导航 (header 顶部条 + 卡片内) */
-body[data-style='brutalism'][data-mode='night'] .nav-pill.active,
+/* brutalism 夜间：未选中保持黄底黑字，选中才翻成黑底黄字 */
 body[data-style='brutalism'][data-mode='night'] .nav-pill:hover,
-body[data-style='brutalism'][data-mode='night'] .tab-chip.active,
 body[data-style='brutalism'][data-mode='night'] .tab-chip:hover,
-body[data-style='brutalism'][data-mode='night'] .button.active,
+body[data-style='brutalism'][data-mode='night'] .tag-chip:hover,
 body[data-style='brutalism'][data-mode='night'] .button:hover,
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab:hover {
+  background-color: #ffffff;
+  background-image: none;
+  color: #000;
+  border-color: #000;
+  box-shadow: 3px 3px 0 #000;
+}
+
+body[data-style='brutalism'][data-mode='night'] .nav-pill.active,
+body[data-style='brutalism'][data-mode='night'] .tab-chip.active,
+body[data-style='brutalism'][data-mode='night'] .tag-chip.active,
+body[data-style='brutalism'][data-mode='night'] .button.active,
+body[data-style='brutalism'][data-mode='night'] .button.secondary.active,
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active,
 body[data-style='brutalism'][data-mode='night'] .button.primary,
 body[data-style='brutalism'][data-mode='night'] .button.primary:hover {
   background-color: #000;
@@ -8139,8 +8262,7 @@ body[data-style='brutalism'][data-mode='night'] .button.primary:hover {
   border-radius: 0;
   box-shadow: 3px 3px 0 #ffeb3b;
 }
-body[data-style='brutalism'][data-mode='night'] .repo-nav-pill.active,
-body[data-style='brutalism'][data-mode='night'] .repo-nav-pill:hover {
+body[data-style='brutalism'][data-mode='night'] .repo-nav-pill.active {
   background: #000;
   color: #ffeb3b;
   border-color: #000;

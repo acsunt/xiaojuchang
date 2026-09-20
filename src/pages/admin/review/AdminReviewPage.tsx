@@ -429,12 +429,15 @@ function ReviewCategoryField({
   );
 }
 
+type TagSortScope = 'idle' | 'group' | 'leaf';
+
 type TagAdminCardProps = {
   tag: Tag;
   playCount: number;
   editing: boolean;
   editingTagName: string;
   isTagSorting: boolean;
+  canDrag: boolean;
   tagSaving: boolean;
   draggingTagId: string;
   onEditingTagNameChange: (value: string) => void;
@@ -445,9 +448,9 @@ type TagAdminCardProps = {
   onDragStart: (tagId: string) => void;
   onDragEnd: () => void;
   onDrop: (tagId: string) => void;
-  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>, tagId: string) => void;
-  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLSpanElement>, tagId: string) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLSpanElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLSpanElement>) => void;
 };
 
 function TagAdminCard({
@@ -456,6 +459,7 @@ function TagAdminCard({
   editing,
   editingTagName,
   isTagSorting,
+  canDrag,
   tagSaving,
   draggingTagId,
   onEditingTagNameChange,
@@ -471,24 +475,33 @@ function TagAdminCard({
   onPointerUp,
 }: TagAdminCardProps) {
   const kindLabel = isGroupTag(tag) ? '大类' : '小类';
+  const cardClassName = [
+    'tag-admin-card',
+    isGroupTag(tag) ? 'tag-admin-group-card' : '',
+    isTagSorting ? 'is-sorting' : '',
+    canDrag ? 'is-draggable' : '',
+    draggingTagId === tag.id ? 'dragging' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <article
-      className={
-        draggingTagId === tag.id
-          ? `tag-admin-card dragging is-sorting${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
-          : isTagSorting
-            ? `tag-admin-card is-sorting${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
-            : `tag-admin-card${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
-      }
+      className={cardClassName}
+      data-parent-id={tag.parentId ?? ''}
       data-tag-id={tag.id}
-      draggable={isTagSorting && !editing && !tagSaving}
+      data-tag-kind={tag.kind}
+      draggable={canDrag && !editing && !tagSaving}
       onDragEnd={onDragEnd}
       onDragOver={(event) => {
-        if (isTagSorting) {
+        if (canDrag) {
           event.preventDefault();
         }
       }}
-      onDragStart={() => onDragStart(tag.id)}
+      onDragStart={() => {
+        if (canDrag) {
+          onDragStart(tag.id);
+        }
+      }}
       onDrop={() => onDrop(tag.id)}
     >
       {editing ? (
@@ -523,23 +536,30 @@ function TagAdminCard({
       ) : (
         <div className="tag-chip-row tag-card-head">
           <div className="tag-chip-row tag-card-title-group">
-            {isTagSorting ? (
-              <button
+            {canDrag ? (
+              <span
+                aria-label={`${kindLabel}拖拽排序`}
                 className="tag-drag-handle"
                 onPointerCancel={onPointerUp}
                 onPointerDown={(event) => onPointerDown(event, tag.id)}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
-                type="button"
+                role="img"
               >
-                拖拽
-              </button>
+                <svg aria-hidden="true" className="tag-drag-handle-icon" viewBox="0 0 16 16">
+                  <circle cx="5" cy="3" r="1.45" />
+                  <circle cx="11" cy="3" r="1.45" />
+                  <circle cx="5" cy="8" r="1.45" />
+                  <circle cx="11" cy="8" r="1.45" />
+                  <circle cx="5" cy="13" r="1.45" />
+                  <circle cx="11" cy="13" r="1.45" />
+                </svg>
+              </span>
             ) : null}
             <span className="content-meta tag-floor-order">#{tag.sortOrder + 1}</span>
-            <strong>
-              {kindLabel} · {tag.name}
-            </strong>
-            <span className="content-meta">{playCount} 篇</span>
+            <span className="tag-kind-label">{kindLabel}</span>
+            <strong className="tag-card-name">{tag.name}</strong>
+            <span className="content-meta tag-card-count">{playCount} 篇</span>
           </div>
           {!isTagSorting ? (
             <div className="inline-actions tag-card-inline-actions">
@@ -1071,21 +1091,70 @@ const readContinuationStatus = () =>
 
 const formatAuditLogTime = (value: string) => new Date(value).toLocaleString('zh-CN');
 
-const reorderTagsInMemory = (items: Tag[], sourceId: string, targetId: string) => {
+const flattenTagGroupNodes = (nodes: ReturnType<typeof buildTagGroupNodes>) =>
+  nodes.flatMap((node) => [...(node.group ? [node.group] : []), ...node.children]);
+
+const applyTagSortOrders = (items: Tag[]) =>
+  items.map((item, index) => ({ ...item, sortOrder: index }));
+
+const reorderGroupedTagsInMemory = (
+  items: Tag[],
+  sourceId: string,
+  targetId: string,
+  scope: Exclude<TagSortScope, 'idle'>,
+) => {
   if (sourceId === targetId) {
     return items;
   }
 
-  const fromIndex = items.findIndex((item) => item.id === sourceId);
-  const toIndex = items.findIndex((item) => item.id === targetId);
-  if (fromIndex === -1 || toIndex === -1) {
+  const source = items.find((item) => item.id === sourceId);
+  const target = items.find((item) => item.id === targetId);
+  if (!source || !target) {
     return items;
   }
 
-  const nextItems = [...items];
-  const [movedItem] = nextItems.splice(fromIndex, 1);
-  nextItems.splice(toIndex, 0, movedItem);
-  return nextItems.map((item, index) => ({ ...item, sortOrder: index }));
+  if (scope === 'group') {
+    if (!isGroupTag(source) || !isGroupTag(target)) {
+      return items;
+    }
+
+    const nodes = buildTagGroupNodes(items);
+    const fromIndex = nodes.findIndex((node) => node.group?.id === sourceId);
+    const toIndex = nodes.findIndex((node) => node.group?.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) {
+      return items;
+    }
+
+    const nextNodes = [...nodes];
+    const [movedNode] = nextNodes.splice(fromIndex, 1);
+    nextNodes.splice(toIndex, 0, movedNode);
+    return applyTagSortOrders(flattenTagGroupNodes(nextNodes));
+  }
+
+  if (!isLeafTag(source) || !isLeafTag(target) || source.parentId !== target.parentId) {
+    return items;
+  }
+
+  const nodes = buildTagGroupNodes(items);
+  const nextNodes = nodes.map((node) => {
+    const parentId = node.group?.id ?? null;
+    if (parentId !== source.parentId) {
+      return node;
+    }
+
+    const children = [...node.children];
+    const fromIndex = children.findIndex((item) => item.id === sourceId);
+    const toIndex = children.findIndex((item) => item.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) {
+      return node;
+    }
+
+    const [movedItem] = children.splice(fromIndex, 1);
+    children.splice(toIndex, 0, movedItem);
+    return { ...node, children };
+  });
+
+  return applyTagSortOrders(flattenTagGroupNodes(nextNodes));
 };
 
 const isTouchLikePointer = (pointerType: string) =>
@@ -1495,9 +1564,10 @@ export function AdminReviewPage() {
   const [deleteSelectedIds, setDeleteSelectedIds] = useState<string[]>([]);
   const [deleteAuthorName, setDeleteAuthorName] = useState('');
   const [deleteSelectCountInput, setDeleteSelectCountInput] = useState('');
-  const [isTagSorting, setIsTagSorting] = useState(false);
+  const [tagSortScope, setTagSortScope] = useState<TagSortScope>('idle');
   const [tagSortDraft, setTagSortDraft] = useState<Tag[]>([]);
   const [tagSortSnapshot, setTagSortSnapshot] = useState<Tag[]>([]);
+  const isTagSorting = tagSortScope !== 'idle';
   const [tagKeyword, setTagKeyword] = useState('');
   const [emptyTagDeleteOpen, setEmptyTagDeleteOpen] = useState(false);
   const [tagLibrarySortMode, setTagLibrarySortModeState] =
@@ -2606,7 +2676,17 @@ export function AdminReviewPage() {
       }
       return tag.name.toLowerCase().includes(normalizedKeyword);
     });
+    const groupRank = new Map(mergeGroupTags.map((group, index) => [group.id, index]));
     return [...filtered].sort((left, right) => {
+      const leftGroupRank = left.parentId
+        ? (groupRank.get(left.parentId) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+      const rightGroupRank = right.parentId
+        ? (groupRank.get(right.parentId) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+      if (leftGroupRank !== rightGroupRank) {
+        return leftGroupRank - rightGroupRank;
+      }
       if (mergeSourceSortMode === 'count') {
         const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
         const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
@@ -2614,7 +2694,14 @@ export function AdminReviewPage() {
       }
       return left.name.localeCompare(right.name, 'zh-CN');
     });
-  }, [mergeLeafTags, mergeSourceKeyword, mergeSourceSortMode, mergeTargetGroupId, tagPlayCountMap]);
+  }, [
+    mergeGroupTags,
+    mergeLeafTags,
+    mergeSourceKeyword,
+    mergeSourceSortMode,
+    mergeTargetGroupId,
+    tagPlayCountMap,
+  ]);
   const mergeTargetGroupOptions = useMemo(() => {
     const selectedName =
       mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ?? '';
@@ -4298,19 +4385,25 @@ export function AdminReviewPage() {
     }
   };
 
-  const enterTagSortMode = () => {
+  const enterTagSortMode = (scope: Exclude<TagSortScope, 'idle'>) => {
     setTagMessage('');
-    setTagSortSnapshot(tags);
-    setTagSortDraft(tags);
+    if (tagSortScope === 'idle') {
+      setTagSortSnapshot(tags);
+      setTagSortDraft(tags);
+    }
     setDraggingTagId('');
-    setIsTagSorting(true);
+    setTagSortScope(scope);
     cancelEditTag();
+  };
+
+  const exitTagSortMode = () => {
+    setTagSortScope('idle');
+    setDraggingTagId('');
   };
 
   const cancelTagSort = () => {
     setTagSortDraft(tagSortSnapshot);
-    setDraggingTagId('');
-    setIsTagSorting(false);
+    exitTagSortMode();
     setTagMessageTone('success');
     setTagMessage('已取消本次标签排序');
   };
@@ -4323,41 +4416,46 @@ export function AdminReviewPage() {
       setTags(savedTags);
       setTagSortDraft(savedTags);
       setTagSortSnapshot(savedTags);
-      setIsTagSorting(false);
-      setDraggingTagId('');
+      exitTagSortMode();
       setTagMessageTone('success');
-      setTagMessage('标签顺序已更新');
+      setTagMessage(tagSortScope === 'group' ? '大类顺序已更新' : '小类顺序已更新');
     } catch (reason) {
       setTagMessageTone('error');
       setTagMessage(reason instanceof Error ? reason.message : '标签排序保存失败');
       await loadTags();
       setTagSortDraft(tagSortSnapshot);
-      setIsTagSorting(false);
-      setDraggingTagId('');
+      exitTagSortMode();
     } finally {
       setTagSaving(false);
     }
   };
 
-  const toggleTagSortMode = async () => {
-    if (!isTagSorting) {
-      enterTagSortMode();
+  const toggleTagSortMode = async (scope: Exclude<TagSortScope, 'idle'>) => {
+    if (tagSortScope === scope) {
+      await saveTagSort();
       return;
     }
 
-    await saveTagSort();
+    enterTagSortMode(scope);
   };
 
   const moveDraftTag = (sourceId: string, targetId: string) => {
-    if (!isTagSorting || sourceId === targetId) {
+    if (tagSortScope === 'idle' || sourceId === targetId) {
       return;
     }
 
-    setTagSortDraft((current) => reorderTagsInMemory(current, sourceId, targetId));
+    setTagSortDraft((current) =>
+      reorderGroupedTagsInMemory(current, sourceId, targetId, tagSortScope),
+    );
   };
 
-  const handleTagPointerDown = (event: ReactPointerEvent<HTMLButtonElement>, tagId: string) => {
-    if (!isTagSorting || tagSaving || editingTagId || !isTouchLikePointer(event.pointerType)) {
+  const handleTagPointerDown = (event: ReactPointerEvent<HTMLSpanElement>, tagId: string) => {
+    if (
+      tagSortScope === 'idle' ||
+      tagSaving ||
+      editingTagId ||
+      !isTouchLikePointer(event.pointerType)
+    ) {
       return;
     }
 
@@ -4366,8 +4464,8 @@ export function AdminReviewPage() {
     setDraggingTagId(tagId);
   };
 
-  const handleTagPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (!isTagSorting || !draggingTagId || !isTouchLikePointer(event.pointerType)) {
+  const handleTagPointerMove = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (tagSortScope === 'idle' || !draggingTagId || !isTouchLikePointer(event.pointerType)) {
       return;
     }
 
@@ -4383,7 +4481,7 @@ export function AdminReviewPage() {
     moveDraftTag(draggingTagId, targetId);
   };
 
-  const handleTagPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const handleTagPointerUp = (event: ReactPointerEvent<HTMLSpanElement>) => {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -4565,6 +4663,8 @@ export function AdminReviewPage() {
         `已将 ${completed} 个小类汇入「${targetGroup.name}」${failed > 0 ? `，${failed} 个失败` : ''}`,
       );
       setMergeSourceTagIds([]);
+      setMergeTargetGroupId('');
+      setMergeTargetKeyword('');
     } finally {
       setMergeBusy(false);
     }
@@ -8738,12 +8838,28 @@ export function AdminReviewPage() {
                   <div className="inline-actions wrap-mobile tag-library-title-row">
                     <h3>当前标签库</h3>
                     <button
-                      className="button ghost drag-toggle-button"
+                      className={
+                        tagSortScope === 'group'
+                          ? 'button ghost drag-toggle-button active'
+                          : 'button ghost drag-toggle-button'
+                      }
                       disabled={tagSaving}
-                      onClick={() => void toggleTagSortMode()}
+                      onClick={() => void toggleTagSortMode('group')}
                       type="button"
                     >
-                      {isTagSorting ? '保存拖拽' : '拖拽排序'}
+                      {tagSortScope === 'group' ? '保存大类拖拽' : '大类拖拽'}
+                    </button>
+                    <button
+                      className={
+                        tagSortScope === 'leaf'
+                          ? 'button ghost drag-toggle-button active'
+                          : 'button ghost drag-toggle-button'
+                      }
+                      disabled={tagSaving}
+                      onClick={() => void toggleTagSortMode('leaf')}
+                      type="button"
+                    >
+                      {tagSortScope === 'leaf' ? '保存小类拖拽' : '小类拖拽'}
                     </button>
                     {isTagSorting ? (
                       <button
@@ -8759,6 +8875,10 @@ export function AdminReviewPage() {
                   <span className="content-meta">
                     共 {tags.length} 个{tagKeyword.trim() ? `，匹配 ${displayTags.length} 个` : ''}
                     {hasLoadedAllPlays ? '' : ' · 正在统计小剧场数量'}
+                    {tagSortScope === 'group'
+                      ? ' · 拖动大类时所属小类会整体跟随，并自动折叠小类'
+                      : ''}
+                    {tagSortScope === 'leaf' ? ' · 小类仅能在所属大类内部调整位置' : ''}
                   </span>
                 </div>
                 <div className="inline-actions wrap-mobile" role="group" aria-label="标签排序">
@@ -8780,41 +8900,58 @@ export function AdminReviewPage() {
                   </button>
                 </div>
 
-                <div className={isTagSorting ? 'tag-admin-list is-sorting' : 'tag-admin-list'}>
+                <div
+                  className={
+                    isTagSorting
+                      ? `tag-admin-list is-sorting is-sorting-${tagSortScope}`
+                      : 'tag-admin-list'
+                  }
+                >
                   {displayTagGroups.map((node) => {
-                    const renderCard = (tag: Tag) => (
-                      <TagAdminCard
-                        draggingTagId={draggingTagId}
-                        editing={editingTagId === tag.id}
-                        editingTagName={editingTagName}
-                        isTagSorting={isTagSorting}
-                        key={tag.id}
-                        onCancelEdit={cancelEditTag}
-                        onDelete={(current) => void handleDeleteTag(current)}
-                        onDragEnd={() => setDraggingTagId('')}
-                        onDragStart={(tagId) => setDraggingTagId(tagId)}
-                        onDrop={(tagId) => {
-                          if (draggingTagId) {
-                            moveDraftTag(draggingTagId, tagId);
-                          }
-                          setDraggingTagId('');
-                        }}
-                        onEditingTagNameChange={setEditingTagName}
-                        onPointerDown={handleTagPointerDown}
-                        onPointerMove={handleTagPointerMove}
-                        onPointerUp={handleTagPointerUp}
-                        onSaveEdit={() => void handleUpdateTag()}
-                        onStartEdit={startEditTag}
-                        playCount={tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0}
-                        tag={tag}
-                        tagSaving={tagSaving}
-                      />
-                    );
+                    const renderCard = (tag: Tag) => {
+                      const canDrag =
+                        (tagSortScope === 'group' && isGroupTag(tag)) ||
+                        (tagSortScope === 'leaf' && isLeafTag(tag));
+                      return (
+                        <TagAdminCard
+                          canDrag={canDrag}
+                          draggingTagId={draggingTagId}
+                          editing={editingTagId === tag.id}
+                          editingTagName={editingTagName}
+                          isTagSorting={isTagSorting}
+                          key={tag.id}
+                          onCancelEdit={cancelEditTag}
+                          onDelete={(current) => void handleDeleteTag(current)}
+                          onDragEnd={() => setDraggingTagId('')}
+                          onDragStart={(tagId) => setDraggingTagId(tagId)}
+                          onDrop={(tagId) => {
+                            if (draggingTagId) {
+                              moveDraftTag(draggingTagId, tagId);
+                            }
+                            setDraggingTagId('');
+                          }}
+                          onEditingTagNameChange={setEditingTagName}
+                          onPointerDown={handleTagPointerDown}
+                          onPointerMove={handleTagPointerMove}
+                          onPointerUp={handleTagPointerUp}
+                          onSaveEdit={() => void handleUpdateTag()}
+                          onStartEdit={startEditTag}
+                          playCount={tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0}
+                          tag={tag}
+                          tagSaving={tagSaving}
+                        />
+                      );
+                    };
+
+                    const hideChildren = tagSortScope === 'group';
+                    if (hideChildren && !node.group) {
+                      return null;
+                    }
 
                     return (
                       <div className="tag-admin-group-block" key={node.group?.id ?? 'ungrouped'}>
                         {node.group ? renderCard(node.group) : null}
-                        {node.children.length > 0 ? (
+                        {hideChildren ? null : node.children.length > 0 ? (
                           <div className="tag-admin-child-list">
                             {node.children.map((tag) => renderCard(tag))}
                           </div>

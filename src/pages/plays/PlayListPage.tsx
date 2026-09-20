@@ -2663,8 +2663,8 @@ export function PlayListPage() {
                                 <button
                                   className={
                                     activeCategory === node.group.name
-                                      ? 'tab-chip active'
-                                      : 'tab-chip'
+                                      ? 'tab-chip active plaza-category-group-chip'
+                                      : 'tab-chip plaza-category-group-chip'
                                   }
                                   onClick={() => {
                                     setActiveCategory(node.group?.name ?? '');
