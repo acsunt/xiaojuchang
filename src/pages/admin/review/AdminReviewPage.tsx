@@ -79,8 +79,9 @@ import {
   getLeafTags,
   isGroupTag,
   isLeafTag,
-  joinPlayCategories,
+  joinPlayCategoriesByTags,
   playHasCategoryName,
+  renameCategoryInValue,
   splitPlayCategories,
 } from '../../../utils/categories';
 
@@ -336,8 +337,8 @@ function SearchableCategorySelect({
   );
 }
 
-const addCategoryName = (current: string, name: string) =>
-  joinPlayCategories([...splitPlayCategories(current), name]);
+const addCategoryName = (current: string, name: string, tags: Tag[]) =>
+  joinPlayCategoriesByTags([...splitPlayCategories(current), name], tags);
 
 function ReviewCategoryField({
   tags,
@@ -409,7 +410,7 @@ function ReviewCategoryField({
                 <button
                   className="category-suggest-item"
                   onClick={() => {
-                    onChange(addCategoryName(value, tag.name));
+                    onChange(addCategoryName(value, tag.name, tags));
                     setSuggestOpen(false);
                   }}
                   type="button"
@@ -491,16 +492,21 @@ function TagAdminCard({
       onDrop={() => onDrop(tag.id)}
     >
       {editing ? (
-        <div className="tag-chip-row tag-card-head">
+        <div className="tag-chip-row tag-card-head is-editing">
           <label className="tag-card-edit-field">
             <span>编辑{kindLabel}</span>
-            <input
-              value={editingTagName}
-              onChange={(event) => onEditingTagNameChange(event.target.value)}
-              placeholder={`输入新的${kindLabel}名`}
-            />
+            <ClearableField
+              onClear={() => onEditingTagNameChange('')}
+              visible={Boolean(editingTagName)}
+            >
+              <input
+                value={editingTagName}
+                onChange={(event) => onEditingTagNameChange(event.target.value)}
+                placeholder={`输入新的${kindLabel}名`}
+              />
+            </ClearableField>
           </label>
-          <div className="inline-actions tag-card-inline-actions">
+          <div className="inline-actions tag-card-edit-actions">
             <button
               className="button primary"
               disabled={tagSaving}
@@ -558,42 +564,24 @@ function TagAdminCard({
         </div>
       )}
 
-      {!isTagSorting ? (
+      {!isTagSorting && !editing ? (
         <div className="inline-actions wrap-mobile tag-card-actions">
-          {editing ? (
-            <>
-              <button
-                className="button primary"
-                disabled={tagSaving}
-                onClick={onSaveEdit}
-                type="button"
-              >
-                保存标签
-              </button>
-              <button className="button ghost" onClick={onCancelEdit} type="button">
-                取消
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="button secondary"
-                disabled={tagSaving}
-                onClick={() => onStartEdit(tag)}
-                type="button"
-              >
-                改名
-              </button>
-              <button
-                className="button danger"
-                disabled={tagSaving}
-                onClick={() => onDelete(tag)}
-                type="button"
-              >
-                删除
-              </button>
-            </>
-          )}
+          <button
+            className="button secondary"
+            disabled={tagSaving}
+            onClick={() => onStartEdit(tag)}
+            type="button"
+          >
+            改名
+          </button>
+          <button
+            className="button danger"
+            disabled={tagSaving}
+            onClick={() => onDelete(tag)}
+            type="button"
+          >
+            删除
+          </button>
         </div>
       ) : null}
     </article>
@@ -877,7 +865,12 @@ type MoveCategorySortMode = 'name' | 'count';
 type TagLibrarySortMode = 'name' | 'count';
 
 const MOVE_CATEGORY_SORT_STORAGE_KEY = 'mini-theater:admin-move-category-sort';
+const MERGE_SOURCE_SORT_STORAGE_KEY = 'mini-theater:admin-merge-source-sort';
 const TAG_LIBRARY_SORT_STORAGE_KEY = 'mini-theater:admin-tag-library-sort';
+const ADMIN_PANEL_STORAGE_KEY = 'mini-theater:admin-review-panel';
+const ADMIN_PLAY_STATUS_KEY = 'mini-theater:admin-review-play-status';
+const ADMIN_REPO_STATUS_KEY = 'mini-theater:admin-review-repo-status';
+const ADMIN_CONTINUATION_STATUS_KEY = 'mini-theater:admin-review-continuation-status';
 const readStoredNameCountSortMode = (storageKey: string): MoveCategorySortMode => {
   if (typeof window === 'undefined') {
     return 'name';
@@ -889,6 +882,8 @@ const readMoveCategorySortMode = (): MoveCategorySortMode =>
   readStoredNameCountSortMode(MOVE_CATEGORY_SORT_STORAGE_KEY);
 const readTagLibrarySortMode = (): TagLibrarySortMode =>
   readStoredNameCountSortMode(TAG_LIBRARY_SORT_STORAGE_KEY);
+const readMergeSourceSortMode = (): MoveCategorySortMode =>
+  readStoredNameCountSortMode(MERGE_SOURCE_SORT_STORAGE_KEY);
 
 type SubmissionDiffItem = {
   label: string;
@@ -1038,6 +1033,42 @@ const auditLogTabs: Array<{ label: string; value: AuditLogCategory }> = [
   { label: '续写', value: 'continuations' },
 ];
 
+const adminPanelValues = new Set(adminPanelTabs.map((panel) => panel.value));
+const readAdminPanel = (): AdminPanel => {
+  if (typeof window === 'undefined') {
+    return 'review';
+  }
+  const saved = window.localStorage.getItem(ADMIN_PANEL_STORAGE_KEY);
+  return saved && adminPanelValues.has(saved as AdminPanel) ? (saved as AdminPanel) : 'review';
+};
+const persistOptionalStatus = (key: string, next?: string) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(key, next ?? '');
+};
+const readOptionalStatus = <T extends string>(
+  key: string,
+  allowed: Set<T>,
+  fallback: T | undefined,
+): T | undefined => {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+  const saved = window.localStorage.getItem(key);
+  if (saved === '') {
+    return undefined;
+  }
+  return saved && allowed.has(saved as T) ? (saved as T) : fallback;
+};
+const playStatusValues = new Set<PlayStatus>(['pending', 'approved', 'rejected', 'offline']);
+const repoStatusValues = new Set<RepoStatus>(['pending', 'approved', 'rejected']);
+const continuationStatusValues = new Set<ContinuationStatus>(['pending', 'approved', 'rejected']);
+const readPlayStatus = () => readOptionalStatus(ADMIN_PLAY_STATUS_KEY, playStatusValues, 'pending');
+const readRepoStatus = () => readOptionalStatus(ADMIN_REPO_STATUS_KEY, repoStatusValues, 'pending');
+const readContinuationStatus = () =>
+  readOptionalStatus(ADMIN_CONTINUATION_STATUS_KEY, continuationStatusValues, 'pending');
+
 const formatAuditLogTime = (value: string) => new Date(value).toLocaleString('zh-CN');
 
 const reorderTagsInMemory = (items: Tag[], sourceId: string, targetId: string) => {
@@ -1170,7 +1201,13 @@ export function AdminReviewPage() {
   const [repos, setRepos] = useState<Repo[]>([]);
   const [allRepos, setAllRepos] = useState<Repo[]>([]);
   const [hasLoadedAllRepos, setHasLoadedAllRepos] = useState(false);
-  const [selectedRepoStatus, setSelectedRepoStatus] = useState<RepoStatus | undefined>('pending');
+  const [selectedRepoStatus, setSelectedRepoStatusState] = useState<RepoStatus | undefined>(
+    readRepoStatus,
+  );
+  const setSelectedRepoStatus = (next: RepoStatus | undefined) => {
+    setSelectedRepoStatusState(next);
+    persistOptionalStatus(ADMIN_REPO_STATUS_KEY, next);
+  };
   const [repoReviewNote, setRepoReviewNote] = useState('');
   const [repoBusyAction, setRepoBusyAction] = useState<RepoReviewAction | 'delete' | null>(null);
   const [repoDeleteSelectedIds, setRepoDeleteSelectedIds] = useState<string[]>([]);
@@ -1191,9 +1228,13 @@ export function AdminReviewPage() {
   const [continuations, setContinuations] = useState<Continuation[]>([]);
   const [allContinuations, setAllContinuations] = useState<Continuation[]>([]);
   const [hasLoadedAllContinuations, setHasLoadedAllContinuations] = useState(false);
-  const [selectedContinuationStatus, setSelectedContinuationStatus] = useState<
+  const [selectedContinuationStatus, setSelectedContinuationStatusState] = useState<
     ContinuationStatus | undefined
-  >('pending');
+  >(readContinuationStatus);
+  const setSelectedContinuationStatus = (next: ContinuationStatus | undefined) => {
+    setSelectedContinuationStatusState(next);
+    persistOptionalStatus(ADMIN_CONTINUATION_STATUS_KEY, next);
+  };
   const [continuationKeyword, setContinuationKeyword] = useState('');
   const [continuationReviewNote, setContinuationReviewNote] = useState('');
   /* busy 状态独立包含 review action + update + delete：
@@ -1214,7 +1255,11 @@ export function AdminReviewPage() {
   }>({ summary: '', content: '', nickname: '', note: '' });
   const [isContinuationMobileExpanded, setIsContinuationMobileExpanded] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<PlayStatus | undefined>('pending');
+  const [selectedStatus, setSelectedStatusState] = useState<PlayStatus | undefined>(readPlayStatus);
+  const setSelectedStatus = (next: PlayStatus | undefined) => {
+    setSelectedStatusState(next);
+    persistOptionalStatus(ADMIN_PLAY_STATUS_KEY, next);
+  };
   const [selectedPlayId, setSelectedPlayId] = useState('');
   /* 任务 5：repo 审核面板点击一条卡片后进入"详情查看"，与 selectedPlay 对齐。
    * 切换面板/筛选时清掉，避免选中的 repo 不在新视图里。 */
@@ -1372,7 +1417,13 @@ export function AdminReviewPage() {
   const [tagMessage, setTagMessage] = useState('');
   const [tagMessageTone, setTagMessageTone] = useState<'success' | 'error'>('success');
   const [tagSaving, setTagSaving] = useState(false);
-  const [activePanel, setActivePanel] = useState<AdminPanel>('review');
+  const [activePanel, setActivePanelState] = useState<AdminPanel>(readAdminPanel);
+  const setActivePanel = (next: AdminPanel) => {
+    setActivePanelState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(ADMIN_PANEL_STORAGE_KEY, next);
+    }
+  };
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState>(() =>
     getDuplicateReviewState(),
   );
@@ -1481,6 +1532,14 @@ export function AdminReviewPage() {
   const [moveTargetCategory, setMoveTargetCategory] = useState('');
   const [mergeSourceTagIds, setMergeSourceTagIds] = useState<string[]>([]);
   const [mergeSourceKeyword, setMergeSourceKeyword] = useState('');
+  const [mergeSourceSortMode, setMergeSourceSortModeState] =
+    useState<MoveCategorySortMode>(readMergeSourceSortMode);
+  const setMergeSourceSortMode = (next: MoveCategorySortMode) => {
+    setMergeSourceSortModeState(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(MERGE_SOURCE_SORT_STORAGE_KEY, next);
+    }
+  };
   const [mergeTargetGroupId, setMergeTargetGroupId] = useState('');
   const [mergeTargetKeyword, setMergeTargetKeyword] = useState('');
   const [mergeBusy, setMergeBusy] = useState(false);
@@ -2538,21 +2597,45 @@ export function AdminReviewPage() {
   const mergeGroupTags = useMemo(() => getGroupTags(tags), [tags]);
   const visibleMergeSourceTags = useMemo(() => {
     const normalizedKeyword = mergeSourceKeyword.trim().toLowerCase();
-    const filtered = normalizedKeyword
-      ? mergeLeafTags.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword))
-      : mergeLeafTags;
-    return [...filtered].sort((left, right) => {
-      const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
-      const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
-      return rightCount - leftCount || left.name.localeCompare(right.name, 'zh-CN');
+    const filtered = mergeLeafTags.filter((tag) => {
+      if (mergeTargetGroupId && tag.parentId === mergeTargetGroupId) {
+        return false;
+      }
+      if (!normalizedKeyword) {
+        return true;
+      }
+      return tag.name.toLowerCase().includes(normalizedKeyword);
     });
-  }, [mergeLeafTags, mergeSourceKeyword, tagPlayCountMap]);
+    return [...filtered].sort((left, right) => {
+      if (mergeSourceSortMode === 'count') {
+        const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
+        const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
+        return rightCount - leftCount || left.name.localeCompare(right.name, 'zh-CN');
+      }
+      return left.name.localeCompare(right.name, 'zh-CN');
+    });
+  }, [mergeLeafTags, mergeSourceKeyword, mergeSourceSortMode, mergeTargetGroupId, tagPlayCountMap]);
   const mergeTargetGroupOptions = useMemo(() => {
+    const selectedName =
+      mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ?? '';
     const normalizedKeyword = mergeTargetKeyword.trim().toLowerCase();
+    const query =
+      selectedName && mergeTargetKeyword.trim() === selectedName ? '' : normalizedKeyword;
     return mergeGroupTags.filter((group) =>
-      normalizedKeyword ? group.name.toLowerCase().includes(normalizedKeyword) : true,
+      query ? group.name.toLowerCase().includes(query) : true,
     );
-  }, [mergeGroupTags, mergeTargetKeyword]);
+  }, [mergeGroupTags, mergeTargetGroupId, mergeTargetKeyword]);
+  useEffect(() => {
+    if (!mergeTargetGroupId) {
+      return;
+    }
+    setMergeSourceTagIds((current) =>
+      current.filter((id) => {
+        const tag = mergeLeafTags.find((item) => item.id === id);
+        return tag != null && tag.parentId !== mergeTargetGroupId;
+      }),
+    );
+  }, [mergeLeafTags, mergeTargetGroupId]);
   const displayTagGroups = useMemo(() => {
     const source = isTagSorting ? tagSortDraft : tags;
     if (isTagSorting) {
@@ -2580,20 +2663,10 @@ export function AdminReviewPage() {
       return left.name.localeCompare(right.name, 'zh-CN');
     };
 
-    return buildTagGroupNodes(withParents)
-      .map((node) => ({
-        ...node,
-        children: [...node.children].sort(compareTags),
-      }))
-      .sort((left, right) => {
-        if (!left.group) {
-          return 1;
-        }
-        if (!right.group) {
-          return -1;
-        }
-        return compareTags(left.group, right.group);
-      });
+    return buildTagGroupNodes(withParents).map((node) => ({
+      ...node,
+      children: [...node.children].sort(compareTags),
+    }));
   }, [isTagSorting, tagKeyword, tagLibrarySortMode, tagPlayCountMap, tagSortDraft, tags]);
   const displayTags = useMemo(
     () =>
@@ -4099,16 +4172,46 @@ export function AdminReviewPage() {
       return;
     }
 
+    const currentTag = tags.find((tag) => tag.id === editingTagId);
+    const nextName = editingTagName.trim();
+    if (!currentTag) {
+      return;
+    }
+    if (!nextName) {
+      setTagMessageTone('error');
+      setTagMessage('先输入新标签名');
+      return;
+    }
+
+    const previousTags = tags;
+    const previousTagSortDraft = tagSortDraft;
+    const previousPlays = plays;
+    const previousAllPlays = allPlays;
+    if (currentTag.name !== nextName) {
+      const renameTag = (tag: Tag) => (tag.id === currentTag.id ? { ...tag, name: nextName } : tag);
+      setTags((current) => current.map(renameTag));
+      setTagSortDraft((current) => current.map(renameTag));
+      const renamePlay = (play: Play): Play => ({
+        ...play,
+        category: renameCategoryInValue(play.category, currentTag.name, nextName),
+      });
+      setPlays((current) => current.map(renamePlay));
+      setAllPlays((current) => current.map(renamePlay));
+    }
+
     setTagSaving(true);
     setTagMessage('');
     try {
-      await playApi.updateAdminTag(editingTagId, { name: editingTagName.trim() });
+      await playApi.updateAdminTag(editingTagId, { name: nextName });
       setTagMessageTone('success');
       setTagMessage('标签已更新，历史内容已同步新标签');
       cancelEditTag();
       await loadTags();
-      await load(selectedStatus, { silent: true });
     } catch (reason) {
+      setTags(previousTags);
+      setTagSortDraft(previousTagSortDraft);
+      setPlays(previousPlays);
+      setAllPlays(previousAllPlays);
       setTagMessageTone('error');
       setTagMessage(reason instanceof Error ? reason.message : '标签更新失败');
     } finally {
@@ -7489,8 +7592,26 @@ export function AdminReviewPage() {
                   <strong>源小类</strong>
                   <span className="content-meta">
                     共 {mergeLeafTags.length} 个小类
-                    {mergeSourceKeyword.trim() ? `，匹配 ${visibleMergeSourceTags.length} 个` : ''}
+                    {mergeTargetGroupId || mergeSourceKeyword.trim()
+                      ? `，当前显示 ${visibleMergeSourceTags.length} 个`
+                      : ''}
                   </span>
+                </div>
+                <div className="inline-actions wrap-mobile" role="group" aria-label="源小类排序">
+                  <button
+                    className={mergeSourceSortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setMergeSourceSortMode('name')}
+                    type="button"
+                  >
+                    按名称首字母
+                  </button>
+                  <button
+                    className={mergeSourceSortMode === 'count' ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setMergeSourceSortMode('count')}
+                    type="button"
+                  >
+                    按小剧场数量
+                  </button>
                 </div>
                 <ClearableField
                   onClear={() => setMergeSourceKeyword('')}
@@ -7539,21 +7660,54 @@ export function AdminReviewPage() {
 
                 <div className="stack-gap-sm">
                   <strong>目标大类</strong>
-                  <span className="content-meta">搜索现有大类，把勾选的小类汇入其中</span>
+                  <span className="content-meta">搜索或直接点选现有大类，把勾选的小类汇入其中</span>
                 </div>
-                <SearchableCategorySelect
-                  options={mergeTargetGroupOptions.map((group) => group.name)}
-                  placeholder="搜索目标大类"
-                  value={
-                    mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ??
-                    mergeTargetKeyword
-                  }
-                  onChange={(next) => {
-                    setMergeTargetKeyword(next);
-                    const matched = mergeGroupTags.find((group) => group.name === next);
-                    setMergeTargetGroupId(matched?.id ?? '');
+                <ClearableField
+                  onClear={() => {
+                    setMergeTargetKeyword('');
+                    setMergeTargetGroupId('');
                   }}
-                />
+                  visible={Boolean(mergeTargetKeyword) || Boolean(mergeTargetGroupId)}
+                >
+                  <input
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setMergeTargetKeyword(next);
+                      const matched = mergeGroupTags.find((group) => group.name === next);
+                      setMergeTargetGroupId(matched?.id ?? '');
+                    }}
+                    placeholder="搜索目标大类"
+                    value={
+                      mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ??
+                      mergeTargetKeyword
+                    }
+                  />
+                </ClearableField>
+                <div className="plaza-export-modal-list move-category-source-list">
+                  {mergeTargetGroupOptions.length > 0 ? (
+                    mergeTargetGroupOptions.map((group) => {
+                      const checked = mergeTargetGroupId === group.id;
+                      return (
+                        <label
+                          className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                          key={group.id}
+                        >
+                          <input
+                            checked={checked}
+                            onChange={() => {
+                              setMergeTargetGroupId(checked ? '' : group.id);
+                              setMergeTargetKeyword(checked ? '' : group.name);
+                            }}
+                            type="checkbox"
+                          />
+                          <span>{group.name}</span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="content-meta">没有匹配的大类</div>
+                  )}
+                </div>
 
                 <div className="stack-gap-sm admin-bulk-review-progress-block">
                   {mergeProgress ? (
@@ -8516,11 +8670,13 @@ export function AdminReviewPage() {
                 </div>
                 <label>
                   <span>{tagCreateKind === 'group' ? '新增大类' : '新增小类'}</span>
-                  <input
-                    value={tagDraft}
-                    onChange={(event) => setTagDraft(event.target.value)}
-                    placeholder={tagCreateKind === 'group' ? '输入新大类名' : '输入新小类名'}
-                  />
+                  <ClearableField onClear={() => setTagDraft('')} visible={Boolean(tagDraft)}>
+                    <input
+                      value={tagDraft}
+                      onChange={(event) => setTagDraft(event.target.value)}
+                      placeholder={tagCreateKind === 'group' ? '输入新大类名' : '输入新小类名'}
+                    />
+                  </ClearableField>
                 </label>
                 {tagCreateKind === 'tag' ? (
                   <label>

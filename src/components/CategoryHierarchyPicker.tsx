@@ -1,6 +1,10 @@
 import { useMemo } from 'react';
 import type { Tag } from '../types/play';
-import { buildTagGroupNodes, joinPlayCategories, splitPlayCategories } from '../utils/categories';
+import {
+  buildTagGroupNodes,
+  joinPlayCategoriesByTags,
+  splitPlayCategories,
+} from '../utils/categories';
 
 type CategoryHierarchyPickerProps = {
   tags: Tag[];
@@ -49,7 +53,9 @@ export function CategoryHierarchyPicker({
                     className={active ? `${chipClassName} active` : chipClassName}
                     disabled={disabled}
                     key={tag.id}
-                    onClick={() => onChange(joinPlayCategories(toggleName(selected, tag.name)))}
+                    onClick={() =>
+                      onChange(joinPlayCategoriesByTags(toggleName(selected, tag.name), tags))
+                    }
                     type="button"
                   >
                     {tag.name}

@@ -33,7 +33,7 @@ import {
 } from '../../types/play';
 import { showFloatingToast } from '../../components/floating-toast-store';
 import { CategoryHierarchyPicker } from '../../components/CategoryHierarchyPicker';
-import { getLeafTags, joinPlayCategories, splitPlayCategories } from '../../utils/categories';
+import { getLeafTags, joinPlayCategoriesByTags, splitPlayCategories } from '../../utils/categories';
 
 const initialForm = {
   authorName: '',
@@ -102,8 +102,8 @@ const compareCategoryNames = (left: string, right: string) =>
 
 const sortTagsByName = (items: Tag[]) =>
   [...items].sort((left, right) => compareCategoryNames(left.name, right.name));
-const addCategoryName = (current: string, name: string) =>
-  joinPlayCategories([...splitPlayCategories(current), name]);
+const addCategoryName = (current: string, name: string, tags: Tag[]) =>
+  joinPlayCategoriesByTags([...splitPlayCategories(current), name], tags);
 
 const ClearableField = ({
   children,
@@ -309,7 +309,10 @@ export function UploadPage() {
     categoryHighlightIndex >= 0 ? visibleCategorySuggestions[categoryHighlightIndex] : undefined;
 
   const pickCategory = (name: string) => {
-    setForm((current) => ({ ...current, category: addCategoryName(current.category, name) }));
+    setForm((current) => ({
+      ...current,
+      category: addCategoryName(current.category, name, tags),
+    }));
     setCategorySuggestOpen(false);
     setCategoryHighlightIndex(-1);
   };

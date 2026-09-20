@@ -102,6 +102,36 @@ export const buildTagGroupNodes = (tags: Tag[]): TagGroupNode[] => {
   return nodes;
 };
 
+export const sortCategoryNamesByTagOrder = (names: string[], tags: Tag[]) => {
+  const unique = splitPlayCategories(joinPlayCategories(names));
+  const rank = new Map<string, number>();
+  let index = 0;
+  buildTagGroupNodes(tags).forEach((node) => {
+    node.children.forEach((tag) => {
+      rank.set(tag.name.toLowerCase(), index);
+      index += 1;
+    });
+  });
+
+  return [...unique].sort((left, right) => {
+    const leftRank = rank.get(left.toLowerCase());
+    const rightRank = rank.get(right.toLowerCase());
+    if (leftRank == null && rightRank == null) {
+      return left.localeCompare(right, 'zh-CN');
+    }
+    if (leftRank == null) {
+      return 1;
+    }
+    if (rightRank == null) {
+      return -1;
+    }
+    return leftRank - rightRank;
+  });
+};
+
+export const joinPlayCategoriesByTags = (names: string[], tags: Tag[]) =>
+  joinPlayCategories(sortCategoryNamesByTagOrder(names, tags));
+
 export const getLeafTags = (tags: Tag[]) => sortTagsByOrder(tags.filter(isLeafTag));
 
 export const getGroupTags = (tags: Tag[]) => sortTagsByOrder(tags.filter(isGroupTag));

@@ -2410,6 +2410,11 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 14px;
 }
 
+.plaza-category-hierarchy > .category-hierarchy-group + .category-hierarchy-group {
+  border-top: 1px solid color-mix(in srgb, var(--border) 82%, white 18%);
+  padding-top: 12px;
+}
+
 .category-hierarchy {
   display: grid;
   gap: 12px;
@@ -2458,6 +2463,12 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   align-items: center;
 }
 
+.tag-card-head.is-editing {
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
 .tag-card-title-group {
   min-width: 0;
   flex: 1 1 auto;
@@ -2465,6 +2476,13 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 .tag-card-inline-actions {
   display: none;
+}
+
+.tag-card-edit-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .tag-card-edit-field {
@@ -5192,7 +5210,8 @@ body[data-mode='night'] .diff-segment-added {
     align-items: center;
   }
 
-  .tag-card-inline-actions .button {
+  .tag-card-inline-actions .button,
+  .tag-card-edit-actions .button {
     width: auto;
     min-width: 0;
     padding: 6px 10px;
