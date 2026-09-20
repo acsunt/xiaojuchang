@@ -158,6 +158,9 @@ export const playMatchesCategoryFilter = (
   if (!target) {
     return true;
   }
+  if (target === DEFAULT_CATEGORY) {
+    return splitPlayCategories(play.category).length === 0;
+  }
 
   const matched = findTagByName(tags, target);
   if (matched && isGroupTag(matched)) {
@@ -166,6 +169,18 @@ export const playMatchesCategoryFilter = (
   }
 
   return playHasCategoryName(play, target);
+};
+
+export const playMatchesCategoryFilters = (
+  play: Pick<Play, 'category'>,
+  activeCategories: string[],
+  tags: Tag[],
+) => {
+  const targets = activeCategories.map((name) => name.trim()).filter(Boolean);
+  if (targets.length === 0) {
+    return true;
+  }
+  return targets.every((name) => playMatchesCategoryFilter(play, name, tags));
 };
 
 export const collectPlayCategorySearchText = (play: Pick<Play, 'category'>) =>

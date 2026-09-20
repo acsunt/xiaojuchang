@@ -210,6 +210,28 @@ const filterCategoryStats = (
   });
 };
 
+const mergeEmptyLeafTagsIntoCategoryStats = (
+  stats: Array<{ name: string; count: number }>,
+  tags: Tag[],
+) => {
+  const merged = new Map<string, { name: string; count: number }>();
+  stats.forEach((item) => {
+    merged.set(item.name.toLowerCase(), item);
+  });
+  tags.filter(isLeafTag).forEach((tag) => {
+    const name = tag.name.trim();
+    if (!name) {
+      return;
+    }
+    const key = name.toLowerCase();
+    if (merged.has(key)) {
+      return;
+    }
+    merged.set(key, { name, count: 0 });
+  });
+  return [...merged.values()];
+};
+
 function CategoryCheckboxList({
   items,
   selected,
@@ -998,6 +1020,22 @@ const readContinuationStatus = () =>
   readOptionalStatus(ADMIN_CONTINUATION_STATUS_KEY, continuationStatusValues, 'pending');
 
 const formatAuditLogTime = (value: string) => new Date(value).toLocaleString('zh-CN');
+const UNGROUPED_TAG_GROUP_NAME = '未归入大类';
+
+const withTrailingUngroupedTagGroup = (
+  nodes: ReturnType<typeof buildTagGroupNodes>,
+  includeEmpty: boolean,
+) => {
+  const grouped = nodes.filter((node) => node.group != null);
+  const ungrouped = nodes.find((node) => node.group == null) ?? {
+    group: null,
+    children: [] as Tag[],
+  };
+  if (!includeEmpty && ungrouped.children.length === 0) {
+    return grouped;
+  }
+  return [...grouped, ungrouped];
+};
 
 const flattenTagGroupNodes = (nodes: ReturnType<typeof buildTagGroupNodes>) =>
   nodes.flatMap((node) => [...(node.group ? [node.group] : []), ...node.children]);
@@ -2152,6 +2190,10 @@ export function AdminReviewPage() {
     });
     return [...counts.entries()].map(([name, count]) => ({ name, count }));
   }, [allPlays]);
+  const moveTargetCategoryStats = useMemo(
+    () => mergeEmptyLeafTagsIntoCategoryStats(moveCategoryStats, tags),
+    [moveCategoryStats, tags],
+  );
   const visibleMoveCategoryStats = useMemo(
     () =>
       sortCategoryStats(
@@ -2164,13 +2206,13 @@ export function AdminReviewPage() {
     () =>
       sortCategoryStats(
         filterCategoryStats(
-          moveCategoryStats,
+          moveTargetCategoryStats,
           moveTargetKeyword,
           new Set([...moveSourceCategories, DEFAULT_CATEGORY]),
         ),
         moveCategorySortMode,
       ),
-    [moveCategorySortMode, moveCategoryStats, moveSourceCategories, moveTargetKeyword],
+    [moveCategorySortMode, moveSourceCategories, moveTargetCategoryStats, moveTargetKeyword],
   );
   const visibleTagSourceCategoryStats = useMemo(
     () =>
@@ -2184,13 +2226,13 @@ export function AdminReviewPage() {
     () =>
       sortCategoryStats(
         filterCategoryStats(
-          moveCategoryStats,
+          moveTargetCategoryStats,
           tagTargetKeyword,
           new Set([...tagSourceCategories, DEFAULT_CATEGORY]),
         ),
         moveCategorySortMode,
       ),
-    [moveCategorySortMode, moveCategoryStats, tagSourceCategories, tagTargetKeyword],
+    [moveCategorySortMode, moveTargetCategoryStats, tagSourceCategories, tagTargetKeyword],
   );
   const playsMatchingSourceCategories = useCallback(
     (sourceCategories: string[]) => {
@@ -2613,6 +2655,18 @@ export function AdminReviewPage() {
       ).length;
       counts.set(group.name.toLowerCase(), count);
     });
+    const groupIdSet = new Set(tags.filter(isGroupTag).map((group) => group.id));
+    const ungroupedNames = new Set(
+      tags
+        .filter((tag) => isLeafTag(tag) && (!tag.parentId || !groupIdSet.has(tag.parentId)))
+        .map((tag) => tag.name.toLowerCase()),
+    );
+    counts.set(
+      UNGROUPED_TAG_GROUP_NAME.toLowerCase(),
+      allPlays.filter((play) =>
+        splitPlayCategories(play.category).some((name) => ungroupedNames.has(name.toLowerCase())),
+      ).length,
+    );
     return counts;
   }, [allPlays, tags]);
   const mergeLeafTags = useMemo(() => getLeafTags(tags), [tags]);
@@ -2687,11 +2741,15 @@ export function AdminReviewPage() {
   }, [tagSourceCategories]);
   const displayTagGroups = useMemo(() => {
     const source = isTagSorting ? tagSortDraft : tags;
+    const normalizedKeyword = tagKeyword.trim().toLowerCase();
+    const keywordMatchesUngrouped =
+      Boolean(normalizedKeyword) &&
+      UNGROUPED_TAG_GROUP_NAME.toLowerCase().includes(normalizedKeyword);
+
     if (isTagSorting) {
-      return buildTagGroupNodes(source);
+      return withTrailingUngroupedTagGroup(buildTagGroupNodes(source), true);
     }
 
-    const normalizedKeyword = tagKeyword.trim().toLowerCase();
     const filtered = normalizedKeyword
       ? source.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword))
       : source;
@@ -2712,10 +2770,26 @@ export function AdminReviewPage() {
       return left.name.localeCompare(right.name, 'zh-CN');
     };
 
-    return buildTagGroupNodes(withParents).map((node) => ({
+    const nodes = buildTagGroupNodes(withParents).map((node) => ({
       ...node,
       children: [...node.children].sort(compareTags),
     }));
+
+    if (keywordMatchesUngrouped) {
+      const allUngrouped =
+        buildTagGroupNodes(source).find((node) => node.group == null)?.children ?? [];
+      const grouped = nodes.filter((node) => node.group != null);
+      const matchedUngrouped = nodes.find((node) => node.group == null);
+      return [
+        ...grouped,
+        {
+          group: null,
+          children: [...(matchedUngrouped?.children ?? allUngrouped)].sort(compareTags),
+        },
+      ];
+    }
+
+    return withTrailingUngroupedTagGroup(nodes, !normalizedKeyword);
   }, [isTagSorting, tagKeyword, tagLibrarySortMode, tagPlayCountMap, tagSortDraft, tags]);
   const displayTags = useMemo(
     () =>
@@ -2729,9 +2803,11 @@ export function AdminReviewPage() {
     let groupIndex = 0;
     let leafIndex = 0;
     displayTagGroups.forEach((node) => {
+      groupIndex += 1;
       if (node.group) {
-        groupIndex += 1;
         map.set(node.group.id, groupIndex);
+      } else {
+        map.set('ungrouped', groupIndex);
       }
       if (tagSortScope === 'group') {
         return;
@@ -4204,6 +4280,11 @@ export function AdminReviewPage() {
       setTagMessage('新建小类时请选择所属大类');
       return;
     }
+    if (tagDraft.trim() === UNGROUPED_TAG_GROUP_NAME) {
+      setTagMessageTone('error');
+      setTagMessage('「未归入大类」是固定分组，不能加入标签库');
+      return;
+    }
 
     setTagSaving(true);
     setTagMessage('');
@@ -4250,6 +4331,11 @@ export function AdminReviewPage() {
     if (!nextName) {
       setTagMessageTone('error');
       setTagMessage('先输入新标签名');
+      return;
+    }
+    if (nextName === UNGROUPED_TAG_GROUP_NAME) {
+      setTagMessageTone('error');
+      setTagMessage('「未归入大类」是固定分组，不能用作标签名');
       return;
     }
 
@@ -7659,7 +7745,12 @@ export function AdminReviewPage() {
                     <div className="stack-gap-sm">
                       <strong>目标分类</strong>
                       <span className="content-meta">
-                        可同时勾选多个；搜索结果会跟着筛选。不选则归入「未分类」
+                        可同时勾选多个，包含 0 篇小剧场的标签。共 {moveTargetCategoryStats.length}{' '}
+                        个分类
+                        {moveTargetKeyword.trim()
+                          ? `，匹配 ${visibleMoveTargetCategoryStats.length} 个`
+                          : ''}
+                        。不选则归入「未分类」
                       </span>
                     </div>
                     <ClearableField
@@ -7795,7 +7886,12 @@ export function AdminReviewPage() {
                     <div className="stack-gap-sm">
                       <strong>目标分类</strong>
                       <span className="content-meta">
-                        可同时勾选多个；搜索结果会跟着筛选。会保留原有分类并追加勾选的分类
+                        可同时勾选多个，包含 0 篇小剧场的标签。共 {moveTargetCategoryStats.length}{' '}
+                        个分类
+                        {tagTargetKeyword.trim()
+                          ? `，匹配 ${visibleTagTargetCategoryStats.length} 个`
+                          : ''}
+                        。会保留原有分类并追加勾选的分类
                       </span>
                     </div>
                     <ClearableField
@@ -9115,6 +9211,9 @@ export function AdminReviewPage() {
                   }
                 >
                   {displayTagGroups.map((node) => {
+                    const hideChildren = tagSortScope === 'group';
+                    const ungroupedPlayCount =
+                      tagPlayCountMap.get(UNGROUPED_TAG_GROUP_NAME.toLowerCase()) ?? 0;
                     const renderCard = (tag: Tag) => {
                       const canDrag =
                         (tagSortScope === 'group' && isGroupTag(tag)) ||
@@ -9151,25 +9250,39 @@ export function AdminReviewPage() {
                       );
                     };
 
-                    const hideChildren = tagSortScope === 'group';
-                    if (hideChildren && !node.group) {
-                      return null;
-                    }
-
                     return (
                       <div className="tag-admin-group-block" key={node.group?.id ?? 'ungrouped'}>
-                        {node.group ? renderCard(node.group) : null}
+                        {node.group ? (
+                          renderCard(node.group)
+                        ) : (
+                          <article className="tag-admin-card tag-admin-group-card">
+                            <div className="tag-chip-row tag-card-head">
+                              <div className="tag-chip-row tag-card-title-group">
+                                <span className="content-meta tag-floor-order">
+                                  #{tagDisplayOrderMap.get('ungrouped') ?? displayTagGroups.length}
+                                </span>
+                                <span className="tag-kind-label">大类</span>
+                                <strong className="tag-card-name">
+                                  {UNGROUPED_TAG_GROUP_NAME}
+                                </strong>
+                                <span className="content-meta tag-card-count">
+                                  {ungroupedPlayCount} 篇
+                                </span>
+                              </div>
+                            </div>
+                          </article>
+                        )}
                         {hideChildren ? null : node.children.length > 0 ? (
                           <div className="tag-admin-child-list">
                             {node.children.map((tag) => renderCard(tag))}
                           </div>
-                        ) : node.group ? (
+                        ) : (
                           <div className="content-meta">暂无小类</div>
-                        ) : null}
+                        )}
                       </div>
                     );
                   })}
-                  {displayTags.length === 0 ? (
+                  {displayTagGroups.length === 0 ? (
                     <div className="empty-panel">
                       {tags.length === 0 ? '当前还没有可用标签。' : '没有匹配的标签。'}
                     </div>

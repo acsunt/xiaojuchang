@@ -2435,8 +2435,8 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   padding-top: 12px;
 }
 
-.plaza-category-group-chip {
-  font-weight: 700;
+.plaza-category-hierarchy .category-hierarchy-group-label {
+  font-weight: 400;
 }
 
 .category-hierarchy {

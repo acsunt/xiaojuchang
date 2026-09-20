@@ -73,9 +73,8 @@ import {
   buildTagGroupNodes,
   collectPlayCategorySearchText,
   formatPlayLeafCategoryLabels,
-  getChildTagNames,
   isGroupTag,
-  playMatchesCategoryFilter,
+  playMatchesCategoryFilters,
   splitPlayCategories,
 } from '../../utils/categories';
 import { ExportContinuationsButton } from './ExportContinuationsButton';
@@ -292,6 +291,32 @@ const readPlazaString = (key: string, fallback = '') => {
 
   return window.localStorage.getItem(key) ?? fallback;
 };
+
+const parseStoredCategories = (raw: string) => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [] as string[];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+  } catch {
+    /* 兼容旧版单个分类字符串 */
+  }
+
+  return [trimmed];
+};
+
+const toggleCategorySelection = (current: string[], name: string) =>
+  current.includes(name) ? current.filter((item) => item !== name) : [...current, name];
+
+const formatSelectedCategoryFilterLabel = (names: string[]) => names.join(' · ');
 
 const readPlazaNumber = (key: string, fallback: number) => {
   if (typeof window === 'undefined') {
@@ -831,8 +856,8 @@ export function PlayListPage() {
       ? (saved as PlazaView)
       : 'everything';
   });
-  const [activeCategory, setActiveCategory] = useState(() =>
-    readPlazaString(PLAZA_ACTIVE_CATEGORY_KEY, ''),
+  const [activeCategories, setActiveCategories] = useState<string[]>(() =>
+    parseStoredCategories(readPlazaString(PLAZA_ACTIVE_CATEGORY_KEY, '')),
   );
   const [activeAuthor, setActiveAuthor] = useState(() =>
     readPlazaString(PLAZA_ACTIVE_AUTHOR_KEY, ''),
@@ -1163,8 +1188,8 @@ export function PlayListPage() {
       return;
     }
 
-    window.localStorage.setItem(PLAZA_ACTIVE_CATEGORY_KEY, activeCategory);
-  }, [activeCategory]);
+    window.localStorage.setItem(PLAZA_ACTIVE_CATEGORY_KEY, JSON.stringify(activeCategories));
+  }, [activeCategories]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1302,34 +1327,32 @@ export function PlayListPage() {
 
   const authorScopedPlays = useMemo(
     () =>
-      activeCategory
-        ? viewScopedPlays.filter((play) => playMatchesCategoryFilter(play, activeCategory, tags))
+      activeCategories.length > 0
+        ? viewScopedPlays.filter((play) => playMatchesCategoryFilters(play, activeCategories, tags))
         : viewScopedPlays,
-    [activeCategory, tags, viewScopedPlays],
+    [activeCategories, tags, viewScopedPlays],
   );
 
   const categoryStats = useMemo<CategoryStat[]>(() => {
-    const counts = new Map<string, number>();
+    const names = new Set<string>();
     categoryScopedPlays.forEach((play) => {
-      const names = splitPlayCategories(play.category);
-      if (names.length === 0) {
-        counts.set(DEFAULT_CATEGORY, (counts.get(DEFAULT_CATEGORY) ?? 0) + 1);
+      const playNames = splitPlayCategories(play.category);
+      if (playNames.length === 0) {
+        names.add(DEFAULT_CATEGORY);
         return;
       }
-      names.forEach((name) => {
-        counts.set(name, (counts.get(name) ?? 0) + 1);
-      });
+      playNames.forEach((name) => names.add(name));
     });
-    tags.filter(isGroupTag).forEach((group) => {
-      const childNames = getChildTagNames(tags, group);
-      const count = categoryScopedPlays.filter((play) =>
-        splitPlayCategories(play.category).some((name) => childNames.includes(name)),
-      ).length;
-      counts.set(group.name, count);
-    });
+    tags.filter(isGroupTag).forEach((group) => names.add(group.name));
 
-    return [...counts.entries()].map(([name, count]) => ({ name, count }));
-  }, [categoryScopedPlays, tags]);
+    return [...names].map((name) => {
+      const otherSelected = activeCategories.filter((item) => item !== name);
+      const count = categoryScopedPlays.filter((play) =>
+        playMatchesCategoryFilters(play, [...otherSelected, name], tags),
+      ).length;
+      return { name, count };
+    });
+  }, [activeCategories, categoryScopedPlays, tags]);
 
   const plazaCategoryGroups = useMemo(() => {
     const countMap = new Map(categoryStats.map((item) => [item.name, item.count]));
@@ -1340,11 +1363,10 @@ export function PlayListPage() {
         count: countMap.get(tag.name) ?? 0,
       })),
     }));
-    const unclassifiedCount = countMap.get(DEFAULT_CATEGORY) ?? 0;
-    if (unclassifiedCount > 0) {
+    if (countMap.has(DEFAULT_CATEGORY)) {
       groups.push({
         group: null,
-        children: [{ name: DEFAULT_CATEGORY, count: unclassifiedCount }],
+        children: [{ name: DEFAULT_CATEGORY, count: countMap.get(DEFAULT_CATEGORY) ?? 0 }],
       });
     }
     return groups;
@@ -1365,17 +1387,17 @@ export function PlayListPage() {
   }, [authorScopedPlays]);
 
   useEffect(() => {
+    if (tags.length === 0) {
+      return;
+    }
     const knownNames = new Set(
-      plazaCategoryGroups.flatMap((node) => [
-        ...(node.group ? [node.group.name] : []),
-        ...node.children.map((item) => item.name),
-      ]),
+      plazaCategoryGroups.flatMap((node) => node.children.map((item) => item.name)),
     );
-    if (activeCategory && !knownNames.has(activeCategory)) {
-      setActiveCategory('');
+    if (activeCategories.some((name) => !knownNames.has(name))) {
+      setActiveCategories((current) => current.filter((name) => knownNames.has(name)));
       setCurrentPage(1);
     }
-  }, [activeCategory, plazaCategoryGroups]);
+  }, [activeCategories, plazaCategoryGroups, tags.length]);
 
   useEffect(() => {
     if (activeAuthor && !authorStats.some((item) => item.name === activeAuthor)) {
@@ -1391,7 +1413,10 @@ export function PlayListPage() {
   const filteredPlays = useMemo(() => {
     const nextItems = viewScopedPlays.filter((play) => {
       const authorName = play.authorName.trim() || '匿名';
-      if (activeCategory && !playMatchesCategoryFilter(play, activeCategory, tags)) {
+      if (
+        activeCategories.length > 0 &&
+        !playMatchesCategoryFilters(play, activeCategories, tags)
+      ) {
         return false;
       }
 
@@ -1449,7 +1474,7 @@ export function PlayListPage() {
     });
   }, [
     activeAuthor,
-    activeCategory,
+    activeCategories,
     normalizedKeyword,
     playSearchFields,
     sortMode,
@@ -2332,7 +2357,7 @@ export function PlayListPage() {
                     <div className="plaza-pill-grid is-tight">
                       <button
                         className={
-                          categoryFilterOpen || activeCategory
+                          categoryFilterOpen || activeCategories.length > 0
                             ? 'plaza-pill-subitem is-active'
                             : 'plaza-pill-subitem'
                         }
@@ -2621,7 +2646,7 @@ export function PlayListPage() {
                             key={view}
                             onClick={() => {
                               setActiveView(view);
-                              setActiveCategory('');
+                              setActiveCategories([]);
                               setActiveAuthor('');
                               setSelectionMode('idle');
                               setCurrentPage(1);
@@ -2643,15 +2668,27 @@ export function PlayListPage() {
                       <div className="category-hierarchy plaza-category-hierarchy">
                         <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
                           <button
-                            className={activeCategory === '' ? 'tab-chip active' : 'tab-chip'}
+                            className={
+                              activeCategories.length === 0 ? 'tab-chip active' : 'tab-chip'
+                            }
                             onClick={() => {
-                              setActiveCategory('');
+                              setActiveCategories([]);
                               setCurrentPage(1);
                             }}
                             type="button"
                           >
                             全部分类 {categoryScopedPlays.length}
                           </button>
+                          {activeCategories.length > 0 ? (
+                            <span className="content-meta">
+                              已选 {formatSelectedCategoryFilterLabel(activeCategories)}，同时包含{' '}
+                              {filteredPlays.length} 篇
+                            </span>
+                          ) : (
+                            <span className="content-meta">
+                              可多选，筛选同时包含这些标签的小剧场
+                            </span>
+                          )}
                         </div>
                         {plazaCategoryGroups.map((node) => (
                           <div
@@ -2660,22 +2697,11 @@ export function PlayListPage() {
                           >
                             {node.group ? (
                               <div className="category-hierarchy-group-row">
-                                <button
-                                  className={
-                                    activeCategory === node.group.name
-                                      ? 'tab-chip active plaza-category-group-chip'
-                                      : 'tab-chip plaza-category-group-chip'
-                                  }
-                                  onClick={() => {
-                                    setActiveCategory(node.group?.name ?? '');
-                                    setCurrentPage(1);
-                                  }}
-                                  type="button"
-                                >
+                                <span className="category-hierarchy-group-label">
                                   {node.group.name}{' '}
                                   {categoryStats.find((item) => item.name === node.group?.name)
                                     ?.count ?? 0}
-                                </button>
+                                </span>
                               </div>
                             ) : node.children.some((item) => item.name !== DEFAULT_CATEGORY) ? (
                               <div className="category-hierarchy-group-row">
@@ -2687,10 +2713,14 @@ export function PlayListPage() {
                                 <button
                                   key={item.name}
                                   className={
-                                    activeCategory === item.name ? 'tab-chip active' : 'tab-chip'
+                                    activeCategories.includes(item.name)
+                                      ? 'tab-chip active'
+                                      : 'tab-chip'
                                   }
                                   onClick={() => {
-                                    setActiveCategory(item.name);
+                                    setActiveCategories((current) =>
+                                      toggleCategorySelection(current, item.name),
+                                    );
                                     setCurrentPage(1);
                                   }}
                                   type="button"
@@ -3035,7 +3065,9 @@ export function PlayListPage() {
                 </div>
                 <span className="content-meta">
                   当前范围：{viewLabels[activeView]}
-                  {activeCategory ? ` / ${activeCategory}` : ''}
+                  {activeCategories.length > 0
+                    ? ` / ${formatSelectedCategoryFilterLabel(activeCategories)}`
+                    : ''}
                   {activeAuthor ? ` / ${activeAuthor}` : ''}
                 </span>
               </div>
