@@ -2439,6 +2439,15 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   font-weight: 400;
 }
 
+.plaza-category-combinations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border, #d8d8d8) 82%, var(--accent, #6c8cff) 18%);
+}
+
 .category-hierarchy {
   display: grid;
   gap: 12px;

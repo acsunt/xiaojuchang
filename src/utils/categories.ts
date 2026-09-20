@@ -195,3 +195,48 @@ export const formatPlayLeafCategoryLabels = (category: string | undefined, tags:
   const leafNames = names.filter((name) => !groupNames.has(name));
   return leafNames.length > 0 ? leafNames.join(' · ') : DEFAULT_CATEGORY;
 };
+
+export type CategoryCombination = {
+  names: string[];
+  label: string;
+  count: number;
+};
+
+export const collectPlayCategoryCombinations = (
+  plays: Array<Pick<Play, 'category'>>,
+  tags: Tag[],
+): CategoryCombination[] => {
+  const groupNames = new Set(tags.filter(isGroupTag).map((tag) => tag.name));
+  const counts = new Map<string, { names: string[]; count: number }>();
+
+  plays.forEach((play) => {
+    const names = sortCategoryNamesByTagOrder(
+      splitPlayCategories(play.category).filter((name) => !groupNames.has(name)),
+      tags,
+    );
+    if (names.length < 2) {
+      return;
+    }
+
+    const key = names.map((name) => name.toLowerCase()).join('\n');
+    const current = counts.get(key);
+    if (current) {
+      current.count += 1;
+      return;
+    }
+    counts.set(key, { names, count: 1 });
+  });
+
+  return [...counts.values()]
+    .map((item) => ({
+      names: item.names,
+      label: item.names.join(' · '),
+      count: item.count,
+    }))
+    .sort(
+      (left, right) =>
+        right.count - left.count ||
+        left.names.length - right.names.length ||
+        left.label.localeCompare(right.label, 'zh-CN'),
+    );
+};

@@ -71,6 +71,7 @@ import { openVisitorChangelog } from '../../data/visitor-changelog';
 import { showFloatingToast } from '../../components/floating-toast-store';
 import {
   buildTagGroupNodes,
+  collectPlayCategoryCombinations,
   collectPlayCategorySearchText,
   formatPlayLeafCategoryLabels,
   isGroupTag,
@@ -317,6 +318,9 @@ const toggleCategorySelection = (current: string[], name: string) =>
   current.includes(name) ? current.filter((item) => item !== name) : [...current, name];
 
 const formatSelectedCategoryFilterLabel = (names: string[]) => names.join(' · ');
+
+const isSameCategorySelection = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((name) => right.includes(name));
 
 const readPlazaNumber = (key: string, fallback: number) => {
   if (typeof window === 'undefined') {
@@ -881,6 +885,7 @@ export function PlayListPage() {
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(() =>
     readPlazaBool(PLAZA_CATEGORY_FILTER_OPEN_KEY, false),
   );
+  const [categoryCombinationsOpen, setCategoryCombinationsOpen] = useState(false);
   const [authorFilterOpen, setAuthorFilterOpen] = useState(false);
   const [autoRefreshOnNewPlays, setAutoRefreshOnNewPlaysState] = useState(() =>
     getPlazaAutoRefresh(),
@@ -1371,6 +1376,11 @@ export function PlayListPage() {
     }
     return groups;
   }, [categoryStats, tags]);
+
+  const categoryCombinations = useMemo(
+    () => collectPlayCategoryCombinations(categoryScopedPlays, tags),
+    [categoryScopedPlays, tags],
+  );
 
   const authorStats = useMemo<AuthorStat[]>(() => {
     const counts = new Map<string, number>();
@@ -2679,6 +2689,14 @@ export function PlayListPage() {
                           >
                             全部分类 {categoryScopedPlays.length}
                           </button>
+                          <button
+                            aria-expanded={categoryCombinationsOpen}
+                            className={categoryCombinationsOpen ? 'tab-chip active' : 'tab-chip'}
+                            onClick={() => setCategoryCombinationsOpen((current) => !current)}
+                            type="button"
+                          >
+                            已有分类组合 {categoryCombinations.length}
+                          </button>
                           {activeCategories.length > 0 ? (
                             <span className="content-meta">
                               已选 {formatSelectedCategoryFilterLabel(activeCategories)}，同时包含{' '}
@@ -2690,6 +2708,37 @@ export function PlayListPage() {
                             </span>
                           )}
                         </div>
+                        {categoryCombinationsOpen ? (
+                          <div className="plaza-category-combinations">
+                            {categoryCombinations.length > 0 ? (
+                              categoryCombinations.map((item) => {
+                                const active = isSameCategorySelection(
+                                  activeCategories,
+                                  item.names,
+                                );
+                                return (
+                                  <button
+                                    key={item.label}
+                                    className={active ? 'tab-chip active' : 'tab-chip'}
+                                    onClick={() => {
+                                      setActiveCategories((current) =>
+                                        isSameCategorySelection(current, item.names)
+                                          ? []
+                                          : item.names,
+                                      );
+                                      setCurrentPage(1);
+                                    }}
+                                    type="button"
+                                  >
+                                    {item.label} {item.count}
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <span className="content-meta">当前没有含多个标签的小剧场</span>
+                            )}
+                          </div>
+                        ) : null}
                         {plazaCategoryGroups.map((node) => (
                           <div
                             className="category-hierarchy-group"
