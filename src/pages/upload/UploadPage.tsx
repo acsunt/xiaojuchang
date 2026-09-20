@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   countPlayBatchItems,
@@ -33,7 +33,11 @@ import {
 } from '../../types/play';
 import { showFloatingToast } from '../../components/floating-toast-store';
 import { CategoryHierarchyPicker } from '../../components/CategoryHierarchyPicker';
-import { getLeafTags, joinPlayCategoriesByTags, splitPlayCategories } from '../../utils/categories';
+import {
+  getGroupTags,
+  joinPlayCategoriesByTags,
+  splitPlayCategories,
+} from '../../utils/categories';
 
 const initialForm = {
   authorName: '',
@@ -97,11 +101,6 @@ const formatLocalTime = (value: string) => {
   return new Date(timestamp).toLocaleString();
 };
 
-const compareCategoryNames = (left: string, right: string) =>
-  left.localeCompare(right, 'zh-CN', { numeric: true, sensitivity: 'base' });
-
-const sortTagsByName = (items: Tag[]) =>
-  [...items].sort((left, right) => compareCategoryNames(left.name, right.name));
 const addCategoryName = (current: string, name: string, tags: Tag[]) =>
   joinPlayCategoriesByTags([...splitPlayCategories(current), name], tags);
 
@@ -162,9 +161,11 @@ export function UploadPage() {
   const [categoryTagsOpen, setCategoryTagsOpen] = useState(() =>
     readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true),
   );
-  const [categorySuggestOpen, setCategorySuggestOpen] = useState(false);
-  const [categoryHighlightIndex, setCategoryHighlightIndex] = useState(-1);
-  const categoryFieldRef = useRef<HTMLDivElement | null>(null);
+  const [categoryQuery, setCategoryQuery] = useState('');
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [createCategoryName, setCreateCategoryName] = useState('');
+  const [createCategoryGroupId, setCreateCategoryGroupId] = useState('');
+  const [createCategoryBusy, setCreateCategoryBusy] = useState(false);
   const [authorHistory, setAuthorHistory] = useState<string[]>([]);
   const [submissionHistory, setSubmissionHistory] = useState<BrowserSubmissionRecord[]>([]);
   const [editingHistoryId, setEditingHistoryId] = useState('');
@@ -293,28 +294,48 @@ export function UploadPage() {
     [batchItemCount, submitting],
   );
 
-  const sortedTags = useMemo(() => sortTagsByName(getLeafTags(tags)), [tags]);
+  const groupTags = useMemo(() => getGroupTags(tags), [tags]);
   const selectedCategoryNames = useMemo(() => splitPlayCategories(form.category), [form.category]);
-  const categoryKeyword = form.category.trim();
-  const categorySuggestions = useMemo(() => {
-    const query = selectedCategoryNames.at(-1) || categoryKeyword;
-    if (!query) {
-      return [];
-    }
-    const keyword = query.toLowerCase();
-    return sortedTags.filter((tag) => tag.name.toLowerCase().includes(keyword));
-  }, [categoryKeyword, selectedCategoryNames, sortedTags]);
-  const visibleCategorySuggestions = categorySuggestOpen ? categorySuggestions : [];
-  const highlightedCategorySuggestion =
-    categoryHighlightIndex >= 0 ? visibleCategorySuggestions[categoryHighlightIndex] : undefined;
 
-  const pickCategory = (name: string) => {
-    setForm((current) => ({
-      ...current,
-      category: addCategoryName(current.category, name, tags),
-    }));
-    setCategorySuggestOpen(false);
-    setCategoryHighlightIndex(-1);
+  const closeCreateCategoryModal = () => {
+    setCreateCategoryOpen(false);
+    setCreateCategoryName('');
+    setCreateCategoryGroupId('');
+  };
+
+  const handleCreateCategory = async () => {
+    const name = createCategoryName.trim();
+    if (!name) {
+      showFloatingToast('请填写新分类名称', 'error');
+      return;
+    }
+    if (!createCategoryGroupId) {
+      showFloatingToast('请选择所属大类', 'error');
+      return;
+    }
+
+    setCreateCategoryBusy(true);
+    try {
+      const created = await playApi.createPublicTag({
+        name,
+        parentId: createCategoryGroupId,
+      });
+      setTags((current) =>
+        current.some((tag) => tag.id === created.id) ? current : [...current, created],
+      );
+      setForm((current) => ({
+        ...current,
+        category: addCategoryName(current.category, created.name, [...tags, created]),
+      }));
+      setCategoryQuery('');
+      setCategoryTagsOpen(true);
+      closeCreateCategoryModal();
+      showFloatingToast(`已新增分类「${created.name}」`);
+    } catch (reason) {
+      showFloatingToast(reason instanceof Error ? reason.message : '新增分类失败', 'error');
+    } finally {
+      setCreateCategoryBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -372,24 +393,19 @@ export function UploadPage() {
   }, [categoryTagsOpen]);
 
   useEffect(() => {
-    if (!categorySuggestOpen) {
+    if (!createCategoryOpen) {
       return;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!categoryFieldRef.current?.contains(event.target as Node)) {
-        setCategorySuggestOpen(false);
-        setCategoryHighlightIndex(-1);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !createCategoryBusy) {
+        closeCreateCategoryModal();
       }
     };
 
-    window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
-  }, [categorySuggestOpen]);
-
-  useEffect(() => {
-    setCategoryHighlightIndex(-1);
-  }, [categoryKeyword]);
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [createCategoryBusy, createCategoryOpen]);
 
   const syncLocalHistory = (authorName: string) => {
     setAuthorHistory(rememberAuthorName(authorName));
@@ -709,117 +725,78 @@ export function UploadPage() {
               <label>
                 <div className="field-label-row">
                   <span>分类</span>
-                  {sortedTags.length > 0 && !lockTitleAndCategory ? (
-                    <button
-                      className="text-button field-inline-action"
-                      onClick={() => setCategoryTagsOpen((current) => !current)}
-                      type="button"
-                    >
-                      {categoryTagsOpen ? '收起分类' : '展开分类'}
-                    </button>
+                  {!lockTitleAndCategory ? (
+                    <div className="inline-actions field-inline-actions">
+                      <button
+                        className="text-button field-inline-action"
+                        onClick={() => {
+                          setCreateCategoryOpen(true);
+                          setCategoryTagsOpen(true);
+                        }}
+                        type="button"
+                      >
+                        新增分类
+                      </button>
+                      {tags.length > 0 ? (
+                        <button
+                          className="text-button field-inline-action"
+                          onClick={() => setCategoryTagsOpen((current) => !current)}
+                          type="button"
+                        >
+                          {categoryTagsOpen ? '收起分类' : '展开分类'}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
-                <div className="category-suggest-field" ref={categoryFieldRef}>
-                  <ClearableField
-                    onClear={() => {
-                      setForm((current) => ({ ...current, category: '' }));
-                      setCategorySuggestOpen(false);
-                      setCategoryHighlightIndex(-1);
+                <ClearableField
+                  onClear={() => {
+                    if (categoryQuery) {
+                      setCategoryQuery('');
+                      return;
+                    }
+                    setForm((current) => ({ ...current, category: '' }));
+                  }}
+                  visible={
+                    (Boolean(categoryQuery) || Boolean(form.category)) && !lockTitleAndCategory
+                  }
+                >
+                  <input
+                    value={lockTitleAndCategory ? selectedCategoryNames.join(' · ') : categoryQuery}
+                    readOnly={lockTitleAndCategory}
+                    autoComplete="off"
+                    onChange={(event) => {
+                      setCategoryQuery(event.target.value);
+                      setCategoryTagsOpen(true);
                     }}
-                    visible={Boolean(form.category) && !lockTitleAndCategory}
-                  >
-                    <input
-                      value={form.category}
-                      readOnly={lockTitleAndCategory}
-                      autoComplete="off"
-                      role="combobox"
-                      aria-autocomplete="list"
-                      aria-expanded={visibleCategorySuggestions.length > 0}
-                      aria-controls="category-suggest-list"
-                      onFocus={() => {
-                        if (!lockTitleAndCategory && categoryKeyword) {
-                          setCategorySuggestOpen(true);
-                        }
-                      }}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        setForm((current) => ({ ...current, category: nextValue }));
-                        setCategorySuggestOpen(nextValue.trim().length > 0);
-                      }}
-                      onKeyDown={(event) => {
-                        if (lockTitleAndCategory) {
-                          return;
-                        }
-                        if (event.key === 'ArrowDown') {
-                          if (visibleCategorySuggestions.length === 0) {
-                            return;
-                          }
-                          event.preventDefault();
-                          setCategorySuggestOpen(true);
-                          setCategoryHighlightIndex((current) =>
-                            current < visibleCategorySuggestions.length - 1 ? current + 1 : 0,
-                          );
-                          return;
-                        }
-                        if (event.key === 'ArrowUp') {
-                          if (visibleCategorySuggestions.length === 0) {
-                            return;
-                          }
-                          event.preventDefault();
-                          setCategorySuggestOpen(true);
-                          setCategoryHighlightIndex((current) =>
-                            current > 0 ? current - 1 : visibleCategorySuggestions.length - 1,
-                          );
-                          return;
-                        }
-                        if (event.key === 'Enter' && highlightedCategorySuggestion) {
-                          event.preventDefault();
-                          pickCategory(highlightedCategorySuggestion.name);
-                          return;
-                        }
-                        if (event.key === 'Escape') {
-                          setCategorySuggestOpen(false);
-                          setCategoryHighlightIndex(-1);
-                        }
-                      }}
-                      placeholder={`可多选不同大类下的小类，不填记为 ${DEFAULT_CATEGORY}`}
-                    />
-                  </ClearableField>
-                  {visibleCategorySuggestions.length > 0 ? (
-                    <ul className="category-suggest-list" id="category-suggest-list" role="listbox">
-                      {visibleCategorySuggestions.map((tag, index) => {
-                        const active = form.category === tag.name;
-                        const highlighted = index === categoryHighlightIndex;
-
-                        return (
-                          <li key={tag.id}>
-                            <button
-                              className={
-                                highlighted
-                                  ? 'category-suggest-item is-highlighted'
-                                  : 'category-suggest-item'
-                              }
-                              onMouseDown={(event) => event.preventDefault()}
-                              onClick={() => pickCategory(tag.name)}
-                              role="option"
-                              aria-selected={active || highlighted}
-                              type="button"
-                            >
-                              {tag.name}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : null}
-                </div>
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                      }
+                    }}
+                    placeholder={
+                      selectedCategoryNames.length > 0
+                        ? `已选 ${selectedCategoryNames.join(' · ')}，可搜索已有分类`
+                        : `搜索已有分类，不填记为 ${DEFAULT_CATEGORY}`
+                    }
+                  />
+                </ClearableField>
               </label>
-              {tags.length > 0 && !lockTitleAndCategory && categoryTagsOpen ? (
-                <CategoryHierarchyPicker
-                  tags={tags}
-                  value={form.category}
-                  onChange={(next) => setForm((current) => ({ ...current, category: next }))}
-                />
+              {!lockTitleAndCategory && categoryTagsOpen ? (
+                tags.length > 0 ? (
+                  <CategoryHierarchyPicker
+                    emptyText="没有匹配的分类"
+                    keyword={categoryQuery}
+                    tags={tags}
+                    value={form.category}
+                    onChange={(next) => {
+                      setForm((current) => ({ ...current, category: next }));
+                      setCategoryQuery('');
+                    }}
+                  />
+                ) : (
+                  <div className="content-meta">还没有分类，可先新增分类</div>
+                )
               ) : null}
               <label>
                 <div className="field-label-row">
@@ -1152,6 +1129,73 @@ export function UploadPage() {
           )}
         </aside>
       </div>
+      {createCategoryOpen ? (
+        <div className="modal-overlay" onClick={closeCreateCategoryModal} role="presentation">
+          <div
+            aria-labelledby="create-category-title"
+            aria-modal="true"
+            className="modal-panel stack-gap-md create-category-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <h3 id="create-category-title" className="modal-title">
+              新增分类
+            </h3>
+            <p className="sub-copy">选择所属大类，再填写新的小类名称。</p>
+            <label>
+              <span>所属大类</span>
+              <select
+                disabled={createCategoryBusy || groupTags.length === 0}
+                onChange={(event) => setCreateCategoryGroupId(event.target.value)}
+                value={createCategoryGroupId}
+              >
+                <option value="">请选择大类</option>
+                {groupTags.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>新分类名称</span>
+              <ClearableField
+                onClear={() => setCreateCategoryName('')}
+                visible={Boolean(createCategoryName)}
+              >
+                <input
+                  autoFocus
+                  disabled={createCategoryBusy}
+                  onChange={(event) => setCreateCategoryName(event.target.value)}
+                  placeholder="输入新的小类名"
+                  value={createCategoryName}
+                />
+              </ClearableField>
+            </label>
+            {groupTags.length === 0 ? (
+              <div className="feedback error">当前还没有大类，无法新增分类</div>
+            ) : null}
+            <div className="inline-actions modal-action-row">
+              <button
+                className="button ghost"
+                disabled={createCategoryBusy}
+                onClick={closeCreateCategoryModal}
+                type="button"
+              >
+                取消
+              </button>
+              <button
+                className="button primary"
+                disabled={createCategoryBusy || groupTags.length === 0}
+                onClick={() => void handleCreateCategory()}
+                type="button"
+              >
+                {createCategoryBusy ? '创建中...' : '确认新增'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

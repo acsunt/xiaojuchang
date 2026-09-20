@@ -9,7 +9,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAdminUpdateNotifier } from '../../../hooks/useUpdateNotifier';
 import { UpdatePromptModal } from '../../../components/UpdatePromptModal';
@@ -169,177 +168,82 @@ const ClearableField = ({
   </div>
 );
 
-// 可搜索的分类下拉框：自由输入 + 过滤现有分类 + 点击选中
-function SearchableCategorySelect({
-  options,
-  placeholder,
-  value,
-  onChange,
+const addCategoryName = (current: string, name: string, tags: Tag[]) =>
+  joinPlayCategoriesByTags([...splitPlayCategories(current), name], tags);
+
+const toggleNameInList = (current: string[], name: string) =>
+  current.includes(name) ? current.filter((value) => value !== name) : [...current, name];
+
+const formatSelectedCategoryLabel = (names: string[]) => {
+  const unique = names.map((name) => name.trim()).filter(Boolean);
+  if (unique.length === 0) {
+    return DEFAULT_CATEGORY;
+  }
+  return unique.join(' · ');
+};
+
+const sortCategoryStats = (
+  items: Array<{ name: string; count: number }>,
+  sortMode: MoveCategorySortMode,
+) =>
+  [...items].sort((left, right) => {
+    if (sortMode === 'count') {
+      return right.count - left.count || left.name.localeCompare(right.name, 'zh-CN');
+    }
+    return left.name.localeCompare(right.name, 'zh-CN');
+  });
+
+const filterCategoryStats = (
+  stats: Array<{ name: string; count: number }>,
+  keyword: string,
+  excluded: Set<string> = new Set(),
+) => {
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  return stats.filter((item) => {
+    if (excluded.has(item.name)) {
+      return false;
+    }
+    if (!normalizedKeyword) {
+      return true;
+    }
+    return item.name.toLowerCase().includes(normalizedKeyword);
+  });
+};
+
+function CategoryCheckboxList({
+  items,
+  selected,
+  onToggle,
+  emptyText,
 }: {
-  options: string[];
-  placeholder: string;
-  value: string;
-  onChange: (next: string) => void;
+  items: Array<{ name: string; count: number }>;
+  selected: string[];
+  onToggle: (name: string) => void;
+  emptyText: string;
 }) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const [open, setOpen] = useState(false);
-  /* 菜单挂到 document.body + fixed 坐标，避免被审核面板 overflow / stacking context 裁掉。 */
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  useEffect(() => {
-    if (!open || !value.trim()) {
-      setMenuPos(null);
-      return;
-    }
-
-    const updatePosition = () => {
-      const rect = inputRef.current?.getBoundingClientRect();
-      if (!rect) {
-        return;
-      }
-      const viewportPadding = 12;
-      const maxHeight = Math.min(260, window.innerHeight - viewportPadding * 2);
-      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
-      const openUpward = spaceBelow < 160 && rect.top > spaceBelow;
-      const top = openUpward
-        ? Math.max(viewportPadding, rect.top - maxHeight - 8)
-        : rect.bottom + 8;
-      setMenuPos({
-        top,
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
-
-    return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
-    };
-  }, [open, value]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) {
-        return;
-      }
-      setOpen(false);
-    };
-
-    const handleEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        inputRef.current?.blur();
-      }
-    };
-
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [open]);
-
-  const trimmed = value.trim().toLowerCase();
-  const hasQuery = trimmed.length > 0;
-  const filtered = hasQuery
-    ? options.filter((option) => option.toLowerCase().includes(trimmed))
-    : [];
-  const menuOpen = open && hasQuery;
-
   return (
-    <div
-      className={
-        menuOpen
-          ? 'custom-select open searchable-category-select'
-          : 'custom-select searchable-category-select'
-      }
-      ref={rootRef}
-    >
-      <ClearableField
-        onClear={() => {
-          onChange('');
-          setOpen(false);
-          inputRef.current?.focus();
-        }}
-        visible={Boolean(value)}
-      >
-        <input
-          ref={inputRef}
-          autoComplete="off"
-          className="searchable-category-input"
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            onChange(nextValue);
-            setOpen(nextValue.trim().length > 0);
-          }}
-          onFocus={() => {
-            if (value.trim()) {
-              setOpen(true);
-            }
-          }}
-          placeholder={placeholder}
-          value={value}
-        />
-      </ClearableField>
-      {menuOpen && menuPos && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="custom-select-menu searchable-category-menu"
-              ref={menuRef}
-              role="listbox"
-              aria-label="选择分类"
-              style={{
-                position: 'fixed',
-                top: menuPos.top,
-                left: menuPos.left,
-                width: menuPos.width,
-              }}
+    <div className="plaza-export-modal-list move-category-source-list">
+      {items.length > 0 ? (
+        items.map((item) => {
+          const checked = selected.includes(item.name);
+          return (
+            <label
+              className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+              key={item.name}
             >
-              {filtered.length > 0 ? (
-                filtered.map((option) => (
-                  <button
-                    aria-selected={option === value}
-                    className={
-                      option === value ? 'custom-select-option active' : 'custom-select-option'
-                    }
-                    key={option}
-                    onClick={() => {
-                      onChange(option);
-                      setOpen(false);
-                    }}
-                    role="option"
-                    type="button"
-                  >
-                    {option}
-                  </button>
-                ))
-              ) : (
-                <div className="searchable-category-empty">
-                  没有匹配的分类，可直接使用当前输入作为自定义分类
-                </div>
-              )}
-            </div>,
-            document.body,
-          )
-        : null}
+              <input checked={checked} onChange={() => onToggle(item.name)} type="checkbox" />
+              <span>
+                {item.name} · {item.count} 篇
+              </span>
+            </label>
+          );
+        })
+      ) : (
+        <div className="content-meta">{emptyText}</div>
+      )}
     </div>
   );
 }
-
-const addCategoryName = (current: string, name: string, tags: Tag[]) =>
-  joinPlayCategoriesByTags([...splitPlayCategories(current), name], tags);
 
 function ReviewCategoryField({
   tags,
@@ -611,7 +515,7 @@ function TagAdminCard({
   );
 }
 
-/* 「按作者」下拉的可搜索版（与 SearchableCategorySelect 同款交互）。
+/* 「按作者」下拉的可搜索版。
  * 选项是作者字符串列表；输入即按子串过滤，回车保留当前输入。
  * 用途：替换审核后台一键通过面板里的「按作者」原生 <select>，作者多了之后
  * 也能快速搜索定位。 */
@@ -885,6 +789,7 @@ type AdminPanel =
   | 'moveCategory';
 type AuditLogCategory = 'plays' | 'repos' | 'continuations';
 type MoveCategorySortMode = 'name' | 'count';
+type CategoryAdjustTab = 'move' | 'tag' | 'merge';
 type TagLibrarySortMode = 'name' | 'count';
 
 const MOVE_CATEGORY_SORT_STORAGE_KEY = 'mini-theater:admin-move-category-sort';
@@ -1043,7 +948,7 @@ const adminPanelTabs: Array<{ label: string; value: AdminPanel }> = [
   { label: '续写', value: 'continuations' },
   { label: '审核记录', value: 'auditLogs' },
   { label: '删除', value: 'delete' },
-  { label: '移动分类', value: 'moveCategory' },
+  { label: '调整分类', value: 'moveCategory' },
   { label: '备份', value: 'backup' },
   { label: '标签', value: 'tags' },
   { label: '重复', value: 'duplicates' },
@@ -1602,7 +1507,17 @@ export function AdminReviewPage() {
       window.localStorage.setItem(MOVE_CATEGORY_SORT_STORAGE_KEY, next);
     }
   };
-  const [moveTargetCategory, setMoveTargetCategory] = useState('');
+  const [moveTargetCategories, setMoveTargetCategories] = useState<string[]>([]);
+  const [moveTargetKeyword, setMoveTargetKeyword] = useState('');
+  const [categoryAdjustTab, setCategoryAdjustTab] = useState<CategoryAdjustTab>('move');
+  const [tagSourceCategories, setTagSourceCategories] = useState<string[]>([]);
+  const [tagSourceKeyword, setTagSourceKeyword] = useState('');
+  const [tagTargetCategories, setTagTargetCategories] = useState<string[]>([]);
+  const [tagTargetKeyword, setTagTargetKeyword] = useState('');
+  const [tagCategoryBusy, setTagCategoryBusy] = useState(false);
+  const [tagCategoryProgress, setTagCategoryProgress] = useState<BulkReviewProgress | null>(null);
+  const [tagCategoryMessage, setTagCategoryMessage] = useState('');
+  const [tagCategoryError, setTagCategoryError] = useState('');
   const [mergeSourceTagIds, setMergeSourceTagIds] = useState<string[]>([]);
   const [mergeSourceKeyword, setMergeSourceKeyword] = useState('');
   const [mergeSourceSortMode, setMergeSourceSortModeState] =
@@ -2136,7 +2051,7 @@ export function AdminReviewPage() {
    * - 但「删除」面板本身就是基于左侧列表操作的(批量勾选/全选/按作者删),
    *   把列表藏掉后批量删除就完全无法选条目。这里把「删除」面板加入例外,
    *   让它和「审核」面板一样显示左侧列表,保留多选 + 全选 + 反选 + 按作者勾选等交互。
-   * - 「移动分类」面板也会用到左侧列表(按分类移动),同样加入例外。 */
+   * - 「调整分类」面板也会用到左侧列表(按分类移动 / 打标签),同样加入例外。 */
   const shouldHideMobileReviewWorkspace =
     isMobileReviewViewport &&
     activePanel !== 'review' &&
@@ -2237,39 +2152,70 @@ export function AdminReviewPage() {
     });
     return [...counts.entries()].map(([name, count]) => ({ name, count }));
   }, [allPlays]);
-  const visibleMoveCategoryStats = useMemo(() => {
-    const normalizedKeyword = moveSourceKeyword.trim().toLowerCase();
-    const filtered = normalizedKeyword
-      ? moveCategoryStats.filter((item) => item.name.toLowerCase().includes(normalizedKeyword))
-      : moveCategoryStats;
-    return [...filtered].sort((left, right) => {
-      if (moveCategorySortMode === 'count') {
-        return right.count - left.count || left.name.localeCompare(right.name, 'zh-CN');
+  const visibleMoveCategoryStats = useMemo(
+    () =>
+      sortCategoryStats(
+        filterCategoryStats(moveCategoryStats, moveSourceKeyword),
+        moveCategorySortMode,
+      ),
+    [moveCategorySortMode, moveCategoryStats, moveSourceKeyword],
+  );
+  const visibleMoveTargetCategoryStats = useMemo(
+    () =>
+      sortCategoryStats(
+        filterCategoryStats(
+          moveCategoryStats,
+          moveTargetKeyword,
+          new Set([...moveSourceCategories, DEFAULT_CATEGORY]),
+        ),
+        moveCategorySortMode,
+      ),
+    [moveCategorySortMode, moveCategoryStats, moveSourceCategories, moveTargetKeyword],
+  );
+  const visibleTagSourceCategoryStats = useMemo(
+    () =>
+      sortCategoryStats(
+        filterCategoryStats(moveCategoryStats, tagSourceKeyword),
+        moveCategorySortMode,
+      ),
+    [moveCategorySortMode, moveCategoryStats, tagSourceKeyword],
+  );
+  const visibleTagTargetCategoryStats = useMemo(
+    () =>
+      sortCategoryStats(
+        filterCategoryStats(
+          moveCategoryStats,
+          tagTargetKeyword,
+          new Set([...tagSourceCategories, DEFAULT_CATEGORY]),
+        ),
+        moveCategorySortMode,
+      ),
+    [moveCategorySortMode, moveCategoryStats, tagSourceCategories, tagTargetKeyword],
+  );
+  const playsMatchingSourceCategories = useCallback(
+    (sourceCategories: string[]) => {
+      if (sourceCategories.length === 0) {
+        return [];
       }
-      return left.name.localeCompare(right.name, 'zh-CN');
-    });
-  }, [moveCategorySortMode, moveCategoryStats, moveSourceKeyword]);
-  const moveTargetCategoryOptions = useMemo(() => {
-    const selectedSourceSet = new Set(moveSourceCategories);
-    return moveCategoryStats
-      .map((item) => item.name)
-      .filter((name) => !selectedSourceSet.has(name));
-  }, [moveCategoryStats, moveSourceCategories]);
-  const moveCategoryTargetIds = useMemo(() => {
-    if (moveSourceCategories.length === 0) {
-      return [];
-    }
 
-    return allPlays
-      .filter((play) =>
-        moveSourceCategories.some((name) =>
+      return allPlays.filter((play) =>
+        sourceCategories.some((name) =>
           name === DEFAULT_CATEGORY
             ? splitPlayCategories(play.category).length === 0
             : playHasCategoryName(play, name),
         ),
-      )
-      .map((play) => play.id);
-  }, [allPlays, moveSourceCategories]);
+      );
+    },
+    [allPlays],
+  );
+  const moveCategoryTargetIds = useMemo(
+    () => playsMatchingSourceCategories(moveSourceCategories).map((play) => play.id),
+    [moveSourceCategories, playsMatchingSourceCategories],
+  );
+  const tagCategoryTargetIds = useMemo(
+    () => playsMatchingSourceCategories(tagSourceCategories).map((play) => play.id),
+    [playsMatchingSourceCategories, tagSourceCategories],
+  );
   const duplicateScanSourcePlays = useMemo(
     () => (duplicateReview.scanScope === 'approved' ? duplicateApprovedPlays : allPlays),
     [allPlays, duplicateApprovedPlays, duplicateReview.scanScope],
@@ -2729,6 +2675,16 @@ export function AdminReviewPage() {
       }),
     );
   }, [mergeLeafTags, mergeTargetGroupId]);
+  useEffect(() => {
+    const sourceSet = new Set(moveSourceCategories);
+    setMoveTargetCategories((current) => current.filter((name) => !sourceSet.has(name)));
+  }, [moveSourceCategories]);
+  useEffect(() => {
+    const sourceSet = new Set(tagSourceCategories);
+    setTagTargetCategories((current) =>
+      current.filter((name) => !sourceSet.has(name) && name !== DEFAULT_CATEGORY),
+    );
+  }, [tagSourceCategories]);
   const displayTagGroups = useMemo(() => {
     const source = isTagSorting ? tagSortDraft : tags;
     if (isTagSorting) {
@@ -4585,12 +4541,9 @@ export function AdminReviewPage() {
       return;
     }
 
-    if (!moveTargetCategory.trim() && moveTargetCategory.trim() !== '') {
-      // 未分类用空字符串保存后端会自行 fallback；这里允许 ""
-    }
-
-    const targetCategory = moveTargetCategory.trim();
-    const label = targetCategory || DEFAULT_CATEGORY;
+    const selectedTargets = moveTargetCategories.map((name) => name.trim()).filter(Boolean);
+    const nextCategory = joinPlayCategoriesByTags(selectedTargets, tags);
+    const label = formatSelectedCategoryLabel(selectedTargets);
 
     if (!window.confirm(`确认将 ${moveCategoryTargetIds.length} 篇小剧场移动到「${label}」吗？`)) {
       return;
@@ -4608,7 +4561,7 @@ export function AdminReviewPage() {
     try {
       for (const playId of targetIds) {
         try {
-          await playApi.updateAdminPlay(playId, { category: targetCategory });
+          await playApi.updateAdminPlay(playId, { category: nextCategory });
           completed += 1;
         } catch {
           failed += 1;
@@ -4628,6 +4581,65 @@ export function AdminReviewPage() {
       );
     } finally {
       setMoveCategoryBusy(false);
+    }
+  };
+
+  const handleBulkTagCategory = async () => {
+    if (tagCategoryTargetIds.length === 0) {
+      setTagCategoryError('请先勾选至少一个源分类');
+      return;
+    }
+    if (tagTargetCategories.length === 0) {
+      setTagCategoryError('请先勾选至少一个目标分类');
+      return;
+    }
+
+    const extraNames = tagTargetCategories.map((name) => name.trim()).filter(Boolean);
+    const label = formatSelectedCategoryLabel(extraNames);
+    if (
+      !window.confirm(
+        `确认给 ${tagCategoryTargetIds.length} 篇小剧场追加「${label}」吗？原有分类会保留。`,
+      )
+    ) {
+      return;
+    }
+
+    const targetPlays = playsMatchingSourceCategories(tagSourceCategories);
+    const progressLabel = `正在追加「${label}」`;
+    setTagCategoryBusy(true);
+    setTagCategoryError('');
+    setTagCategoryMessage('');
+    setTagCategoryProgress({ completed: 0, total: targetPlays.length, label: progressLabel });
+
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (const play of targetPlays) {
+        try {
+          const nextCategory = joinPlayCategoriesByTags(
+            [...splitPlayCategories(play.category), ...extraNames],
+            tags,
+          );
+          await playApi.updateAdminPlay(play.id, { category: nextCategory });
+          completed += 1;
+        } catch {
+          failed += 1;
+        }
+        setTagCategoryProgress({
+          completed: completed + failed,
+          total: targetPlays.length,
+          label: progressLabel,
+        });
+      }
+
+      await Promise.all([load(selectedStatus, { silent: true }), loadAllPlays()]);
+      notifyPlaysUpdate();
+
+      setTagCategoryMessage(
+        `已给 ${completed} 篇追加「${label}」${failed > 0 ? `，${failed} 篇失败` : ''}`,
+      );
+    } finally {
+      setTagCategoryBusy(false);
     }
   };
 
@@ -7548,17 +7560,51 @@ export function AdminReviewPage() {
               <div className="form-panel stack-gap-md">
                 <div className="content-head">
                   <div>
-                    <p className="eyebrow">Bulk Move Category</p>
-                    <h3>批量移动分类</h3>
+                    <p className="eyebrow">Adjust Categories</p>
+                    <h3>调整分类</h3>
                     <p className="sub-copy">
-                      勾选源分类，把其中的小剧场移动到目标分类（留空代表未分类）。
+                      {categoryAdjustTab === 'move'
+                        ? '勾选源分类，把其中的小剧场移动到目标分类（不选代表未分类）。'
+                        : categoryAdjustTab === 'tag'
+                          ? '勾选源分类，给其中的小剧场追加目标分类。原有分类会保留，一篇可同时属于多个分类。'
+                          : '勾选小类，把它们移动到目标大类。小剧场上的小类名称不变，只改所属大类。'}
                     </p>
                   </div>
                 </div>
 
-                {!hasLoadedAllPlays ? (
+                <div
+                  className="inline-actions category-adjust-tab-group"
+                  role="tablist"
+                  aria-label="调整分类功能"
+                >
+                  <button
+                    className={categoryAdjustTab === 'move' ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setCategoryAdjustTab('move')}
+                    type="button"
+                  >
+                    移动分类
+                  </button>
+                  <button
+                    className={categoryAdjustTab === 'tag' ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setCategoryAdjustTab('tag')}
+                    type="button"
+                  >
+                    打标签
+                  </button>
+                  <button
+                    className={categoryAdjustTab === 'merge' ? 'tab-chip active' : 'tab-chip'}
+                    onClick={() => setCategoryAdjustTab('merge')}
+                    type="button"
+                  >
+                    汇流入海
+                  </button>
+                </div>
+
+                {categoryAdjustTab !== 'merge' && !hasLoadedAllPlays ? (
                   <div className="feedback info">正在加载全部小剧场数据，请稍候…</div>
-                ) : (
+                ) : null}
+
+                {categoryAdjustTab === 'move' && hasLoadedAllPlays ? (
                   <>
                     <div className="stack-gap-sm">
                       <strong>源分类</strong>
@@ -7601,48 +7647,38 @@ export function AdminReviewPage() {
                         按小剧场数量
                       </button>
                     </div>
-                    <div className="plaza-export-modal-list move-category-source-list">
-                      {visibleMoveCategoryStats.length > 0 ? (
-                        visibleMoveCategoryStats.map((item) => {
-                          const checked = moveSourceCategories.includes(item.name);
-                          return (
-                            <label
-                              className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
-                              key={item.name}
-                            >
-                              <input
-                                checked={checked}
-                                onChange={() =>
-                                  setMoveSourceCategories((current) =>
-                                    current.includes(item.name)
-                                      ? current.filter((value) => value !== item.name)
-                                      : [...current, item.name],
-                                  )
-                                }
-                                type="checkbox"
-                              />
-                              <span>
-                                {item.name} · {item.count} 篇
-                              </span>
-                            </label>
-                          );
-                        })
-                      ) : (
-                        <div className="content-meta">没有匹配的源分类</div>
-                      )}
-                    </div>
+                    <CategoryCheckboxList
+                      emptyText="没有匹配的源分类"
+                      items={visibleMoveCategoryStats}
+                      onToggle={(name) =>
+                        setMoveSourceCategories((current) => toggleNameInList(current, name))
+                      }
+                      selected={moveSourceCategories}
+                    />
 
                     <div className="stack-gap-sm">
                       <strong>目标分类</strong>
                       <span className="content-meta">
-                        输入搜索现有分类，或当前输入作为自定义分类；留空归入「未分类」
+                        可同时勾选多个；搜索结果会跟着筛选。不选则归入「未分类」
                       </span>
                     </div>
-                    <SearchableCategorySelect
-                      options={moveTargetCategoryOptions}
-                      placeholder="搜索或输入目标分类"
-                      value={moveTargetCategory}
-                      onChange={setMoveTargetCategory}
+                    <ClearableField
+                      onClear={() => setMoveTargetKeyword('')}
+                      visible={Boolean(moveTargetKeyword)}
+                    >
+                      <input
+                        onChange={(event) => setMoveTargetKeyword(event.target.value)}
+                        placeholder="搜索目标分类"
+                        value={moveTargetKeyword}
+                      />
+                    </ClearableField>
+                    <CategoryCheckboxList
+                      emptyText="没有匹配的目标分类"
+                      items={visibleMoveTargetCategoryStats}
+                      onToggle={(name) =>
+                        setMoveTargetCategories((current) => toggleNameInList(current, name))
+                      }
+                      selected={moveTargetCategories}
                     />
 
                     <div className="stack-gap-sm admin-bulk-review-progress-block">
@@ -7673,7 +7709,8 @@ export function AdminReviewPage() {
                         onClick={() => {
                           setMoveSourceCategories([]);
                           setMoveSourceKeyword('');
-                          setMoveTargetCategory('');
+                          setMoveTargetCategories([]);
+                          setMoveTargetKeyword('');
                           setMoveCategoryError('');
                           setMoveCategoryMessage('');
                           setMoveCategoryProgress(null);
@@ -7690,7 +7727,7 @@ export function AdminReviewPage() {
                       >
                         {moveCategoryBusy
                           ? `移动中 ${moveCategoryProgress?.completed ?? 0}/${moveCategoryProgress?.total ?? moveCategoryTargetIds.length}`
-                          : `移动 ${moveCategoryTargetIds.length} 篇到「${moveTargetCategory.trim() || DEFAULT_CATEGORY}」`}
+                          : `移动 ${moveCategoryTargetIds.length} 篇到「${formatSelectedCategoryLabel(moveTargetCategories)}」`}
                       </button>
                     </div>
 
@@ -7701,193 +7738,333 @@ export function AdminReviewPage() {
                       <div className="feedback error">{moveCategoryError}</div>
                     ) : null}
                   </>
-                )}
-              </div>
+                ) : null}
 
-              <div className="form-panel stack-gap-md">
-                <div className="content-head">
-                  <div>
-                    <p className="eyebrow">Merge Into Group</p>
-                    <h3>汇流入海</h3>
-                    <p className="sub-copy">
-                      勾选小类，把它们移动到目标大类。小剧场上的小类名称不变，只改所属大类。
-                    </p>
-                  </div>
-                </div>
-
-                <div className="stack-gap-sm">
-                  <strong>源小类</strong>
-                  <span className="content-meta">
-                    共 {mergeLeafTags.length} 个小类
-                    {mergeTargetGroupId || mergeSourceKeyword.trim()
-                      ? `，当前显示 ${visibleMergeSourceTags.length} 个`
-                      : ''}
-                  </span>
-                </div>
-                <div className="inline-actions wrap-mobile" role="group" aria-label="源小类排序">
-                  <button
-                    className={mergeSourceSortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
-                    onClick={() => setMergeSourceSortMode('name')}
-                    type="button"
-                  >
-                    按名称首字母
-                  </button>
-                  <button
-                    className={mergeSourceSortMode === 'count' ? 'tab-chip active' : 'tab-chip'}
-                    onClick={() => setMergeSourceSortMode('count')}
-                    type="button"
-                  >
-                    按小剧场数量
-                  </button>
-                </div>
-                <ClearableField
-                  onClear={() => setMergeSourceKeyword('')}
-                  visible={Boolean(mergeSourceKeyword)}
-                >
-                  <input
-                    onChange={(event) => setMergeSourceKeyword(event.target.value)}
-                    placeholder="搜索小类"
-                    value={mergeSourceKeyword}
-                  />
-                </ClearableField>
-                <div className="plaza-export-modal-list move-category-source-list">
-                  {visibleMergeSourceTags.length > 0 ? (
-                    visibleMergeSourceTags.map((tag) => {
-                      const checked = mergeSourceTagIds.includes(tag.id);
-                      const parentName =
-                        mergeGroupTags.find((group) => group.id === tag.parentId)?.name ??
-                        '未归入大类';
-                      const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
-                      return (
-                        <label
-                          className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
-                          key={tag.id}
-                        >
-                          <input
-                            checked={checked}
-                            onChange={() =>
-                              setMergeSourceTagIds((current) =>
-                                current.includes(tag.id)
-                                  ? current.filter((value) => value !== tag.id)
-                                  : [...current, tag.id],
-                              )
-                            }
-                            type="checkbox"
-                          />
-                          <span>
-                            {tag.name} · {parentName} · {playCount} 篇
-                          </span>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div className="content-meta">没有匹配的小类</div>
-                  )}
-                </div>
-
-                <div className="stack-gap-sm">
-                  <strong>目标大类</strong>
-                  <span className="content-meta">搜索或直接点选现有大类，把勾选的小类汇入其中</span>
-                </div>
-                <ClearableField
-                  onClear={() => {
-                    setMergeTargetKeyword('');
-                    setMergeTargetGroupId('');
-                  }}
-                  visible={Boolean(mergeTargetKeyword) || Boolean(mergeTargetGroupId)}
-                >
-                  <input
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      setMergeTargetKeyword(next);
-                      const matched = mergeGroupTags.find((group) => group.name === next);
-                      setMergeTargetGroupId(matched?.id ?? '');
-                    }}
-                    placeholder="搜索目标大类"
-                    value={
-                      mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ??
-                      mergeTargetKeyword
-                    }
-                  />
-                </ClearableField>
-                <div className="plaza-export-modal-list move-category-source-list">
-                  {mergeTargetGroupOptions.length > 0 ? (
-                    mergeTargetGroupOptions.map((group) => {
-                      const checked = mergeTargetGroupId === group.id;
-                      return (
-                        <label
-                          className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
-                          key={group.id}
-                        >
-                          <input
-                            checked={checked}
-                            onChange={() => {
-                              setMergeTargetGroupId(checked ? '' : group.id);
-                              setMergeTargetKeyword(checked ? '' : group.name);
-                            }}
-                            type="checkbox"
-                          />
-                          <span>{group.name}</span>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div className="content-meta">没有匹配的大类</div>
-                  )}
-                </div>
-
-                <div className="stack-gap-sm admin-bulk-review-progress-block">
-                  {mergeProgress ? (
-                    <div className="admin-bulk-review-progress" role="status">
-                      <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
-                        <strong>{mergeProgress.label}</strong>
-                        <span className="content-meta">
-                          已完成 {mergeProgress.completed} / {mergeProgress.total}
-                        </span>
-                      </div>
-                      <div aria-hidden="true" className="admin-bulk-review-progress-track">
-                        <div
-                          className="admin-bulk-review-progress-fill"
-                          style={{
-                            width: `${mergeProgress.total === 0 ? 0 : (mergeProgress.completed / mergeProgress.total) * 100}%`,
-                          }}
-                        />
-                      </div>
+                {categoryAdjustTab === 'tag' && hasLoadedAllPlays ? (
+                  <>
+                    <div className="stack-gap-sm">
+                      <strong>源分类</strong>
+                      <span className="content-meta">
+                        当前已加载 {allPlays.length} 篇，共 {moveCategoryStats.length} 个分类
+                        {tagSourceKeyword.trim()
+                          ? `，匹配 ${visibleTagSourceCategoryStats.length} 个`
+                          : ''}
+                      </span>
                     </div>
-                  ) : null}
-                </div>
+                    <ClearableField
+                      onClear={() => setTagSourceKeyword('')}
+                      visible={Boolean(tagSourceKeyword)}
+                    >
+                      <input
+                        onChange={(event) => setTagSourceKeyword(event.target.value)}
+                        placeholder="搜索源分类"
+                        value={tagSourceKeyword}
+                      />
+                    </ClearableField>
+                    <div
+                      className="inline-actions wrap-mobile"
+                      role="group"
+                      aria-label="源分类排序"
+                    >
+                      <button
+                        className={moveCategorySortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setMoveCategorySortMode('name')}
+                        type="button"
+                      >
+                        按名称首字母
+                      </button>
+                      <button
+                        className={
+                          moveCategorySortMode === 'count' ? 'tab-chip active' : 'tab-chip'
+                        }
+                        onClick={() => setMoveCategorySortMode('count')}
+                        type="button"
+                      >
+                        按小剧场数量
+                      </button>
+                    </div>
+                    <CategoryCheckboxList
+                      emptyText="没有匹配的源分类"
+                      items={visibleTagSourceCategoryStats}
+                      onToggle={(name) =>
+                        setTagSourceCategories((current) => toggleNameInList(current, name))
+                      }
+                      selected={tagSourceCategories}
+                    />
 
-                <div className="inline-actions move-category-action-row">
-                  <button
-                    className="button ghost"
-                    disabled={mergeBusy}
-                    onClick={() => {
-                      setMergeSourceTagIds([]);
-                      setMergeSourceKeyword('');
-                      setMergeTargetGroupId('');
-                      setMergeTargetKeyword('');
-                      setMergeError('');
-                      setMergeMessage('');
-                      setMergeProgress(null);
-                    }}
-                    type="button"
-                  >
-                    重置
-                  </button>
-                  <button
-                    className="button primary"
-                    disabled={mergeBusy || mergeSourceTagIds.length === 0 || !mergeTargetGroupId}
-                    onClick={() => void handleBulkMergeTags()}
-                    type="button"
-                  >
-                    {mergeBusy
-                      ? `汇入中 ${mergeProgress?.completed ?? 0}/${mergeProgress?.total ?? mergeSourceTagIds.length}`
-                      : `汇入 ${mergeSourceTagIds.length} 个小类到「${mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ?? '目标大类'}」`}
-                  </button>
-                </div>
+                    <div className="stack-gap-sm">
+                      <strong>目标分类</strong>
+                      <span className="content-meta">
+                        可同时勾选多个；搜索结果会跟着筛选。会保留原有分类并追加勾选的分类
+                      </span>
+                    </div>
+                    <ClearableField
+                      onClear={() => setTagTargetKeyword('')}
+                      visible={Boolean(tagTargetKeyword)}
+                    >
+                      <input
+                        onChange={(event) => setTagTargetKeyword(event.target.value)}
+                        placeholder="搜索目标分类"
+                        value={tagTargetKeyword}
+                      />
+                    </ClearableField>
+                    <CategoryCheckboxList
+                      emptyText="没有匹配的目标分类"
+                      items={visibleTagTargetCategoryStats}
+                      onToggle={(name) =>
+                        setTagTargetCategories((current) => toggleNameInList(current, name))
+                      }
+                      selected={tagTargetCategories}
+                    />
 
-                {mergeMessage ? <div className="feedback success">{mergeMessage}</div> : null}
-                {mergeError ? <div className="feedback error">{mergeError}</div> : null}
+                    <div className="stack-gap-sm admin-bulk-review-progress-block">
+                      {tagCategoryProgress ? (
+                        <div className="admin-bulk-review-progress" role="status">
+                          <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                            <strong>{tagCategoryProgress.label}</strong>
+                            <span className="content-meta">
+                              已完成 {tagCategoryProgress.completed} / {tagCategoryProgress.total}
+                            </span>
+                          </div>
+                          <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                            <div
+                              className="admin-bulk-review-progress-fill"
+                              style={{
+                                width: `${tagCategoryProgress.total === 0 ? 0 : (tagCategoryProgress.completed / tagCategoryProgress.total) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="inline-actions move-category-action-row">
+                      <button
+                        className="button ghost"
+                        disabled={tagCategoryBusy}
+                        onClick={() => {
+                          setTagSourceCategories([]);
+                          setTagSourceKeyword('');
+                          setTagTargetCategories([]);
+                          setTagTargetKeyword('');
+                          setTagCategoryError('');
+                          setTagCategoryMessage('');
+                          setTagCategoryProgress(null);
+                        }}
+                        type="button"
+                      >
+                        重置
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={
+                          tagCategoryBusy ||
+                          tagCategoryTargetIds.length === 0 ||
+                          tagTargetCategories.length === 0
+                        }
+                        onClick={() => void handleBulkTagCategory()}
+                        type="button"
+                      >
+                        {tagCategoryBusy
+                          ? `追加中 ${tagCategoryProgress?.completed ?? 0}/${tagCategoryProgress?.total ?? tagCategoryTargetIds.length}`
+                          : `给 ${tagCategoryTargetIds.length} 篇追加「${formatSelectedCategoryLabel(tagTargetCategories)}」`}
+                      </button>
+                    </div>
+
+                    {tagCategoryMessage ? (
+                      <div className="feedback success">{tagCategoryMessage}</div>
+                    ) : null}
+                    {tagCategoryError ? (
+                      <div className="feedback error">{tagCategoryError}</div>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {categoryAdjustTab === 'merge' ? (
+                  <>
+                    <div className="stack-gap-sm">
+                      <strong>源小类</strong>
+                      <span className="content-meta">
+                        共 {mergeLeafTags.length} 个小类
+                        {mergeTargetGroupId || mergeSourceKeyword.trim()
+                          ? `，当前显示 ${visibleMergeSourceTags.length} 个`
+                          : ''}
+                      </span>
+                    </div>
+                    <div
+                      className="inline-actions wrap-mobile"
+                      role="group"
+                      aria-label="源小类排序"
+                    >
+                      <button
+                        className={mergeSourceSortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setMergeSourceSortMode('name')}
+                        type="button"
+                      >
+                        按名称首字母
+                      </button>
+                      <button
+                        className={mergeSourceSortMode === 'count' ? 'tab-chip active' : 'tab-chip'}
+                        onClick={() => setMergeSourceSortMode('count')}
+                        type="button"
+                      >
+                        按小剧场数量
+                      </button>
+                    </div>
+                    <ClearableField
+                      onClear={() => setMergeSourceKeyword('')}
+                      visible={Boolean(mergeSourceKeyword)}
+                    >
+                      <input
+                        onChange={(event) => setMergeSourceKeyword(event.target.value)}
+                        placeholder="搜索小类"
+                        value={mergeSourceKeyword}
+                      />
+                    </ClearableField>
+                    <div className="plaza-export-modal-list move-category-source-list">
+                      {visibleMergeSourceTags.length > 0 ? (
+                        visibleMergeSourceTags.map((tag) => {
+                          const checked = mergeSourceTagIds.includes(tag.id);
+                          const parentName =
+                            mergeGroupTags.find((group) => group.id === tag.parentId)?.name ??
+                            '未归入大类';
+                          const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
+                          return (
+                            <label
+                              className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                              key={tag.id}
+                            >
+                              <input
+                                checked={checked}
+                                onChange={() =>
+                                  setMergeSourceTagIds((current) =>
+                                    current.includes(tag.id)
+                                      ? current.filter((value) => value !== tag.id)
+                                      : [...current, tag.id],
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                              <span>
+                                {tag.name} · {parentName} · {playCount} 篇
+                              </span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <div className="content-meta">没有匹配的小类</div>
+                      )}
+                    </div>
+
+                    <div className="stack-gap-sm">
+                      <strong>目标大类</strong>
+                      <span className="content-meta">
+                        搜索或直接点选现有大类，把勾选的小类汇入其中
+                      </span>
+                    </div>
+                    <ClearableField
+                      onClear={() => {
+                        setMergeTargetKeyword('');
+                        setMergeTargetGroupId('');
+                      }}
+                      visible={Boolean(mergeTargetKeyword) || Boolean(mergeTargetGroupId)}
+                    >
+                      <input
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          setMergeTargetKeyword(next);
+                          const matched = mergeGroupTags.find((group) => group.name === next);
+                          setMergeTargetGroupId(matched?.id ?? '');
+                        }}
+                        placeholder="搜索目标大类"
+                        value={
+                          mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ??
+                          mergeTargetKeyword
+                        }
+                      />
+                    </ClearableField>
+                    <div className="plaza-export-modal-list move-category-source-list">
+                      {mergeTargetGroupOptions.length > 0 ? (
+                        mergeTargetGroupOptions.map((group) => {
+                          const checked = mergeTargetGroupId === group.id;
+                          return (
+                            <label
+                              className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                              key={group.id}
+                            >
+                              <input
+                                checked={checked}
+                                onChange={() => {
+                                  setMergeTargetGroupId(checked ? '' : group.id);
+                                  setMergeTargetKeyword(checked ? '' : group.name);
+                                }}
+                                type="checkbox"
+                              />
+                              <span>{group.name}</span>
+                            </label>
+                          );
+                        })
+                      ) : (
+                        <div className="content-meta">没有匹配的大类</div>
+                      )}
+                    </div>
+
+                    <div className="stack-gap-sm admin-bulk-review-progress-block">
+                      {mergeProgress ? (
+                        <div className="admin-bulk-review-progress" role="status">
+                          <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                            <strong>{mergeProgress.label}</strong>
+                            <span className="content-meta">
+                              已完成 {mergeProgress.completed} / {mergeProgress.total}
+                            </span>
+                          </div>
+                          <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                            <div
+                              className="admin-bulk-review-progress-fill"
+                              style={{
+                                width: `${mergeProgress.total === 0 ? 0 : (mergeProgress.completed / mergeProgress.total) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="inline-actions move-category-action-row">
+                      <button
+                        className="button ghost"
+                        disabled={mergeBusy}
+                        onClick={() => {
+                          setMergeSourceTagIds([]);
+                          setMergeSourceKeyword('');
+                          setMergeTargetGroupId('');
+                          setMergeTargetKeyword('');
+                          setMergeError('');
+                          setMergeMessage('');
+                          setMergeProgress(null);
+                        }}
+                        type="button"
+                      >
+                        重置
+                      </button>
+                      <button
+                        className="button primary"
+                        disabled={
+                          mergeBusy || mergeSourceTagIds.length === 0 || !mergeTargetGroupId
+                        }
+                        onClick={() => void handleBulkMergeTags()}
+                        type="button"
+                      >
+                        {mergeBusy
+                          ? `汇入中 ${mergeProgress?.completed ?? 0}/${mergeProgress?.total ?? mergeSourceTagIds.length}`
+                          : `汇入 ${mergeSourceTagIds.length} 个小类到「${mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ?? '目标大类'}」`}
+                      </button>
+                    </div>
+
+                    {mergeMessage ? <div className="feedback success">{mergeMessage}</div> : null}
+                    {mergeError ? <div className="feedback error">{mergeError}</div> : null}
+                  </>
+                ) : null}
               </div>
             </section>
           ) : null}

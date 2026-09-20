@@ -1,6 +1,6 @@
 import { mockDb } from '../data/mock-db';
 import { normalizeImportedSummary } from './play-text';
-import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT } from '../types/play';
+import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT, TAGS_UPDATED_EVENT } from '../types/play';
 import type {
   AdminSession,
   BulkReviewResult,
@@ -196,6 +196,12 @@ const emitPublicPlaysUpdated = () => {
   }
 };
 
+const emitTagsUpdated = () => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(TAGS_UPDATED_EVENT));
+  }
+};
+
 const cachePublicPlays = (plays: Play[]) => {
   const normalized = plays.map(normalizePlaySummary);
   publicPlaysCache = normalized;
@@ -325,6 +331,28 @@ export const playApi = {
     }
 
     return Promise.resolve(mockDb.getTags());
+  },
+
+  async createPublicTag(draft: { name: string; parentId: string }): Promise<Tag> {
+    const name = draft.name.trim();
+    const parentId = draft.parentId.trim();
+    if (!name) {
+      throw new Error('分类名不能为空');
+    }
+    if (!parentId) {
+      throw new Error('新建分类时请选择所属大类');
+    }
+
+    const created =
+      apiMode === 'remote'
+        ? await jsonRequest<Tag>('/api/tags', {
+            method: 'POST',
+            body: JSON.stringify({ name, parentId }),
+          })
+        : mockDb.createTag({ name, kind: 'tag', parentId });
+
+    emitTagsUpdated();
+    return created;
   },
 
   async getSiteSettings(): Promise<SiteSettings> {

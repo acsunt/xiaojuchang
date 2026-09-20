@@ -12,6 +12,8 @@ type CategoryHierarchyPickerProps = {
   onChange: (next: string) => void;
   disabled?: boolean;
   chipClassName?: string;
+  keyword?: string;
+  emptyText?: string;
 };
 
 const toggleName = (current: string[], name: string) =>
@@ -23,12 +25,33 @@ export function CategoryHierarchyPicker({
   onChange,
   disabled = false,
   chipClassName = 'tag-chip',
+  keyword = '',
+  emptyText = '没有匹配的分类',
 }: CategoryHierarchyPickerProps) {
   const selected = useMemo(() => splitPlayCategories(value), [value]);
-  const groups = useMemo(() => buildTagGroupNodes(tags), [tags]);
+  const groups = useMemo(() => {
+    const nodes = buildTagGroupNodes(tags);
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    if (!normalizedKeyword) {
+      return nodes;
+    }
+
+    return nodes
+      .map((node) => {
+        const groupMatches = node.group?.name.toLowerCase().includes(normalizedKeyword) ?? false;
+        const children = groupMatches
+          ? node.children
+          : node.children.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword));
+        return { ...node, children };
+      })
+      .filter((node) => {
+        const groupMatches = node.group?.name.toLowerCase().includes(normalizedKeyword) ?? false;
+        return groupMatches || node.children.length > 0;
+      });
+  }, [keyword, tags]);
 
   if (groups.length === 0) {
-    return null;
+    return <div className="content-meta">{emptyText}</div>;
   }
 
   return (
