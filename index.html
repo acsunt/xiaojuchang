@@ -20,30 +20,85 @@
     ></script>
     <script>
       (() => {
-        const themeStorageKey = 'mini-theater.theme';
-        const storedTheme = window.localStorage.getItem(themeStorageKey);
-        const theme = storedTheme === 'light' ? 'light' : 'dark';
-        document.documentElement.dataset.theme = theme;
-        document.documentElement.style.colorScheme = theme;
-
-        /* 预置 body 的 data-style / data-mode,避免 React 挂载前
-         * 按钮回退到 :root 的 --btn-bg-color: #000 出现"瞬间黑色"闪烁。 */
-        const style = window.localStorage.getItem('site-style') || 'default';
-        const mode = window.localStorage.getItem('site-mode') === 'night' ? 'night' : 'day';
+        const read = (key) => {
+          try {
+            return window.localStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        };
+        const style = read('site-style') || 'default';
+        const mode = read('site-mode') === 'night' ? 'night' : 'day';
+        const colorScheme = mode === 'night' ? 'dark' : 'light';
+        const nightBg = style === 'default' ? '#08111f' : '#121212';
+        const dayBg = style === 'default' ? '#f3eedf' : '#ffffff';
+        const bg = mode === 'night' ? nightBg : dayBg;
+        const root = document.documentElement;
+        /* 日夜以 site-mode 为准,不要再用旧的 mini-theater.theme 默认成 dark,
+         * 否则会和真实日夜状态打架,刷新时先按错的 color-scheme 画一帧。 */
+        root.dataset.theme = colorScheme;
+        root.dataset.bootStyle = style;
+        root.dataset.bootMode = mode;
+        root.dataset.style = style;
+        root.dataset.mode = mode;
+        root.style.colorScheme = colorScheme;
+        root.style.backgroundColor = bg;
+        root.style.setProperty('--bg-color', bg);
         const applyBodyDataset = () => {
-          if (!document.body) return;
+          if (!document.body) return false;
           document.body.setAttribute('data-style', style);
           document.body.setAttribute('data-mode', mode);
+          document.body.style.backgroundColor = bg;
+          return true;
         };
-        if (document.body) {
-          applyBodyDataset();
-        } else {
+        if (!applyBodyDataset()) {
           document.addEventListener('DOMContentLoaded', applyBodyDataset, { once: true });
         }
       })();
     </script>
+    <style>
+      /* 首屏兜底色:styles.css 走 JS bundle,夜间刷新时先用 html 底色挡住白屏。 */
+      html {
+        background-color: #f3eedf;
+        color-scheme: light;
+      }
+      html[data-mode='night'],
+      html[data-boot-mode='night'] {
+        background-color: #121212;
+        color-scheme: dark;
+        --bg-color: #121212;
+      }
+      html[data-style='default'][data-mode='day'],
+      html[data-boot-style='default'][data-boot-mode='day'] {
+        background-color: #f3eedf;
+        --bg-color: #f3eedf;
+      }
+      html[data-style='default'][data-mode='night'],
+      html[data-boot-style='default'][data-boot-mode='night'] {
+        background-color: #08111f;
+        --bg-color: #08111f;
+      }
+      html,
+      body {
+        min-height: 100%;
+      }
+      body {
+        margin: 0;
+        background-color: inherit;
+      }
+    </style>
   </head>
   <body>
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const style = root.dataset.style || root.dataset.bootStyle || 'default';
+        const mode = root.dataset.mode || root.dataset.bootMode || 'day';
+        document.body.setAttribute('data-style', style);
+        document.body.setAttribute('data-mode', mode);
+        document.body.style.backgroundColor = getComputedStyle(root).backgroundColor;
+      })();
+    </script>
     <!-- 基础背景图层与字体加载动画DOM（插入到body最前面） -->
     <div id="fontLoadingOverlay" class="font-loading-overlay" role="status" aria-live="polite">
       <i class="fas fa-spinner fa-spin font-loading-spinner" aria-hidden="true"></i>

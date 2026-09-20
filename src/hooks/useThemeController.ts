@@ -721,8 +721,25 @@ export function useThemeController(): UseThemeControllerResult {
     if (!SAFE_WINDOW) {
       return;
     }
+    const root = document.documentElement;
+    const colorScheme = currentMode === 'night' ? 'dark' : 'light';
+    const nightBg = currentStyle === 'default' ? '#08111f' : '#121212';
+    const dayBg = currentStyle === 'default' ? '#f3eedf' : '#ffffff';
+    const bg = currentMode === 'night' ? nightBg : dayBg;
+
     document.body.setAttribute('data-style', currentStyle);
     document.body.setAttribute('data-mode', currentMode);
+    const computedBg = window.getComputedStyle(document.body).getPropertyValue('--bg-color').trim();
+    const resolvedBg = computedBg || bg;
+    document.body.style.backgroundColor = resolvedBg;
+    root.dataset.theme = colorScheme;
+    root.dataset.style = currentStyle;
+    root.dataset.mode = currentMode;
+    root.dataset.bootStyle = currentStyle;
+    root.dataset.bootMode = currentMode;
+    root.style.colorScheme = colorScheme;
+    root.style.backgroundColor = resolvedBg;
+    root.style.setProperty('--bg-color', resolvedBg);
 
     document.querySelectorAll('.switcher button').forEach((b) => {
       b.classList.toggle('active', (b as HTMLElement).dataset.key === currentStyle);

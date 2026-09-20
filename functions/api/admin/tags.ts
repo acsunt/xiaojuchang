@@ -18,8 +18,16 @@ export const onRequestPost: PagesFunction = async ({ env, request }) => {
   }
 
   try {
-    const body = (await request.json()) as { name?: string };
-    const tag = await createTag(env.DB, { name: String(body.name ?? '') });
+    const body = (await request.json()) as {
+      name?: string;
+      kind?: string;
+      parentId?: string | null;
+    };
+    const tag = await createTag(env.DB, {
+      name: String(body.name ?? ''),
+      kind: body.kind === 'group' ? 'group' : 'tag',
+      parentId: body.parentId,
+    });
     return json(tag, { status: 201 });
   } catch (reason) {
     return error(reason instanceof Error ? reason.message : '标签创建失败');

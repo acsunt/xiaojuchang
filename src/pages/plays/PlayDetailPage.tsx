@@ -17,12 +17,13 @@ import {
 import { getCachedPublicPlayById, getCachedPublicPlays, playApi } from '../../services/play-api';
 
 import {
-  DEFAULT_CATEGORY,
   type Play,
   type Repo,
   type RepoOrder,
   type Continuation,
+  type Tag,
 } from '../../types/play';
+import { formatPlayLeafCategoryLabels } from '../../utils/categories';
 
 import { RepoMarkdown } from '../repos/RepoMarkdown';
 
@@ -74,6 +75,7 @@ export function PlayDetailPage() {
   const locationState = location.state as DetailLocationState | null;
 
   const [play, setPlay] = useState<Play | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -223,6 +225,13 @@ export function PlayDetailPage() {
       .then(setContinuations)
       .catch(() => setContinuations([]));
   }, [id, continuationOrder]);
+
+  useEffect(() => {
+    playApi
+      .getTags()
+      .then(setTags)
+      .catch(() => setTags([]));
+  }, []);
 
   const handleCopy = async (value: string, label: string) => {
     try {
@@ -470,7 +479,9 @@ export function PlayDetailPage() {
         <div className="stack-gap-md">
           {/* 第一行:分类 + 作者同行,均带小剧场列表风格图标(◈ 分类 / ✎ 作者) */}
           <div className="card-topline wrap-mobile align-start detail-meta-first-row">
-            <span className="compact-meta-item">◈ {play.category || DEFAULT_CATEGORY}</span>
+            <span className="compact-meta-item">
+              ◈ {formatPlayLeafCategoryLabels(play.category, tags)}
+            </span>
             <span className="compact-meta-item">✎ {play.authorName}</span>
           </div>
 

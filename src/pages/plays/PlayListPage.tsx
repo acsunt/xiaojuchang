@@ -61,12 +61,23 @@ import { getPlayVersionKey, sortPlayVersions } from './play-versions';
 import {
   DEFAULT_CATEGORY,
   PLAYS_UPDATED_EVENT,
+  TAGS_UPDATED_EVENT,
   type NotificationSummary,
   type Play,
   type RepoSummary,
+  type Tag,
 } from '../../types/play';
 import { openVisitorChangelog } from '../../data/visitor-changelog';
 import { showFloatingToast } from '../../components/floating-toast-store';
+import {
+  buildTagGroupNodes,
+  collectPlayCategorySearchText,
+  formatPlayLeafCategoryLabels,
+  getChildTagNames,
+  isGroupTag,
+  playMatchesCategoryFilter,
+  splitPlayCategories,
+} from '../../utils/categories';
 import { ExportContinuationsButton } from './ExportContinuationsButton';
 import { ExportAllButton } from './ExportAllButton';
 import { ExportFavoritesButton } from './ExportFavoritesButton';
@@ -334,7 +345,7 @@ const matchesPlayKeyword = (
     haystack.push(play.authorName);
   }
   if (activeFields.includes('category')) {
-    haystack.push(play.category);
+    haystack.push(collectPlayCategorySearchText(play));
   }
   if (activeFields.includes('content')) {
     haystack.push(play.summary, play.content);
@@ -344,7 +355,8 @@ const matchesPlayKeyword = (
 };
 
 const getPlayAuthorName = (play: Play) => play.authorName.trim() || '匿名';
-const getPlayCategoryName = (play: Play) => play.category?.trim() || DEFAULT_CATEGORY;
+const getPlayCategoryName = (play: Play) =>
+  splitPlayCategories(play.category)[0] || DEFAULT_CATEGORY;
 
 const groupPlaysByExportValue = (items: Play[], pickValue: (play: Play) => string) => {
   const groups = new Map<string, Play[]>();
@@ -782,6 +794,7 @@ export function PlayListPage() {
   const initialNavigationSnapshot = getPlazaNavigationSnapshot();
   const [plays, setPlays] = useState<Play[]>(() => getCachedPublicPlays());
   const [loading, setLoading] = useState(() => getCachedPublicPlays().length === 0);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [repoCounts, setRepoCounts] = useState<RepoSummary[]>([]);
   const randomPickedCardRef = useRef<HTMLElement | null>(null);
   const confettiRef = useRef<ConfettiCanvasHandle | null>(null);
@@ -1063,6 +1076,19 @@ export function PlayListPage() {
   }, []);
 
   useEffect(() => {
+    const loadTags = async () => {
+      try {
+        setTags(await playApi.getTags());
+      } catch {
+        setTags([]);
+      }
+    };
+    void loadTags();
+    window.addEventListener(TAGS_UPDATED_EVENT, loadTags);
+    return () => window.removeEventListener(TAGS_UPDATED_EVENT, loadTags);
+  }, []);
+
+  useEffect(() => {
     void loadPublicPlays({ showLoading: true });
     void loadNotificationSummary();
 
@@ -1277,33 +1303,52 @@ export function PlayListPage() {
   const authorScopedPlays = useMemo(
     () =>
       activeCategory
-        ? viewScopedPlays.filter(
-            (play) => (play.category?.trim() || DEFAULT_CATEGORY) === activeCategory,
-          )
+        ? viewScopedPlays.filter((play) => playMatchesCategoryFilter(play, activeCategory, tags))
         : viewScopedPlays,
-    [activeCategory, viewScopedPlays],
+    [activeCategory, tags, viewScopedPlays],
   );
 
   const categoryStats = useMemo<CategoryStat[]>(() => {
     const counts = new Map<string, number>();
     categoryScopedPlays.forEach((play) => {
-      const name = play.category?.trim() || DEFAULT_CATEGORY;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+      const names = splitPlayCategories(play.category);
+      if (names.length === 0) {
+        counts.set(DEFAULT_CATEGORY, (counts.get(DEFAULT_CATEGORY) ?? 0) + 1);
+        return;
+      }
+      names.forEach((name) => {
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      });
+    });
+    tags.filter(isGroupTag).forEach((group) => {
+      const childNames = getChildTagNames(tags, group);
+      const count = categoryScopedPlays.filter((play) =>
+        splitPlayCategories(play.category).some((name) => childNames.includes(name)),
+      ).length;
+      counts.set(group.name, count);
     });
 
-    return [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
-      .sort(
-        (left, right) => right.count - left.count || left.name.localeCompare(right.name, 'zh-CN'),
-      );
-  }, [categoryScopedPlays]);
+    return [...counts.entries()].map(([name, count]) => ({ name, count }));
+  }, [categoryScopedPlays, tags]);
 
-  const orderedCategoryStats = useMemo(() => {
-    const unclassified = categoryStats.find((item) => item.name === DEFAULT_CATEGORY);
-    const others = categoryStats.filter((item) => item.name !== DEFAULT_CATEGORY);
-
-    return unclassified ? [unclassified, ...others] : others;
-  }, [categoryStats]);
+  const plazaCategoryGroups = useMemo(() => {
+    const countMap = new Map(categoryStats.map((item) => [item.name, item.count]));
+    const groups = buildTagGroupNodes(tags).map((node) => ({
+      group: node.group,
+      children: node.children.map((tag) => ({
+        name: tag.name,
+        count: countMap.get(tag.name) ?? 0,
+      })),
+    }));
+    const unclassifiedCount = countMap.get(DEFAULT_CATEGORY) ?? 0;
+    if (unclassifiedCount > 0) {
+      groups.push({
+        group: null,
+        children: [{ name: DEFAULT_CATEGORY, count: unclassifiedCount }],
+      });
+    }
+    return groups;
+  }, [categoryStats, tags]);
 
   const authorStats = useMemo<AuthorStat[]>(() => {
     const counts = new Map<string, number>();
@@ -1320,11 +1365,17 @@ export function PlayListPage() {
   }, [authorScopedPlays]);
 
   useEffect(() => {
-    if (activeCategory && !categoryStats.some((item) => item.name === activeCategory)) {
+    const knownNames = new Set(
+      plazaCategoryGroups.flatMap((node) => [
+        ...(node.group ? [node.group.name] : []),
+        ...node.children.map((item) => item.name),
+      ]),
+    );
+    if (activeCategory && !knownNames.has(activeCategory)) {
       setActiveCategory('');
       setCurrentPage(1);
     }
-  }, [activeCategory, categoryStats]);
+  }, [activeCategory, plazaCategoryGroups]);
 
   useEffect(() => {
     if (activeAuthor && !authorStats.some((item) => item.name === activeAuthor)) {
@@ -1339,9 +1390,8 @@ export function PlayListPage() {
 
   const filteredPlays = useMemo(() => {
     const nextItems = viewScopedPlays.filter((play) => {
-      const categoryName = play.category?.trim() || DEFAULT_CATEGORY;
       const authorName = play.authorName.trim() || '匿名';
-      if (activeCategory && categoryName !== activeCategory) {
+      if (activeCategory && !playMatchesCategoryFilter(play, activeCategory, tags)) {
         return false;
       }
 
@@ -1403,6 +1453,7 @@ export function PlayListPage() {
     normalizedKeyword,
     playSearchFields,
     sortMode,
+    tags,
     viewScopedPlays,
     repoSortMode,
     activeRepoFilter,
@@ -2000,7 +2051,9 @@ export function PlayListPage() {
   const renderCompactMeta = (play: Play) => {
     return (
       <div className="compact-meta-row compact-meta-row-small">
-        <span className="compact-meta-item">◈ {play.category?.trim() || DEFAULT_CATEGORY}</span>
+        <span className="compact-meta-item">
+          ◈ {formatPlayLeafCategoryLabels(play.category, tags)}
+        </span>
       </div>
     );
   };
@@ -2587,31 +2640,66 @@ export function PlayListPage() {
                   {/* 分类筛选带（受筛选分组 / toolbar 折叠状态控制） */}
                   {categoryFilterOpen ? (
                     <div className="plaza-category-strip">
-                      <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
-                        <button
-                          className={activeCategory === '' ? 'tab-chip active' : 'tab-chip'}
-                          onClick={() => {
-                            setActiveCategory('');
-                            setCurrentPage(1);
-                          }}
-                          type="button"
-                        >
-                          全部分类 {categoryScopedPlays.length}
-                        </button>
-                        {orderedCategoryStats.map((item) => (
+                      <div className="category-hierarchy plaza-category-hierarchy">
+                        <div className="inline-actions wrap-mobile plaza-view-switcher plaza-category-switcher">
                           <button
-                            key={item.name}
-                            className={
-                              activeCategory === item.name ? 'tab-chip active' : 'tab-chip'
-                            }
+                            className={activeCategory === '' ? 'tab-chip active' : 'tab-chip'}
                             onClick={() => {
-                              setActiveCategory(item.name);
+                              setActiveCategory('');
                               setCurrentPage(1);
                             }}
                             type="button"
                           >
-                            {item.name} {item.count}
+                            全部分类 {categoryScopedPlays.length}
                           </button>
+                        </div>
+                        {plazaCategoryGroups.map((node) => (
+                          <div
+                            className="category-hierarchy-group"
+                            key={node.group?.id ?? node.children[0]?.name ?? 'ungrouped'}
+                          >
+                            {node.group ? (
+                              <div className="category-hierarchy-group-row">
+                                <button
+                                  className={
+                                    activeCategory === node.group.name
+                                      ? 'tab-chip active'
+                                      : 'tab-chip'
+                                  }
+                                  onClick={() => {
+                                    setActiveCategory(node.group?.name ?? '');
+                                    setCurrentPage(1);
+                                  }}
+                                  type="button"
+                                >
+                                  {node.group.name}{' '}
+                                  {categoryStats.find((item) => item.name === node.group?.name)
+                                    ?.count ?? 0}
+                                </button>
+                              </div>
+                            ) : node.children.some((item) => item.name !== DEFAULT_CATEGORY) ? (
+                              <div className="category-hierarchy-group-row">
+                                <span className="category-hierarchy-group-label">未归入大类</span>
+                              </div>
+                            ) : null}
+                            <div className="category-hierarchy-children">
+                              {node.children.map((item) => (
+                                <button
+                                  key={item.name}
+                                  className={
+                                    activeCategory === item.name ? 'tab-chip active' : 'tab-chip'
+                                  }
+                                  onClick={() => {
+                                    setActiveCategory(item.name);
+                                    setCurrentPage(1);
+                                  }}
+                                  type="button"
+                                >
+                                  {item.name} {item.count}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>

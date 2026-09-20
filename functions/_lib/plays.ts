@@ -12,7 +12,7 @@ import {
   type ReviewAction,
 } from './http';
 import { chunkItems, D1_BACKUP_INSERT_CHUNK_SIZE, D1_SELECT_CHUNK_SIZE } from './db-utils';
-import { ensureTagByName } from './tags';
+import { ensureTagsByCategory } from './tags';
 import { parseRepoStatus } from './repos';
 
 type PlayDraft = {
@@ -140,7 +140,7 @@ const mergeModificationIntoParent = async (
   if (!nextTitle) throw new Error('标题不能为空');
   if (!nextAuthorName) throw new Error('署名不能为空');
   if (!nextContent) throw new Error('正文不能为空');
-  await ensureTagByName(db, nextCategory || currentPlay.category);
+  await ensureTagsByCategory(db, nextCategory || currentPlay.category);
 
   const parentPlay = currentPlay.parentPlayId
     ? await getAdminPlayById(db, currentPlay.parentPlayId)
@@ -601,7 +601,7 @@ export const updateAdminPlay = async (
     throw new Error('正文不能为空');
   }
 
-  await ensureTagByName(db, nextCategory);
+  await ensureTagsByCategory(db, nextCategory);
 
   const timestamp = now();
   /* 同系列跟随:把同 (author_name + title + category) 旧键下所有作品的 title/category
@@ -702,7 +702,7 @@ export const submitPlayEdit = async (
   if (!nextAuthorName) throw new Error('署名不能为空');
   if (!nextContent) throw new Error('正文不能为空');
   if (nextCategory) {
-    await ensureTagByName(db, nextCategory);
+    await ensureTagsByCategory(db, nextCategory);
   }
 
   /* 上溯 parent_play_id 到同 title+category 最早一条,避免
@@ -1047,6 +1047,8 @@ export const restoreBackupContinuations = async (
 type BackupTagDraft = {
   id: string;
   name: string;
+  kind?: string;
+  parentId?: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -1058,9 +1060,12 @@ const normalizeBackupTagDraft = (
 ): BackupTagDraft => {
   const createdAt = normalizeBackupTimestamp(String(draft.createdAt ?? ''), fallbackTimestamp);
   const updatedAt = normalizeBackupTimestamp(String(draft.updatedAt ?? ''), createdAt);
+  const kind = String(draft.kind ?? '').trim() === 'group' ? 'group' : 'tag';
   return {
     id: String(draft.id ?? '').trim() || makeId('tag'),
     name: String(draft.name ?? '').trim(),
+    kind,
+    parentId: kind === 'group' ? null : String(draft.parentId ?? '').trim() || null,
     sortOrder: Number.isFinite(Number(draft.sortOrder)) ? Number(draft.sortOrder) : 0,
     createdAt,
     updatedAt,
@@ -1099,12 +1104,14 @@ export const restoreBackupTags = async (db: D1Database, tags: BackupTagDraft[]) 
       tagChunk.map((tag, index) =>
         db
           .prepare(
-            `INSERT INTO tags (id, name, sort_order, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO tags (id, name, kind, parent_id, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             tag.id,
             tag.name,
+            tag.kind === 'group' ? 'group' : 'tag',
+            tag.parentId ?? null,
             chunkIndex * D1_BACKUP_INSERT_CHUNK_SIZE + index,
             tag.createdAt,
             tag.updatedAt,
@@ -1185,7 +1192,7 @@ export const reviewPlay = async (
     throw new Error('正文不能为空');
   }
 
-  await ensureTagByName(db, nextCategory);
+  await ensureTagsByCategory(db, nextCategory);
 
   const stmts = [
     db
@@ -1328,7 +1335,7 @@ export const bulkReviewPlays = async (
         .bind(makeId('review'), playId, input.action, input.operator, reviewNote, timestamp),
     ]);
     if (mappedStatus === 'approved') {
-      await ensureTagByName(db, play.category);
+      await ensureTagsByCategory(db, play.category);
     }
     finalUpdatedIds.push(playId);
   }

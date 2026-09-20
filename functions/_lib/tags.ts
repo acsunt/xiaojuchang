@@ -1,13 +1,26 @@
-import { makeId, normalizeTag, now } from './http';
+import { makeId, normalizeTag, now, parseTagKind, type TagKind } from './http';
 import { chunkItems, D1_TAG_REORDER_CHUNK_SIZE } from './db-utils';
+import {
+  BUILTIN_TAG_GROUPS,
+  DEFAULT_CATEGORY,
+  removeCategoryFromValue,
+  renameCategoryInValue,
+  splitPlayCategories,
+} from './categories';
 
 type TagDraft = {
   name: string;
+  kind?: TagKind;
+  parentId?: string | null;
 };
 
 type TagReorderDraft = {
   orderedIds: string[];
 };
+
+const TAG_HIERARCHY_COLUMNS = ['kind', 'parent_id'] as const;
+const tagHierarchyCache = new WeakMap<D1Database, boolean>();
+const builtinGroupSeedCache = new WeakMap<D1Database, boolean>();
 
 const ensureTag = async (db: D1Database, id: string) => {
   const tag = await getTagById(db, id);
@@ -18,7 +31,68 @@ const ensureTag = async (db: D1Database, id: string) => {
   return tag;
 };
 
-export const listTags = async (db: D1Database) => {
+export const ensureTagHierarchyColumns = async (db: D1Database): Promise<boolean> => {
+  const cached = tagHierarchyCache.get(db);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  try {
+    const rows = await db
+      .prepare(`SELECT name FROM pragma_table_info('tags')`)
+      .all<{ name?: string }>();
+    const existing = new Set(rows.results.map((row) => String(row.name ?? '')));
+    const missing = TAG_HIERARCHY_COLUMNS.filter((column) => !existing.has(column));
+    if (missing.length === 0) {
+      tagHierarchyCache.set(db, true);
+      return true;
+    }
+
+    const stmts = missing.map((column) => {
+      if (column === 'kind') {
+        return db.prepare(`ALTER TABLE tags ADD COLUMN kind TEXT NOT NULL DEFAULT 'tag'`);
+      }
+      return db.prepare(`ALTER TABLE tags ADD COLUMN parent_id TEXT`);
+    });
+    await db.batch(stmts);
+    tagHierarchyCache.set(db, true);
+    return true;
+  } catch {
+    tagHierarchyCache.set(db, false);
+    return false;
+  }
+};
+
+export const ensureBuiltinTagGroups = async (db: D1Database) => {
+  if (builtinGroupSeedCache.get(db)) {
+    return;
+  }
+
+  await ensureTagHierarchyColumns(db);
+  const current = await listTagsRaw(db);
+  const existingNames = new Set(current.map((tag) => tag.name));
+  const timestamp = now();
+  let sortOrder = current.reduce((max, tag) => Math.max(max, tag.sortOrder), -1);
+
+  for (const name of BUILTIN_TAG_GROUPS) {
+    if (existingNames.has(name)) {
+      continue;
+    }
+    sortOrder += 1;
+    await db
+      .prepare(
+        `INSERT INTO tags (id, name, kind, parent_id, sort_order, created_at, updated_at)
+         VALUES (?, ?, 'group', NULL, ?, ?, ?)`,
+      )
+      .bind(makeId('tag'), name, sortOrder, timestamp, timestamp)
+      .run();
+  }
+
+  builtinGroupSeedCache.set(db, true);
+};
+
+const listTagsRaw = async (db: D1Database) => {
+  await ensureTagHierarchyColumns(db);
   const result = await db
     .prepare(
       `SELECT * FROM tags
@@ -29,7 +103,13 @@ export const listTags = async (db: D1Database) => {
   return result.results.map(normalizeTag);
 };
 
+export const listTags = async (db: D1Database) => {
+  await ensureBuiltinTagGroups(db);
+  return listTagsRaw(db);
+};
+
 export const getTagById = async (db: D1Database, id: string) => {
+  await ensureTagHierarchyColumns(db);
   const row = await db
     .prepare(
       `SELECT * FROM tags
@@ -43,6 +123,7 @@ export const getTagById = async (db: D1Database, id: string) => {
 };
 
 const getTagByName = async (db: D1Database, name: string) => {
+  await ensureTagHierarchyColumns(db);
   const row = await db
     .prepare(
       `SELECT * FROM tags
@@ -66,7 +147,22 @@ const getNextTagSortOrder = async (db: D1Database) => {
   return Number(row?.max_sort_order ?? -1) + 1;
 };
 
+const resolveParentId = async (db: D1Database, parentId?: string | null) => {
+  const normalized = String(parentId ?? '').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parent = await getTagById(db, normalized);
+  if (!parent || parent.kind !== 'group') {
+    throw new Error('目标大类不存在');
+  }
+
+  return parent.id;
+};
+
 export const createTag = async (db: D1Database, draft: TagDraft) => {
+  await ensureTagHierarchyColumns(db);
   const name = draft.name.trim();
   if (!name) {
     throw new Error('标签名不能为空');
@@ -77,34 +173,43 @@ export const createTag = async (db: D1Database, draft: TagDraft) => {
     throw new Error('标签已存在');
   }
 
+  const kind = parseTagKind(draft.kind);
+  const parentId = kind === 'group' ? null : await resolveParentId(db, draft.parentId);
   const id = makeId('tag');
   const timestamp = now();
   const sortOrder = await getNextTagSortOrder(db);
 
   await db
     .prepare(
-      `INSERT INTO tags (id, name, sort_order, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO tags (id, name, kind, parent_id, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(id, name, sortOrder, timestamp, timestamp)
+    .bind(id, name, kind, parentId, sortOrder, timestamp, timestamp)
     .run();
 
   return ensureTag(db, id);
 };
 
-// 供 plays.ts 复用：小剧场分类需要落到标签表时，按分类名自动创建缺失的标签。
 export const ensureTagByName = async (db: D1Database, name: string) => {
   const normalizedName = name.trim();
-  if (!normalizedName || normalizedName === '未分类') {
+  if (!normalizedName || normalizedName === DEFAULT_CATEGORY) {
     return null;
   }
 
+  await ensureTagHierarchyColumns(db);
   const existing = await getTagByName(db, normalizedName);
   if (existing) {
     return existing;
   }
 
-  return createTag(db, { name: normalizedName });
+  return createTag(db, { name: normalizedName, kind: 'tag', parentId: null });
+};
+
+export const ensureTagsByCategory = async (db: D1Database, category: string) => {
+  const names = splitPlayCategories(category);
+  for (const name of names) {
+    await ensureTagByName(db, name);
+  }
 };
 
 export const updateTag = async (db: D1Database, tagId: string, draft: TagDraft) => {
@@ -123,24 +228,74 @@ export const updateTag = async (db: D1Database, tagId: string, draft: TagDraft) 
     throw new Error('标签已存在');
   }
 
-  const timestamp = now();
+  const nextKind = draft.kind ? parseTagKind(draft.kind) : current.kind;
+  if (nextKind !== current.kind) {
+    throw new Error('不能更改标签类型');
+  }
 
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE tags
-         SET name = ?, updated_at = ?
-         WHERE id = ?`,
-      )
-      .bind(name, timestamp, tagId),
-    db
-      .prepare(
-        `UPDATE plays
-         SET category = ?, updated_at = ?
-         WHERE category = ?`,
-      )
-      .bind(name, timestamp, current.name),
-  ]);
+  const nextParentId =
+    current.kind === 'group'
+      ? null
+      : draft.parentId === undefined
+        ? current.parentId
+        : await resolveParentId(db, draft.parentId);
+  const timestamp = now();
+  const plays = await db
+    .prepare(`SELECT id, category FROM plays`)
+    .all<{ id: string; category: string }>();
+  const playUpdates = plays.results
+    .map((row) => ({
+      id: String(row.id),
+      category: renameCategoryInValue(String(row.category ?? ''), current.name, name),
+      previous: String(row.category ?? ''),
+    }))
+    .filter((row) => row.category !== row.previous);
+
+  await db
+    .prepare(
+      `UPDATE tags
+       SET name = ?, parent_id = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(name, nextParentId, timestamp, tagId)
+    .run();
+
+  for (const chunk of chunkItems(playUpdates, D1_TAG_REORDER_CHUNK_SIZE)) {
+    await db.batch(
+      chunk.map((row) =>
+        db
+          .prepare(
+            `UPDATE plays
+             SET category = ?, updated_at = ?
+             WHERE id = ?`,
+          )
+          .bind(row.category, timestamp, row.id),
+      ),
+    );
+  }
+
+  return ensureTag(db, tagId);
+};
+
+export const moveTagToGroup = async (db: D1Database, tagId: string, parentId: string) => {
+  const current = await getTagById(db, tagId);
+  if (!current) {
+    return null;
+  }
+  if (current.kind === 'group') {
+    throw new Error('大类不能再进入另一个大类');
+  }
+
+  const nextParentId = await resolveParentId(db, parentId);
+  const timestamp = now();
+  await db
+    .prepare(
+      `UPDATE tags
+       SET parent_id = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(nextParentId, timestamp, tagId)
+    .run();
 
   return ensureTag(db, tagId);
 };
@@ -152,19 +307,62 @@ export const deleteTag = async (db: D1Database, tagId: string, fallbackCategory:
   }
 
   const timestamp = now();
+  const children =
+    current.kind === 'group'
+      ? (await listTagsRaw(db)).filter((tag) => tag.parentId === current.id)
+      : [];
 
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE plays
-         SET category = ?, updated_at = ?
-         WHERE category = ?`,
-      )
-      .bind(fallbackCategory, timestamp, current.name),
-    db.prepare(`DELETE FROM tags WHERE id = ?`).bind(tagId),
-  ]);
+  if (current.kind === 'group' && children.length > 0) {
+    await db.batch(
+      children.map((child) =>
+        db
+          .prepare(
+            `UPDATE tags
+             SET parent_id = NULL, updated_at = ?
+             WHERE id = ?`,
+          )
+          .bind(timestamp, child.id),
+      ),
+    );
+  }
 
-  const remainingTags = await listTags(db);
+  const namesToRemove = current.kind === 'group' ? [] : [current.name];
+  if (namesToRemove.length > 0) {
+    const plays = await db
+      .prepare(`SELECT id, category FROM plays`)
+      .all<{ id: string; category: string }>();
+    const playUpdates = plays.results
+      .map((row) => {
+        let next = String(row.category ?? '');
+        namesToRemove.forEach((name) => {
+          next = removeCategoryFromValue(next, name);
+        });
+        return {
+          id: String(row.id),
+          category: next || fallbackCategory,
+          previous: String(row.category ?? ''),
+        };
+      })
+      .filter((row) => row.category !== row.previous);
+
+    for (const chunk of chunkItems(playUpdates, D1_TAG_REORDER_CHUNK_SIZE)) {
+      await db.batch(
+        chunk.map((row) =>
+          db
+            .prepare(
+              `UPDATE plays
+               SET category = ?, updated_at = ?
+               WHERE id = ?`,
+            )
+            .bind(row.category, timestamp, row.id),
+        ),
+      );
+    }
+  }
+
+  await db.prepare(`DELETE FROM tags WHERE id = ?`).bind(tagId).run();
+
+  const remainingTags = await listTagsRaw(db);
   for (const [chunkIndex, reorderChunk] of chunkItems(
     remainingTags,
     D1_TAG_REORDER_CHUNK_SIZE,
@@ -186,7 +384,7 @@ export const deleteTag = async (db: D1Database, tagId: string, fallbackCategory:
 };
 
 export const reorderTags = async (db: D1Database, draft: TagReorderDraft) => {
-  const currentTags = await listTags(db);
+  const currentTags = await listTagsRaw(db);
   const currentIds = currentTags.map((tag) => tag.id);
   const nextIds = draft.orderedIds.map((id) => id.trim()).filter(Boolean);
 

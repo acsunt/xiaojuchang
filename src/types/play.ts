@@ -5,9 +5,13 @@ export type RepoReviewAction = 'approve' | 'reject';
 export type Category = string;
 export type PlayTimeField = 'createdAt' | 'updatedAt';
 
+export type TagKind = 'group' | 'tag';
+
 export type Tag = {
   id: string;
   name: string;
+  kind: TagKind;
+  parentId: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -215,6 +219,8 @@ export type PlayDraft = {
 
 export type TagDraft = {
   name: string;
+  kind?: TagKind;
+  parentId?: string | null;
 };
 
 export type BackgroundCrop = {

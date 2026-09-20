@@ -1,5 +1,7 @@
-import { useMemo } from 'react';
-import { DEFAULT_CATEGORY, type Play, type RepoSummary } from '../../types/play';
+import { useEffect, useMemo, useState } from 'react';
+import { type Play, type RepoSummary, type Tag } from '../../types/play';
+import { playApi } from '../../services/play-api';
+import { formatPlayLeafCategoryLabels } from '../../utils/categories';
 
 type PlazaContinuationPanelProps = {
   plays: Play[];
@@ -35,6 +37,13 @@ export function PlazaContinuationPanel({
   continuationCounts,
   onOpenPlay,
 }: PlazaContinuationPanelProps) {
+  const [tags, setTags] = useState<Tag[]>([]);
+  useEffect(() => {
+    playApi
+      .getTags()
+      .then(setTags)
+      .catch(() => setTags([]));
+  }, []);
   const items = useMemo(() => {
     const countMap = new Map(continuationCounts.map((item) => [item.playId, item]));
     return plays
@@ -87,7 +96,7 @@ export function PlazaContinuationPanel({
               <div className="card-topline wrap-mobile align-start plaza-continuation-topline">
                 <div className="inline-actions wrap-mobile align-start plaza-continuation-meta">
                   <span className="compact-meta-item">
-                    ◈ {play.category?.trim() || DEFAULT_CATEGORY}
+                    ◈ {formatPlayLeafCategoryLabels(play.category, tags)}
                   </span>
                   <span className="compact-meta-item">✎ {play.authorName?.trim() || '匿名'}</span>
                 </div>

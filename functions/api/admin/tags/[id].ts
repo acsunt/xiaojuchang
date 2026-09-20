@@ -15,8 +15,16 @@ export const onRequestPut: PagesFunction = async ({ env, request, params }) => {
   }
 
   try {
-    const body = (await request.json()) as { name?: string };
-    const updated = await updateTag(env.DB, tagId, { name: String(body.name ?? '') });
+    const body = (await request.json()) as {
+      name?: string;
+      kind?: string;
+      parentId?: string | null;
+    };
+    const updated = await updateTag(env.DB, tagId, {
+      name: String(body.name ?? ''),
+      kind: body.kind === 'group' || body.kind === 'tag' ? body.kind : undefined,
+      parentId: body.parentId,
+    });
     if (!updated) {
       return error('标签不存在', 404);
     }

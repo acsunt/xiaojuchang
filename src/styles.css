@@ -2406,6 +2406,74 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 10px;
 }
 
+.plaza-category-hierarchy {
+  gap: 14px;
+}
+
+.category-hierarchy {
+  display: grid;
+  gap: 12px;
+}
+
+.category-hierarchy-group {
+  display: grid;
+  gap: 8px;
+}
+
+.category-hierarchy-group-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.category-hierarchy-group-label {
+  font-size: calc(13px * var(--text-scale, 1));
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.category-hierarchy-children {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-admin-group-block {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-admin-group-card {
+  background: color-mix(in srgb, var(--panel-strong) 88%, var(--accent) 8%);
+}
+
+.tag-admin-child-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 12px;
+}
+
+.tag-card-head {
+  align-items: center;
+}
+
+.tag-card-title-group {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tag-card-inline-actions {
+  display: none;
+}
+
+.tag-card-edit-field {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 6px;
+}
+
 .play-card-shell,
 .review-card-shell {
   position: relative;
@@ -5114,9 +5182,22 @@ body[data-mode='night'] .diff-segment-added {
   }
 
   .tag-card-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    display: none;
+  }
+
+  .tag-card-inline-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .tag-card-inline-actions .button {
+    width: auto;
+    min-width: 0;
+    padding: 6px 10px;
+    font-size: calc(12px * var(--text-scale, 1));
+    white-space: nowrap;
   }
 
   .move-category-action-row {
@@ -6305,7 +6386,9 @@ body[data-style='default'][data-mode='day'] .update-changelog-link:hover {
 }
 
 :root {
-  --bg-color: #ffffff;
+  /* 不要在这里写死 --bg-color。首屏由 index.html 写到 html,
+   * 主题色由 body[data-style][data-mode] 覆盖。若 :root 设成 inherit,
+   * 会把 html 内联底色算成无效值,夜间刷新先闪日间白底。 */
   --bg-image: none;
   --bg-image-opacity: 0;
   /* 首屏 body[data-style] 由 index.html 的内联脚本预置,
@@ -6391,7 +6474,7 @@ body {
   inset: 0;
   z-index: -6;
   background-color: var(--bg-color);
-  transition: background-color 0.4s ease;
+  /* 不过渡底色:刷新时 --bg-color 从兜底值切到主题值,0.4s 动画会把夜间先闪成浅色。 */
 }
 #theme-bg-layer::before {
   content: '';

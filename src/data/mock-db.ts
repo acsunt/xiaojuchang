@@ -23,6 +23,12 @@ import type {
   TagDraft,
 } from '../types/play';
 import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT, TAGS_UPDATED_EVENT } from '../types/play';
+import {
+  BUILTIN_TAG_GROUPS,
+  removeCategoryFromValue,
+  renameCategoryInValue,
+  splitPlayCategories,
+} from '../utils/categories';
 
 const PLAY_STORE_KEY = 'mini-theater.plays';
 const REVIEW_LOG_STORE_KEY = 'mini-theater.review-logs';
@@ -47,10 +53,44 @@ const emitTagsUpdated = () => {
   window.dispatchEvent(new Event(TAGS_UPDATED_EVENT));
 };
 
+const seedTimestamp = now();
 const seedTags: Tag[] = [
-  { id: 'tag_modern', name: '现代/日常', sortOrder: 0, createdAt: now(), updatedAt: now() },
-  { id: 'tag_emotion', name: '情感/恋爱', sortOrder: 1, createdAt: now(), updatedAt: now() },
-  { id: 'tag_campus', name: '校园/成长', sortOrder: 2, createdAt: now(), updatedAt: now() },
+  ...BUILTIN_TAG_GROUPS.map((name, index) => ({
+    id: `tag_group_${index}`,
+    name,
+    kind: 'group' as const,
+    parentId: null,
+    sortOrder: index,
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp,
+  })),
+  {
+    id: 'tag_modern',
+    name: '现代/日常',
+    kind: 'tag',
+    parentId: 'tag_group_0',
+    sortOrder: BUILTIN_TAG_GROUPS.length,
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp,
+  },
+  {
+    id: 'tag_emotion_leaf',
+    name: '情感/恋爱',
+    kind: 'tag',
+    parentId: 'tag_group_1',
+    sortOrder: BUILTIN_TAG_GROUPS.length + 1,
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp,
+  },
+  {
+    id: 'tag_campus',
+    name: '校园/成长',
+    kind: 'tag',
+    parentId: 'tag_group_0',
+    sortOrder: BUILTIN_TAG_GROUPS.length + 2,
+    createdAt: seedTimestamp,
+    updatedAt: seedTimestamp,
+  },
 ];
 
 const seedPlays: Play[] = [
@@ -377,28 +417,67 @@ const createDevSession = (username: string) => {
 };
 
 const normalizeTagName = (value: string) => value.trim();
-const ensureTagName = (value: string) => {
-  const name = normalizeTagName(value);
-  if (!name || name === DEFAULT_CATEGORY) {
-    return;
-  }
-
-  const currentTags = getTags();
-  if (currentTags.some((tag) => tag.name.toLowerCase() === name.toLowerCase())) {
-    return;
-  }
-
+const normalizeStoredTag = (tag: Tag): Tag => ({
+  ...tag,
+  kind: tag.kind === 'group' ? 'group' : 'tag',
+  parentId: tag.kind === 'group' ? null : (tag.parentId ?? null),
+});
+const ensureBuiltinTagGroups = (tags: Tag[]) => {
   const timestamp = now();
-  setTags([
-    ...currentTags,
-    {
+  const existingNames = new Set(tags.map((tag) => tag.name));
+  const next = [...tags];
+  BUILTIN_TAG_GROUPS.forEach((name) => {
+    if (existingNames.has(name)) {
+      return;
+    }
+    next.push({
       id: makeId('tag'),
       name,
-      sortOrder: currentTags.length,
+      kind: 'group',
+      parentId: null,
+      sortOrder: next.length,
       createdAt: timestamp,
       updatedAt: timestamp,
-    },
-  ]);
+    });
+  });
+  return next;
+};
+const ensureTagName = (value: string) => {
+  const names = splitPlayCategories(value);
+  if (names.length === 0) {
+    return;
+  }
+
+  let currentTags = ensureBuiltinTagGroups(getTags().map(normalizeStoredTag));
+  const timestamp = now();
+  let changed = currentTags.length !== getTags().length;
+
+  names.forEach((name) => {
+    const normalized = normalizeTagName(name);
+    if (!normalized || normalized === DEFAULT_CATEGORY) {
+      return;
+    }
+    if (currentTags.some((tag) => tag.name.toLowerCase() === normalized.toLowerCase())) {
+      return;
+    }
+    changed = true;
+    currentTags = [
+      ...currentTags,
+      {
+        id: makeId('tag'),
+        name: normalized,
+        kind: 'tag',
+        parentId: null,
+        sortOrder: currentTags.length,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    ];
+  });
+
+  if (changed) {
+    setTags(currentTags);
+  }
 };
 const normalizeImportedSummary = (value: string) => {
   const normalized = value.trim();
@@ -487,9 +566,12 @@ const normalizeBackupContinuation = (item: Continuation): Continuation => {
 
 const normalizeBackupTag = (tag: Tag): Tag => {
   const timestampFallback = now();
+  const kind = tag.kind === 'group' ? 'group' : 'tag';
   return {
     id: tag.id.trim() || makeId('tag'),
     name: tag.name.trim(),
+    kind,
+    parentId: kind === 'group' ? null : (tag.parentId ?? null),
     sortOrder: Number.isFinite(tag.sortOrder) ? tag.sortOrder : 0,
     createdAt: normalizeBackupTimestamp(tag.createdAt, timestampFallback),
     updatedAt: normalizeBackupTimestamp(tag.updatedAt, tag.createdAt || timestampFallback),
@@ -519,9 +601,11 @@ export const mockDb = {
   },
 
   getTags() {
-    return getTags().sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'),
-    );
+    const tags = ensureBuiltinTagGroups(getTags().map(normalizeStoredTag));
+    if (tags.length !== getTags().length) {
+      setTags(tags);
+    }
+    return tags.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'zh-CN'));
   },
 
   getSiteSettings() {
@@ -856,21 +940,34 @@ export const mockDb = {
       throw new Error('标签名不能为空');
     }
 
-    const existing = getTags().find((tag) => tag.name === name);
+    const currentTags = this.getTags();
+    const existing = currentTags.find((tag) => tag.name === name);
     if (existing) {
       throw new Error('标签已存在');
+    }
+
+    const kind = draft.kind === 'group' ? 'group' : 'tag';
+    let parentId: string | null = null;
+    if (kind === 'tag' && draft.parentId) {
+      const parent = currentTags.find((tag) => tag.id === draft.parentId);
+      if (!parent || parent.kind !== 'group') {
+        throw new Error('目标大类不存在');
+      }
+      parentId = parent.id;
     }
 
     const timestamp = now();
     const nextTag: Tag = {
       id: makeId('tag'),
       name,
-      sortOrder: getTags().length,
+      kind,
+      parentId,
+      sortOrder: currentTags.length,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
 
-    setTags([...getTags(), nextTag]);
+    setTags([...currentTags, nextTag]);
     return nextTag;
   },
 
@@ -880,54 +977,94 @@ export const mockDb = {
       throw new Error('标签名不能为空');
     }
 
-    const currentTags = getTags();
+    const currentTags = this.getTags();
     const existing = currentTags.find((tag) => tag.id !== tagId && tag.name === name);
     if (existing) {
       throw new Error('标签已存在');
     }
 
-    const timestamp = now();
-    let target: Tag | null = null;
-    const nextTags = currentTags.map((tag) => {
-      if (tag.id !== tagId) {
-        return tag;
-      }
-
-      target = { ...tag, name, updatedAt: timestamp };
-      return target;
-    });
-
-    if (!target) {
+    const current = currentTags.find((tag) => tag.id === tagId);
+    if (!current) {
       throw new Error('标签不存在');
     }
+    if (draft.kind && draft.kind !== current.kind) {
+      throw new Error('不能更改标签类型');
+    }
 
-    const nextPlays = getPlays().map((play) =>
-      play.category === currentTags.find((tag) => tag.id === tagId)?.name
-        ? { ...play, category: name, updatedAt: timestamp }
-        : play,
+    let nextParentId = current.parentId;
+    if (current.kind === 'group') {
+      nextParentId = null;
+    } else if (draft.parentId !== undefined) {
+      if (!draft.parentId) {
+        nextParentId = null;
+      } else {
+        const parent = currentTags.find((tag) => tag.id === draft.parentId);
+        if (!parent || parent.kind !== 'group') {
+          throw new Error('目标大类不存在');
+        }
+        nextParentId = parent.id;
+      }
+    }
+
+    const timestamp = now();
+    const nextTags = currentTags.map((tag) =>
+      tag.id === tagId ? { ...tag, name, parentId: nextParentId, updatedAt: timestamp } : tag,
     );
+    const nextPlays = getPlays().map((play) => ({
+      ...play,
+      category: renameCategoryInValue(play.category, current.name, name),
+      updatedAt: play.category === current.name ? timestamp : play.updatedAt,
+    }));
 
     setTags(nextTags);
     setPlays(nextPlays);
-    return target;
+    return nextTags.find((tag) => tag.id === tagId)!;
+  },
+
+  moveTagToGroup(tagId: string, parentId: string) {
+    const currentTags = this.getTags();
+    const current = currentTags.find((tag) => tag.id === tagId);
+    if (!current) {
+      throw new Error('小类不存在');
+    }
+    if (current.kind === 'group') {
+      throw new Error('大类不能再进入另一个大类');
+    }
+    const parent = currentTags.find((tag) => tag.id === parentId);
+    if (!parent || parent.kind !== 'group') {
+      throw new Error('目标大类不存在');
+    }
+
+    const timestamp = now();
+    const nextTags = currentTags.map((tag) =>
+      tag.id === tagId ? { ...tag, parentId: parent.id, updatedAt: timestamp } : tag,
+    );
+    setTags(nextTags);
+    return nextTags.find((tag) => tag.id === tagId)!;
   },
 
   deleteTag(tagId: string) {
-    const currentTags = getTags();
+    const currentTags = this.getTags();
     const target = currentTags.find((tag) => tag.id === tagId);
     if (!target) {
       throw new Error('标签不存在');
     }
 
+    const timestamp = now();
     const nextTags = currentTags
       .filter((tag) => tag.id !== tagId)
+      .map((tag) =>
+        tag.parentId === tagId ? { ...tag, parentId: null, updatedAt: timestamp } : tag,
+      )
       .map((tag, index) => ({ ...tag, sortOrder: index }));
-    const timestamp = now();
-    const nextPlays = getPlays().map((play) =>
-      play.category === target.name
-        ? { ...play, category: DEFAULT_CATEGORY, updatedAt: timestamp }
-        : play,
-    );
+    const nextPlays =
+      target.kind === 'group'
+        ? getPlays()
+        : getPlays().map((play) => ({
+            ...play,
+            category: removeCategoryFromValue(play.category, target.name),
+            updatedAt: timestamp,
+          }));
 
     setTags(nextTags);
     setPlays(nextPlays);

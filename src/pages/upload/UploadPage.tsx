@@ -32,6 +32,8 @@ import {
   type UploadMode,
 } from '../../types/play';
 import { showFloatingToast } from '../../components/floating-toast-store';
+import { CategoryHierarchyPicker } from '../../components/CategoryHierarchyPicker';
+import { getLeafTags, joinPlayCategories, splitPlayCategories } from '../../utils/categories';
 
 const initialForm = {
   authorName: '',
@@ -100,6 +102,8 @@ const compareCategoryNames = (left: string, right: string) =>
 
 const sortTagsByName = (items: Tag[]) =>
   [...items].sort((left, right) => compareCategoryNames(left.name, right.name));
+const addCategoryName = (current: string, name: string) =>
+  joinPlayCategories([...splitPlayCategories(current), name]);
 
 const ClearableField = ({
   children,
@@ -289,21 +293,23 @@ export function UploadPage() {
     [batchItemCount, submitting],
   );
 
-  const sortedTags = useMemo(() => sortTagsByName(tags), [tags]);
+  const sortedTags = useMemo(() => sortTagsByName(getLeafTags(tags)), [tags]);
+  const selectedCategoryNames = useMemo(() => splitPlayCategories(form.category), [form.category]);
   const categoryKeyword = form.category.trim();
   const categorySuggestions = useMemo(() => {
-    if (!categoryKeyword) {
+    const query = selectedCategoryNames.at(-1) || categoryKeyword;
+    if (!query) {
       return [];
     }
-    const keyword = categoryKeyword.toLowerCase();
+    const keyword = query.toLowerCase();
     return sortedTags.filter((tag) => tag.name.toLowerCase().includes(keyword));
-  }, [categoryKeyword, sortedTags]);
+  }, [categoryKeyword, selectedCategoryNames, sortedTags]);
   const visibleCategorySuggestions = categorySuggestOpen ? categorySuggestions : [];
   const highlightedCategorySuggestion =
     categoryHighlightIndex >= 0 ? visibleCategorySuggestions[categoryHighlightIndex] : undefined;
 
   const pickCategory = (name: string) => {
-    setForm((current) => ({ ...current, category: name }));
+    setForm((current) => ({ ...current, category: addCategoryName(current.category, name) }));
     setCategorySuggestOpen(false);
     setCategoryHighlightIndex(-1);
   };
@@ -773,7 +779,7 @@ export function UploadPage() {
                           setCategoryHighlightIndex(-1);
                         }
                       }}
-                      placeholder={`可自定义分类，不填会自动记为 ${DEFAULT_CATEGORY}`}
+                      placeholder={`可多选不同大类下的小类，不填记为 ${DEFAULT_CATEGORY}`}
                     />
                   </ClearableField>
                   {visibleCategorySuggestions.length > 0 ? (
@@ -805,28 +811,12 @@ export function UploadPage() {
                   ) : null}
                 </div>
               </label>
-              {sortedTags.length > 0 && !lockTitleAndCategory && categoryTagsOpen ? (
-                <div className="tag-cloud compact-tag-cloud">
-                  {sortedTags.map((tag) => {
-                    const active = form.category === tag.name;
-
-                    return (
-                      <button
-                        key={tag.id}
-                        className={active ? 'tag-chip active' : 'tag-chip'}
-                        onClick={() =>
-                          setForm((current) => ({
-                            ...current,
-                            category: current.category === tag.name ? '' : tag.name,
-                          }))
-                        }
-                        type="button"
-                      >
-                        {tag.name}
-                      </button>
-                    );
-                  })}
-                </div>
+              {tags.length > 0 && !lockTitleAndCategory && categoryTagsOpen ? (
+                <CategoryHierarchyPicker
+                  tags={tags}
+                  value={form.category}
+                  onChange={(next) => setForm((current) => ({ ...current, category: next }))}
+                />
               ) : null}
               <label>
                 <div className="field-label-row">

@@ -58,6 +58,8 @@ const REPLY_TO_NICKNAME_PREFIX = 'ReplyToNickname:';
 
 /* tag 字段 */
 const TAG_NAME_PREFIX = 'Name:';
+const TAG_KIND_PREFIX = 'Kind:';
+const TAG_PARENT_ID_PREFIX = 'ParentId:';
 const TAG_SORT_ORDER_PREFIX = 'SortOrder:';
 
 /* 文件名(全中文) */
@@ -516,6 +518,8 @@ const makeTagRecordText = (tag: Tag) =>
     `${TYPE_PREFIX} ${TAG_TYPE}`,
     `${ID_PREFIX} ${escapeInlineValue(tag.id)}`,
     `${TAG_NAME_PREFIX} ${escapeInlineValue(tag.name)}`,
+    `${TAG_KIND_PREFIX} ${escapeInlineValue(tag.kind === 'group' ? 'group' : 'tag')}`,
+    `${TAG_PARENT_ID_PREFIX} ${escapeInlineValue(tag.parentId ?? '')}`,
     `${TAG_SORT_ORDER_PREFIX} ${tag.sortOrder}`,
     `${CREATED_AT_PREFIX} ${escapeInlineValue(tag.createdAt)}`,
     `${UPDATED_AT_PREFIX} ${escapeInlineValue(tag.updatedAt)}`,
@@ -528,6 +532,8 @@ const parseTagRecord = (block: string): Tag => {
 
   const id = reader.readByPrefix(ID_PREFIX);
   const name = reader.readByPrefix(TAG_NAME_PREFIX);
+  const kindRaw = reader.readByPrefix(TAG_KIND_PREFIX);
+  const parentIdRaw = reader.readByPrefix(TAG_PARENT_ID_PREFIX);
   const sortOrderRaw = reader.readByPrefix(TAG_SORT_ORDER_PREFIX);
   const createdAt = reader.readByPrefix(CREATED_AT_PREFIX) ?? '';
   const updatedAt = reader.readByPrefix(UPDATED_AT_PREFIX) ?? '';
@@ -540,9 +546,12 @@ const parseTagRecord = (block: string): Tag => {
   const sortOrder = Number.parseInt(sortOrderRaw ?? '', 10);
   const finalSortOrder = Number.isFinite(sortOrder) ? sortOrder : 0;
 
+  const kind = kindRaw?.trim() === 'group' ? 'group' : 'tag';
   return {
     id: id?.trim() || makeFallbackId('tag'),
     name: name.trim(),
+    kind,
+    parentId: kind === 'group' ? null : parentIdRaw?.trim() || null,
     sortOrder: finalSortOrder,
     createdAt: normalizeTimestamp(createdAt, timestampFallback),
     updatedAt: normalizeTimestamp(updatedAt, timestampFallback),

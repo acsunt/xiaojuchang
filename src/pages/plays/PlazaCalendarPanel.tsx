@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_CATEGORY, type Play } from '../../types/play';
+import { type Play, type Tag } from '../../types/play';
+import { playApi } from '../../services/play-api';
+import { formatPlayLeafCategoryLabels } from '../../utils/categories';
 import {
   buildCalendarCells,
   buildPlayDayBuckets,
@@ -33,6 +35,13 @@ const formatMonthNumberLabel = (monthKey: string) => {
 
 export function PlazaCalendarPanel({ plays, onOpenPlay }: PlazaCalendarPanelProps) {
   const pickerAreaRef = useRef<HTMLDivElement | null>(null);
+  const [tags, setTags] = useState<Tag[]>([]);
+  useEffect(() => {
+    playApi
+      .getTags()
+      .then(setTags)
+      .catch(() => setTags([]));
+  }, []);
   const dayBuckets = useMemo(() => buildPlayDayBuckets(plays), [plays]);
   const dayBucketMap = useMemo(
     () => new Map(dayBuckets.map((item) => [item.dayKey, item])),
@@ -284,7 +293,7 @@ export function PlazaCalendarPanel({ plays, onOpenPlay }: PlazaCalendarPanelProp
                 <strong>{play.title}</strong>
                 <div className="compact-meta-row compact-meta-row-small">
                   <span>{play.authorName || '匿名'}</span>
-                  <span>{play.category?.trim() || DEFAULT_CATEGORY}</span>
+                  <span>{formatPlayLeafCategoryLabels(play.category, tags)}</span>
                   <span>{formatTime(play.createdAt)}</span>
                 </div>
                 {play.summary ? (

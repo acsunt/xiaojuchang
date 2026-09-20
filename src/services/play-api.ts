@@ -942,6 +942,17 @@ export const playApi = {
     return Promise.resolve(mockDb.reorderTags(orderedIds));
   },
 
+  async moveAdminTagToGroup(tagId: string, parentId: string): Promise<Tag> {
+    if (apiMode === 'remote') {
+      return jsonRequest<Tag>('/api/admin/tags/move', {
+        method: 'POST',
+        body: JSON.stringify({ tagId, parentId }),
+      });
+    }
+
+    return Promise.resolve(mockDb.moveTagToGroup(tagId, parentId));
+  },
+
   async deleteAdminTag(tagId: string): Promise<void> {
     if (apiMode === 'remote') {
       await jsonRequest<{ ok: boolean }>(`/api/admin/tags/${tagId}`, {

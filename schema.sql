@@ -20,12 +20,16 @@ CREATE INDEX IF NOT EXISTS idx_plays_parent_play_id ON plays(parent_play_id);
 CREATE TABLE IF NOT EXISTS tags (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL DEFAULT 'tag' CHECK (kind IN ('group', 'tag')),
+  parent_id TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (parent_id) REFERENCES tags(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_tags_parent_id ON tags(parent_id);
 
 CREATE TABLE IF NOT EXISTS site_settings (
   id TEXT PRIMARY KEY,
@@ -147,7 +151,10 @@ CREATE INDEX IF NOT EXISTS idx_continuations_play_status_created_at
 CREATE INDEX IF NOT EXISTS idx_continuations_visitor_created_at
   ON continuations(visitor_id, created_at DESC);
 
-INSERT OR IGNORE INTO tags (id, name, sort_order, created_at, updated_at) VALUES
-  ('tag_modern', '现代/日常', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('tag_emotion', '情感/恋爱', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('tag_campus', '校园/成长', 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT OR IGNORE INTO tags (id, name, kind, parent_id, sort_order, created_at, updated_at) VALUES
+  ('tag_group_world', '世界观', 'group', NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tag_group_emotion', '感情向', 'group', NULL, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tag_group_ending', '结局', 'group', NULL, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tag_group_scale', '尺度', 'group', NULL, 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tag_group_mood', '氛围', 'group', NULL, 4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('tag_group_special', '特殊', 'group', NULL, 5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);

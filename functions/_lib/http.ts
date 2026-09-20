@@ -32,9 +32,13 @@ export type PlayRecord = {
   parentPlayId: string | null;
 };
 
+export type TagKind = 'group' | 'tag';
+
 export type TagRecord = {
   id: string;
   name: string;
+  kind: TagKind;
+  parentId: string | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -214,9 +218,14 @@ export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
   };
 };
 
+export const parseTagKind = (value: unknown): TagKind =>
+  String(value ?? '').trim() === 'group' ? 'group' : 'tag';
+
 export const normalizeTag = (row: Record<string, unknown>): TagRecord => ({
   id: String(row.id),
   name: String(row.name),
+  kind: parseTagKind(row.kind),
+  parentId: row.parent_id ? String(row.parent_id) : null,
   sortOrder: Number(row.sort_order ?? 0),
   createdAt: String(row.created_at),
   updatedAt: String(row.updated_at),

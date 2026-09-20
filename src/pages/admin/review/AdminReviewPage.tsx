@@ -70,6 +70,19 @@ import {
   continuationStatusLabelMap,
 } from '../../../types/play';
 import { showFloatingToast } from '../../../components/floating-toast-store';
+import { CategoryHierarchyPicker } from '../../../components/CategoryHierarchyPicker';
+import {
+  buildTagGroupNodes,
+  collectPlayCategorySearchText,
+  getChildTagNames,
+  getGroupTags,
+  getLeafTags,
+  isGroupTag,
+  isLeafTag,
+  joinPlayCategories,
+  playHasCategoryName,
+  splitPlayCategories,
+} from '../../../utils/categories';
 
 const statusTabs: Array<{ label: string; value?: PlayStatus }> = [
   { label: '全部', value: undefined },
@@ -320,6 +333,270 @@ function SearchableCategorySelect({
           )
         : null}
     </div>
+  );
+}
+
+const addCategoryName = (current: string, name: string) =>
+  joinPlayCategories([...splitPlayCategories(current), name]);
+
+function ReviewCategoryField({
+  tags,
+  value,
+  onChange,
+  disabled = false,
+  open,
+  onToggleOpen,
+}: {
+  tags: Tag[];
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
+}) {
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const leafTags = useMemo(() => getLeafTags(tags), [tags]);
+  const selectedNames = useMemo(() => splitPlayCategories(value), [value]);
+  const query = selectedNames.at(-1) || value.trim();
+  const suggestions = useMemo(() => {
+    if (!query) {
+      return [];
+    }
+    const keyword = query.toLowerCase();
+    return leafTags.filter((tag) => tag.name.toLowerCase().includes(keyword));
+  }, [leafTags, query]);
+  const visibleSuggestions = suggestOpen && !disabled ? suggestions : [];
+
+  return (
+    <label>
+      <div className="field-label-row">
+        <span>分类</span>
+        {tags.length > 0 && !disabled ? (
+          <button className="text-button field-inline-action" onClick={onToggleOpen} type="button">
+            {open ? '收起分类' : '展开分类'}
+          </button>
+        ) : null}
+      </div>
+      <div className="category-suggest-field">
+        <ClearableField
+          onClear={() => {
+            onChange('');
+            setSuggestOpen(false);
+          }}
+          visible={Boolean(value) && !disabled}
+        >
+          <input
+            autoComplete="off"
+            disabled={disabled}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              onChange(nextValue);
+              setSuggestOpen(nextValue.trim().length > 0);
+            }}
+            onFocus={() => {
+              if (!disabled && query) {
+                setSuggestOpen(true);
+              }
+            }}
+            placeholder={`可搜索并多选小类，不填记为 ${DEFAULT_CATEGORY}`}
+            value={value}
+          />
+        </ClearableField>
+        {visibleSuggestions.length > 0 ? (
+          <ul className="category-suggest-list" role="listbox">
+            {visibleSuggestions.map((tag) => (
+              <li key={tag.id}>
+                <button
+                  className="category-suggest-item"
+                  onClick={() => {
+                    onChange(addCategoryName(value, tag.name));
+                    setSuggestOpen(false);
+                  }}
+                  type="button"
+                >
+                  {tag.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      {open && tags.length > 0 && !disabled ? (
+        <CategoryHierarchyPicker tags={tags} value={value} onChange={onChange} />
+      ) : null}
+    </label>
+  );
+}
+
+type TagAdminCardProps = {
+  tag: Tag;
+  playCount: number;
+  editing: boolean;
+  editingTagName: string;
+  isTagSorting: boolean;
+  tagSaving: boolean;
+  draggingTagId: string;
+  onEditingTagNameChange: (value: string) => void;
+  onStartEdit: (tag: Tag) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onDelete: (tag: Tag) => void;
+  onDragStart: (tagId: string) => void;
+  onDragEnd: () => void;
+  onDrop: (tagId: string) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>, tagId: string) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+};
+
+function TagAdminCard({
+  tag,
+  playCount,
+  editing,
+  editingTagName,
+  isTagSorting,
+  tagSaving,
+  draggingTagId,
+  onEditingTagNameChange,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
+  onDelete,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: TagAdminCardProps) {
+  const kindLabel = isGroupTag(tag) ? '大类' : '小类';
+  return (
+    <article
+      className={
+        draggingTagId === tag.id
+          ? `tag-admin-card dragging is-sorting${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
+          : isTagSorting
+            ? `tag-admin-card is-sorting${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
+            : `tag-admin-card${isGroupTag(tag) ? ' tag-admin-group-card' : ''}`
+      }
+      data-tag-id={tag.id}
+      draggable={isTagSorting && !editing && !tagSaving}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => {
+        if (isTagSorting) {
+          event.preventDefault();
+        }
+      }}
+      onDragStart={() => onDragStart(tag.id)}
+      onDrop={() => onDrop(tag.id)}
+    >
+      {editing ? (
+        <div className="tag-chip-row tag-card-head">
+          <label className="tag-card-edit-field">
+            <span>编辑{kindLabel}</span>
+            <input
+              value={editingTagName}
+              onChange={(event) => onEditingTagNameChange(event.target.value)}
+              placeholder={`输入新的${kindLabel}名`}
+            />
+          </label>
+          <div className="inline-actions tag-card-inline-actions">
+            <button
+              className="button primary"
+              disabled={tagSaving}
+              onClick={onSaveEdit}
+              type="button"
+            >
+              保存
+            </button>
+            <button className="button ghost" onClick={onCancelEdit} type="button">
+              取消
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="tag-chip-row tag-card-head">
+          <div className="tag-chip-row tag-card-title-group">
+            {isTagSorting ? (
+              <button
+                className="tag-drag-handle"
+                onPointerCancel={onPointerUp}
+                onPointerDown={(event) => onPointerDown(event, tag.id)}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                type="button"
+              >
+                拖拽
+              </button>
+            ) : null}
+            <span className="content-meta tag-floor-order">#{tag.sortOrder + 1}</span>
+            <strong>
+              {kindLabel} · {tag.name}
+            </strong>
+            <span className="content-meta">{playCount} 篇</span>
+          </div>
+          {!isTagSorting ? (
+            <div className="inline-actions tag-card-inline-actions">
+              <button
+                className="button secondary"
+                disabled={tagSaving}
+                onClick={() => onStartEdit(tag)}
+                type="button"
+              >
+                改名
+              </button>
+              <button
+                className="button danger"
+                disabled={tagSaving}
+                onClick={() => onDelete(tag)}
+                type="button"
+              >
+                删除
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {!isTagSorting ? (
+        <div className="inline-actions wrap-mobile tag-card-actions">
+          {editing ? (
+            <>
+              <button
+                className="button primary"
+                disabled={tagSaving}
+                onClick={onSaveEdit}
+                type="button"
+              >
+                保存标签
+              </button>
+              <button className="button ghost" onClick={onCancelEdit} type="button">
+                取消
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="button secondary"
+                disabled={tagSaving}
+                onClick={() => onStartEdit(tag)}
+                type="button"
+              >
+                改名
+              </button>
+              <button
+                className="button danger"
+                disabled={tagSaving}
+                onClick={() => onDelete(tag)}
+                type="button"
+              >
+                删除
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -655,11 +932,13 @@ type DuplicateScanProgressState = DuplicateScanProgress & {
  *   不含「审核备注」输入(已经在外层 similarReviewNote 统一处理)。 */
 const SimilarInlineEditor = ({
   play,
+  tags,
   busy,
   disabled,
   onSave,
 }: {
   play: Play;
+  tags: Tag[];
   busy: boolean;
   disabled: boolean;
   onSave: (next: {
@@ -675,6 +954,7 @@ const SimilarInlineEditor = ({
   const [category, setCategory] = useState(play.category || DEFAULT_CATEGORY);
   const [summary, setSummary] = useState(play.summary);
   const [content, setContent] = useState(play.content);
+  const [categoryTagsOpen, setCategoryTagsOpen] = useState(true);
 
   useEffect(() => {
     setTitle(play.title);
@@ -701,14 +981,14 @@ const SimilarInlineEditor = ({
         <span>作者</span>
         <input value={authorName} onChange={(event) => setAuthorName(event.target.value)} />
       </label>
-      <label>
-        <span>分类</span>
-        <input
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          placeholder={DEFAULT_CATEGORY}
-        />
-      </label>
+      <ReviewCategoryField
+        disabled={disabled}
+        onChange={setCategory}
+        onToggleOpen={() => setCategoryTagsOpen((current) => !current)}
+        open={categoryTagsOpen}
+        tags={tags}
+        value={category}
+      />
       <label>
         <span>简介（可空）</span>
         <input value={summary} onChange={(event) => setSummary(event.target.value)} />
@@ -839,7 +1119,7 @@ const matchesPlayKeyword = (
     haystack.push(play.authorName);
   }
   if (activeFields.includes('category')) {
-    haystack.push(play.category);
+    haystack.push(collectPlayCategorySearchText(play));
   }
   if (activeFields.includes('content')) {
     haystack.push(play.summary, play.content);
@@ -1084,8 +1364,11 @@ export function AdminReviewPage() {
   const [repoKeyword, setRepoKeyword] = useState('');
   const [repoSearchFields, setRepoSearchFields] = useState<RepoSearchField[]>([]);
   const [tagDraft, setTagDraft] = useState('');
+  const [tagCreateKind, setTagCreateKind] = useState<'group' | 'tag'>('tag');
+  const [tagCreateParentId, setTagCreateParentId] = useState('');
   const [editingTagId, setEditingTagId] = useState('');
   const [editingTagName, setEditingTagName] = useState('');
+  const [reviewCategoryTagsOpen, setReviewCategoryTagsOpen] = useState(true);
   const [tagMessage, setTagMessage] = useState('');
   const [tagMessageTone, setTagMessageTone] = useState<'success' | 'error'>('success');
   const [tagSaving, setTagSaving] = useState(false);
@@ -1196,6 +1479,14 @@ export function AdminReviewPage() {
     }
   };
   const [moveTargetCategory, setMoveTargetCategory] = useState('');
+  const [mergeSourceTagIds, setMergeSourceTagIds] = useState<string[]>([]);
+  const [mergeSourceKeyword, setMergeSourceKeyword] = useState('');
+  const [mergeTargetGroupId, setMergeTargetGroupId] = useState('');
+  const [mergeTargetKeyword, setMergeTargetKeyword] = useState('');
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeProgress, setMergeProgress] = useState<BulkReviewProgress | null>(null);
+  const [mergeMessage, setMergeMessage] = useState('');
+  const [mergeError, setMergeError] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMessage, setBackupMessage] = useState('');
   const [backupMessageTone, setBackupMessageTone] = useState<'success' | 'error'>('success');
@@ -1803,8 +2094,14 @@ export function AdminReviewPage() {
   const moveCategoryStats = useMemo(() => {
     const counts = new Map<string, number>();
     allPlays.forEach((play) => {
-      const name = play.category?.trim() || DEFAULT_CATEGORY;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+      const names = splitPlayCategories(play.category);
+      if (names.length === 0) {
+        counts.set(DEFAULT_CATEGORY, (counts.get(DEFAULT_CATEGORY) ?? 0) + 1);
+        return;
+      }
+      names.forEach((name) => {
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      });
     });
     return [...counts.entries()].map(([name, count]) => ({ name, count }));
   }, [allPlays]);
@@ -1832,7 +2129,13 @@ export function AdminReviewPage() {
     }
 
     return allPlays
-      .filter((play) => moveSourceCategories.includes(play.category?.trim() || DEFAULT_CATEGORY))
+      .filter((play) =>
+        moveSourceCategories.some((name) =>
+          name === DEFAULT_CATEGORY
+            ? splitPlayCategories(play.category).length === 0
+            : playHasCategoryName(play, name),
+        ),
+      )
       .map((play) => play.id);
   }, [allPlays, moveSourceCategories]);
   const duplicateScanSourcePlays = useMemo(
@@ -2213,39 +2516,94 @@ export function AdminReviewPage() {
   const tagPlayCountMap = useMemo(() => {
     const counts = new Map<string, number>();
     allPlays.forEach((play) => {
-      const name = play.category?.trim();
-      if (!name) {
+      const names = splitPlayCategories(play.category);
+      if (names.length === 0) {
         return;
       }
-      const key = name.toLowerCase();
-      counts.set(key, (counts.get(key) ?? 0) + 1);
+      names.forEach((name) => {
+        const key = name.toLowerCase();
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      });
+    });
+    tags.filter(isGroupTag).forEach((group) => {
+      const childNames = new Set(getChildTagNames(tags, group).map((name) => name.toLowerCase()));
+      const count = allPlays.filter((play) =>
+        splitPlayCategories(play.category).some((name) => childNames.has(name.toLowerCase())),
+      ).length;
+      counts.set(group.name.toLowerCase(), count);
     });
     return counts;
-  }, [allPlays]);
-  const displayTags = useMemo(() => {
+  }, [allPlays, tags]);
+  const mergeLeafTags = useMemo(() => getLeafTags(tags), [tags]);
+  const mergeGroupTags = useMemo(() => getGroupTags(tags), [tags]);
+  const visibleMergeSourceTags = useMemo(() => {
+    const normalizedKeyword = mergeSourceKeyword.trim().toLowerCase();
+    const filtered = normalizedKeyword
+      ? mergeLeafTags.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword))
+      : mergeLeafTags;
+    return [...filtered].sort((left, right) => {
+      const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
+      const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
+      return rightCount - leftCount || left.name.localeCompare(right.name, 'zh-CN');
+    });
+  }, [mergeLeafTags, mergeSourceKeyword, tagPlayCountMap]);
+  const mergeTargetGroupOptions = useMemo(() => {
+    const normalizedKeyword = mergeTargetKeyword.trim().toLowerCase();
+    return mergeGroupTags.filter((group) =>
+      normalizedKeyword ? group.name.toLowerCase().includes(normalizedKeyword) : true,
+    );
+  }, [mergeGroupTags, mergeTargetKeyword]);
+  const displayTagGroups = useMemo(() => {
     const source = isTagSorting ? tagSortDraft : tags;
     if (isTagSorting) {
-      return source;
+      return buildTagGroupNodes(source);
     }
 
     const normalizedKeyword = tagKeyword.trim().toLowerCase();
     const filtered = normalizedKeyword
       ? source.filter((tag) => tag.name.toLowerCase().includes(normalizedKeyword))
       : source;
-
-    return [...filtered].sort((left, right) => {
+    const filteredIds = new Set(filtered.map((tag) => tag.id));
+    const withParents = source.filter(
+      (tag) =>
+        filteredIds.has(tag.id) ||
+        (isGroupTag(tag) &&
+          source.some((item) => item.parentId === tag.id && filteredIds.has(item.id))) ||
+        (isLeafTag(tag) && tag.parentId !== null && filteredIds.has(tag.parentId)),
+    );
+    const compareTags = (left: Tag, right: Tag) => {
       if (tagLibrarySortMode === 'count') {
         const rightCount = tagPlayCountMap.get(right.name.toLowerCase()) ?? 0;
         const leftCount = tagPlayCountMap.get(left.name.toLowerCase()) ?? 0;
         return rightCount - leftCount || left.name.localeCompare(right.name, 'zh-CN');
       }
       return left.name.localeCompare(right.name, 'zh-CN');
-    });
+    };
+
+    return buildTagGroupNodes(withParents)
+      .map((node) => ({
+        ...node,
+        children: [...node.children].sort(compareTags),
+      }))
+      .sort((left, right) => {
+        if (!left.group) {
+          return 1;
+        }
+        if (!right.group) {
+          return -1;
+        }
+        return compareTags(left.group, right.group);
+      });
   }, [isTagSorting, tagKeyword, tagLibrarySortMode, tagPlayCountMap, tagSortDraft, tags]);
+  const displayTags = useMemo(
+    () =>
+      displayTagGroups.flatMap((node) => [...(node.group ? [node.group] : []), ...node.children]),
+    [displayTagGroups],
+  );
   const emptyPlayTags = useMemo(
     () =>
       [...tags]
-        .filter((tag) => (tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0) === 0)
+        .filter((tag) => isLeafTag(tag) && (tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0) === 0)
         .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')),
     [tagPlayCountMap, tags],
   );
@@ -3695,17 +4053,26 @@ export function AdminReviewPage() {
   const handleCreateTag = async () => {
     if (!tagDraft.trim()) {
       setTagMessageTone('error');
-      setTagMessage('先输入标签名');
+      setTagMessage(tagCreateKind === 'group' ? '先输入大类名' : '先输入小类名');
+      return;
+    }
+    if (tagCreateKind === 'tag' && !tagCreateParentId) {
+      setTagMessageTone('error');
+      setTagMessage('新建小类时请选择所属大类');
       return;
     }
 
     setTagSaving(true);
     setTagMessage('');
     try {
-      await playApi.createAdminTag({ name: tagDraft.trim() });
+      await playApi.createAdminTag({
+        name: tagDraft.trim(),
+        kind: tagCreateKind,
+        parentId: tagCreateKind === 'tag' ? tagCreateParentId : null,
+      });
       setTagDraft('');
       setTagMessageTone('success');
-      setTagMessage('标签已加入字典');
+      setTagMessage(tagCreateKind === 'group' ? '大类已加入字典' : '小类已加入字典');
       await loadTags();
     } catch (reason) {
       setTagMessageTone('error');
@@ -3749,14 +4116,30 @@ export function AdminReviewPage() {
     }
   };
 
-  const handleDeleteTag = async (tagId: string) => {
+  const handleDeleteTag = async (tag: Tag) => {
+    const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
+    if (playCount > 0) {
+      const confirmed = window.confirm(
+        isGroupTag(tag)
+          ? `「${tag.name}」下还有 ${playCount} 篇小剧场。删除大类后，其小类会变成未归入大类，小剧场上的小类标签不会改。确认删除吗？`
+          : `「${tag.name}」下还有 ${playCount} 篇小剧场。删除后相关内容会回退到「${DEFAULT_CATEGORY}」，确认删除吗？`,
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
     setTagSaving(true);
     setTagMessage('');
     try {
-      await playApi.deleteAdminTag(tagId);
+      await playApi.deleteAdminTag(tag.id);
       setTagMessageTone('success');
-      setTagMessage(`标签已删除，相关内容已回退到 ${DEFAULT_CATEGORY}`);
-      if (editingTagId === tagId) {
+      setTagMessage(
+        !isGroupTag(tag) && playCount > 0
+          ? `标签已删除，相关内容已回退到 ${DEFAULT_CATEGORY}`
+          : '标签已删除',
+      );
+      if (editingTagId === tag.id) {
         cancelEditTag();
       }
       await loadTags();
@@ -4017,6 +4400,70 @@ export function AdminReviewPage() {
       );
     } finally {
       setMoveCategoryBusy(false);
+    }
+  };
+
+  const handleBulkMergeTags = async () => {
+    if (mergeSourceTagIds.length === 0) {
+      setMergeError('请先勾选至少一个小类');
+      return;
+    }
+    if (!mergeTargetGroupId) {
+      setMergeError('请选择目标大类');
+      return;
+    }
+
+    const targetGroup = mergeGroupTags.find((tag) => tag.id === mergeTargetGroupId);
+    if (!targetGroup) {
+      setMergeError('目标大类不存在');
+      return;
+    }
+
+    const sourceTags = mergeLeafTags.filter((tag) => mergeSourceTagIds.includes(tag.id));
+    if (sourceTags.length === 0) {
+      setMergeError('请先勾选至少一个小类');
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `确认将 ${sourceTags.length} 个小类汇入「${targetGroup.name}」吗？小剧场上的小类标签不会改名，只是改所属大类。`,
+      )
+    ) {
+      return;
+    }
+
+    const targetIds = sourceTags.map((tag) => tag.id);
+    const progressLabel = `正在汇入「${targetGroup.name}」`;
+    setMergeBusy(true);
+    setMergeError('');
+    setMergeMessage('');
+    setMergeProgress({ completed: 0, total: targetIds.length, label: progressLabel });
+
+    let completed = 0;
+    let failed = 0;
+    try {
+      for (const tagId of targetIds) {
+        try {
+          await playApi.moveAdminTagToGroup(tagId, mergeTargetGroupId);
+          completed += 1;
+        } catch {
+          failed += 1;
+        }
+        setMergeProgress({
+          completed: completed + failed,
+          total: targetIds.length,
+          label: progressLabel,
+        });
+      }
+
+      await loadTags();
+      setMergeMessage(
+        `已将 ${completed} 个小类汇入「${targetGroup.name}」${failed > 0 ? `，${failed} 个失败` : ''}`,
+      );
+      setMergeSourceTagIds([]);
+    } finally {
+      setMergeBusy(false);
     }
   };
 
@@ -6486,14 +6933,13 @@ export function AdminReviewPage() {
                           placeholder="作者不能为空"
                         />
                       </label>
-                      <label>
-                        <span>分类</span>
-                        <input
-                          value={reviewCategory}
-                          onChange={(event) => setReviewCategory(event.target.value)}
-                          placeholder={DEFAULT_CATEGORY}
-                        />
-                      </label>
+                      <ReviewCategoryField
+                        onChange={setReviewCategory}
+                        onToggleOpen={() => setReviewCategoryTagsOpen((current) => !current)}
+                        open={reviewCategoryTagsOpen}
+                        tags={tags}
+                        value={reviewCategory}
+                      />
                       <label>
                         <span>简介（可空）</span>
                         <input
@@ -7026,6 +7472,141 @@ export function AdminReviewPage() {
                     ) : null}
                   </>
                 )}
+              </div>
+
+              <div className="form-panel stack-gap-md">
+                <div className="content-head">
+                  <div>
+                    <p className="eyebrow">Merge Into Group</p>
+                    <h3>汇流入海</h3>
+                    <p className="sub-copy">
+                      勾选小类，把它们移动到目标大类。小剧场上的小类名称不变，只改所属大类。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="stack-gap-sm">
+                  <strong>源小类</strong>
+                  <span className="content-meta">
+                    共 {mergeLeafTags.length} 个小类
+                    {mergeSourceKeyword.trim() ? `，匹配 ${visibleMergeSourceTags.length} 个` : ''}
+                  </span>
+                </div>
+                <ClearableField
+                  onClear={() => setMergeSourceKeyword('')}
+                  visible={Boolean(mergeSourceKeyword)}
+                >
+                  <input
+                    onChange={(event) => setMergeSourceKeyword(event.target.value)}
+                    placeholder="搜索小类"
+                    value={mergeSourceKeyword}
+                  />
+                </ClearableField>
+                <div className="plaza-export-modal-list move-category-source-list">
+                  {visibleMergeSourceTags.length > 0 ? (
+                    visibleMergeSourceTags.map((tag) => {
+                      const checked = mergeSourceTagIds.includes(tag.id);
+                      const parentName =
+                        mergeGroupTags.find((group) => group.id === tag.parentId)?.name ??
+                        '未归入大类';
+                      const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
+                      return (
+                        <label
+                          className="checkbox-chip checkbox-chip-wide plaza-export-modal-option"
+                          key={tag.id}
+                        >
+                          <input
+                            checked={checked}
+                            onChange={() =>
+                              setMergeSourceTagIds((current) =>
+                                current.includes(tag.id)
+                                  ? current.filter((value) => value !== tag.id)
+                                  : [...current, tag.id],
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>
+                            {tag.name} · {parentName} · {playCount} 篇
+                          </span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="content-meta">没有匹配的小类</div>
+                  )}
+                </div>
+
+                <div className="stack-gap-sm">
+                  <strong>目标大类</strong>
+                  <span className="content-meta">搜索现有大类，把勾选的小类汇入其中</span>
+                </div>
+                <SearchableCategorySelect
+                  options={mergeTargetGroupOptions.map((group) => group.name)}
+                  placeholder="搜索目标大类"
+                  value={
+                    mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ??
+                    mergeTargetKeyword
+                  }
+                  onChange={(next) => {
+                    setMergeTargetKeyword(next);
+                    const matched = mergeGroupTags.find((group) => group.name === next);
+                    setMergeTargetGroupId(matched?.id ?? '');
+                  }}
+                />
+
+                <div className="stack-gap-sm admin-bulk-review-progress-block">
+                  {mergeProgress ? (
+                    <div className="admin-bulk-review-progress" role="status">
+                      <div className="inline-actions wrap-mobile admin-bulk-review-progress-head">
+                        <strong>{mergeProgress.label}</strong>
+                        <span className="content-meta">
+                          已完成 {mergeProgress.completed} / {mergeProgress.total}
+                        </span>
+                      </div>
+                      <div aria-hidden="true" className="admin-bulk-review-progress-track">
+                        <div
+                          className="admin-bulk-review-progress-fill"
+                          style={{
+                            width: `${mergeProgress.total === 0 ? 0 : (mergeProgress.completed / mergeProgress.total) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="inline-actions move-category-action-row">
+                  <button
+                    className="button ghost"
+                    disabled={mergeBusy}
+                    onClick={() => {
+                      setMergeSourceTagIds([]);
+                      setMergeSourceKeyword('');
+                      setMergeTargetGroupId('');
+                      setMergeTargetKeyword('');
+                      setMergeError('');
+                      setMergeMessage('');
+                      setMergeProgress(null);
+                    }}
+                    type="button"
+                  >
+                    重置
+                  </button>
+                  <button
+                    className="button primary"
+                    disabled={mergeBusy || mergeSourceTagIds.length === 0 || !mergeTargetGroupId}
+                    onClick={() => void handleBulkMergeTags()}
+                    type="button"
+                  >
+                    {mergeBusy
+                      ? `汇入中 ${mergeProgress?.completed ?? 0}/${mergeProgress?.total ?? mergeSourceTagIds.length}`
+                      : `汇入 ${mergeSourceTagIds.length} 个小类到「${mergeGroupTags.find((group) => group.id === mergeTargetGroupId)?.name ?? '目标大类'}」`}
+                  </button>
+                </div>
+
+                {mergeMessage ? <div className="feedback success">{mergeMessage}</div> : null}
+                {mergeError ? <div className="feedback error">{mergeError}</div> : null}
               </div>
             </section>
           ) : null}
@@ -7885,6 +8466,7 @@ export function AdminReviewPage() {
                                     <summary>展开修改面板</summary>
                                     <SimilarInlineEditor
                                       play={play}
+                                      tags={tags}
                                       busy={busy && similarBusyAction?.action === 'save'}
                                       disabled={similarBusyAction !== null}
                                       onSave={(next) => void handleSimilarSave(play, next)}
@@ -7910,18 +8492,53 @@ export function AdminReviewPage() {
                   <p className="eyebrow">Tag Dictionary</p>
                   <h3>标签</h3>
                   <p className="sub-copy">
-                    这里维护上传页可复用的标签词表。改名会同步历史内容，删除会回退到未分类。
+                    先展示大类，再展示对应小类。改名会同步历史内容，删除有小剧场的标签需要二次确认。
                   </p>
                 </div>
 
+                <div className="inline-actions wrap-mobile" role="group" aria-label="新建类型">
+                  <button
+                    className={tagCreateKind === 'group' ? 'tab-chip active' : 'tab-chip'}
+                    disabled={tagSaving || isTagSorting}
+                    onClick={() => setTagCreateKind('group')}
+                    type="button"
+                  >
+                    新建大类
+                  </button>
+                  <button
+                    className={tagCreateKind === 'tag' ? 'tab-chip active' : 'tab-chip'}
+                    disabled={tagSaving || isTagSorting}
+                    onClick={() => setTagCreateKind('tag')}
+                    type="button"
+                  >
+                    新建小类
+                  </button>
+                </div>
                 <label>
-                  <span>新增标签</span>
+                  <span>{tagCreateKind === 'group' ? '新增大类' : '新增小类'}</span>
                   <input
                     value={tagDraft}
                     onChange={(event) => setTagDraft(event.target.value)}
-                    placeholder="输入新标签名"
+                    placeholder={tagCreateKind === 'group' ? '输入新大类名' : '输入新小类名'}
                   />
                 </label>
+                {tagCreateKind === 'tag' ? (
+                  <label>
+                    <span>所属大类</span>
+                    <select
+                      disabled={tagSaving || isTagSorting}
+                      onChange={(event) => setTagCreateParentId(event.target.value)}
+                      value={tagCreateParentId}
+                    >
+                      <option value="">请选择大类</option>
+                      {getGroupTags(tags).map((group) => (
+                        <option key={group.id} value={group.id}>
+                          {group.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <div className="inline-actions wrap-mobile tag-library-create-row">
                   <button
                     className="button primary"
@@ -7929,7 +8546,7 @@ export function AdminReviewPage() {
                     onClick={() => void handleCreateTag()}
                     type="button"
                   >
-                    新增标签
+                    {tagCreateKind === 'group' ? '新增大类' : '新增小类'}
                   </button>
                   <button
                     className="button danger"
@@ -8008,117 +8625,47 @@ export function AdminReviewPage() {
                 </div>
 
                 <div className={isTagSorting ? 'tag-admin-list is-sorting' : 'tag-admin-list'}>
-                  {displayTags.map((tag) => {
-                    const editing = editingTagId === tag.id;
-                    const playCount = tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0;
-
-                    return (
-                      <article
+                  {displayTagGroups.map((node) => {
+                    const renderCard = (tag: Tag) => (
+                      <TagAdminCard
+                        draggingTagId={draggingTagId}
+                        editing={editingTagId === tag.id}
+                        editingTagName={editingTagName}
+                        isTagSorting={isTagSorting}
                         key={tag.id}
-                        className={
-                          draggingTagId === tag.id
-                            ? 'tag-admin-card dragging is-sorting'
-                            : isTagSorting
-                              ? 'tag-admin-card is-sorting'
-                              : 'tag-admin-card'
-                        }
-                        data-tag-id={tag.id}
-                        draggable={isTagSorting && !editing && !tagSaving}
+                        onCancelEdit={cancelEditTag}
+                        onDelete={(current) => void handleDeleteTag(current)}
                         onDragEnd={() => setDraggingTagId('')}
-                        onDragOver={(event) => {
-                          if (isTagSorting) {
-                            event.preventDefault();
-                          }
-                        }}
-                        onDragStart={() => setDraggingTagId(tag.id)}
-                        onDrop={() => {
+                        onDragStart={(tagId) => setDraggingTagId(tagId)}
+                        onDrop={(tagId) => {
                           if (draggingTagId) {
-                            moveDraftTag(draggingTagId, tag.id);
+                            moveDraftTag(draggingTagId, tagId);
                           }
                           setDraggingTagId('');
                         }}
-                      >
-                        {editing ? (
-                          <label>
-                            <span>编辑标签</span>
-                            <input
-                              value={editingTagName}
-                              onChange={(event) => setEditingTagName(event.target.value)}
-                              placeholder="输入新的标签名"
-                            />
-                          </label>
-                        ) : (
-                          <div className="tag-chip-row tag-card-head">
-                            <div className="tag-chip-row tag-card-title-group">
-                              {isTagSorting ? (
-                                <button
-                                  className="tag-drag-handle"
-                                  onPointerCancel={handleTagPointerUp}
-                                  onPointerDown={(event) => handleTagPointerDown(event, tag.id)}
-                                  onPointerMove={handleTagPointerMove}
-                                  onPointerUp={handleTagPointerUp}
-                                  type="button"
-                                >
-                                  拖拽
-                                </button>
-                              ) : null}
-                              <span className="content-meta tag-floor-order">
-                                #{tag.sortOrder + 1}
-                              </span>
-                              <strong>{tag.name}</strong>
-                              <span className="content-meta">{playCount} 篇</span>
-                            </div>
-                            {!isTagSorting ? (
-                              <span className="content-meta">
-                                更新于 {new Date(tag.updatedAt).toLocaleString('zh-CN')}
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
+                        onEditingTagNameChange={setEditingTagName}
+                        onPointerDown={handleTagPointerDown}
+                        onPointerMove={handleTagPointerMove}
+                        onPointerUp={handleTagPointerUp}
+                        onSaveEdit={() => void handleUpdateTag()}
+                        onStartEdit={startEditTag}
+                        playCount={tagPlayCountMap.get(tag.name.toLowerCase()) ?? 0}
+                        tag={tag}
+                        tagSaving={tagSaving}
+                      />
+                    );
 
-                        {!isTagSorting ? (
-                          <div className="inline-actions wrap-mobile tag-card-actions">
-                            {editing ? (
-                              <>
-                                <button
-                                  className="button primary"
-                                  disabled={tagSaving}
-                                  onClick={() => void handleUpdateTag()}
-                                  type="button"
-                                >
-                                  保存标签
-                                </button>
-                                <button
-                                  className="button ghost"
-                                  onClick={cancelEditTag}
-                                  type="button"
-                                >
-                                  取消
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  className="button secondary"
-                                  disabled={isTagSorting || tagSaving}
-                                  onClick={() => startEditTag(tag)}
-                                  type="button"
-                                >
-                                  改名
-                                </button>
-                                <button
-                                  className="button danger"
-                                  disabled={isTagSorting || tagSaving}
-                                  onClick={() => void handleDeleteTag(tag.id)}
-                                  type="button"
-                                >
-                                  删除
-                                </button>
-                              </>
-                            )}
+                    return (
+                      <div className="tag-admin-group-block" key={node.group?.id ?? 'ungrouped'}>
+                        {node.group ? renderCard(node.group) : null}
+                        {node.children.length > 0 ? (
+                          <div className="tag-admin-child-list">
+                            {node.children.map((tag) => renderCard(tag))}
                           </div>
+                        ) : node.group ? (
+                          <div className="content-meta">暂无小类</div>
                         ) : null}
-                      </article>
+                      </div>
                     );
                   })}
                   {displayTags.length === 0 ? (
