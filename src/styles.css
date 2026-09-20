@@ -2423,6 +2423,11 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
   gap: 14px;
 }
 
+.plaza-category-hierarchy > .category-hierarchy-group + .category-hierarchy-group {
+  border-top: 1px solid color-mix(in srgb, var(--border, #d8d8d8) 82%, var(--accent, #6c8cff) 18%);
+  padding-top: 12px;
+}
+
 .plaza-category-group-chip {
   font-weight: 700;
 }
@@ -7928,12 +7933,13 @@ body:not([data-style='default']) .plaza-tab-chip.active,
 body:not([data-style='default']) .plaza-status-tab.is-active {
   background-color: color-mix(
     in srgb,
-    var(--accent, #6c8cff) 22%,
-    var(--btn-bg-color, var(--card-bg, transparent))
+    var(--accent, var(--btn-bg-color, #6c8cff)) 22%,
+    var(--card-bg, var(--sp-panel-bg, #ffffff))
   );
   background-image: none;
-  color: var(--heading-color, var(--sp-text, #1a1a1a));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent, #6c8cff) 72%, transparent);
+  color: var(--text, var(--sp-text, #1a1a1a));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--accent, var(--btn-bg-color, #6c8cff)) 72%, transparent);
   opacity: 1;
 }
 

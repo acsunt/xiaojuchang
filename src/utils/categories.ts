@@ -61,6 +61,11 @@ export const removeCategoryFromValue = (category: string, name: string) => {
 export const isGroupTag = (tag: Tag) => tag.kind === 'group';
 export const isLeafTag = (tag: Tag) => tag.kind !== 'group';
 
+export const countTagsByKind = (tags: Tag[]) => ({
+  groupCount: tags.filter(isGroupTag).length,
+  leafCount: tags.filter(isLeafTag).length,
+});
+
 export const sortTagsByOrder = (items: Tag[]) =>
   [...items].sort(
     (left, right) =>

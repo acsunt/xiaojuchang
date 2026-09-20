@@ -74,6 +74,7 @@ import { CategoryHierarchyPicker } from '../../../components/CategoryHierarchyPi
 import {
   buildTagGroupNodes,
   collectPlayCategorySearchText,
+  countTagsByKind,
   getChildTagNames,
   getGroupTags,
   getLeafTags,
@@ -433,6 +434,7 @@ type TagSortScope = 'idle' | 'group' | 'leaf';
 
 type TagAdminCardProps = {
   tag: Tag;
+  displayOrder: number;
   playCount: number;
   editing: boolean;
   editingTagName: string;
@@ -455,6 +457,7 @@ type TagAdminCardProps = {
 
 function TagAdminCard({
   tag,
+  displayOrder,
   playCount,
   editing,
   editingTagName,
@@ -556,7 +559,7 @@ function TagAdminCard({
                 </svg>
               </span>
             ) : null}
-            <span className="content-meta tag-floor-order">#{tag.sortOrder + 1}</span>
+            <span className="content-meta tag-floor-order">#{displayOrder}</span>
             <span className="tag-kind-label">{kindLabel}</span>
             <strong className="tag-card-name">{tag.name}</strong>
             <span className="content-meta tag-card-count">{playCount} 篇</span>
@@ -2590,11 +2593,14 @@ export function AdminReviewPage() {
         ? plays.length
         : 0;
 
+    const { groupCount, leafCount } = countTagsByKind(tags);
+
     return [
       { label: '当前列表', value: `${currentPlayListCount} 篇` },
       { label: '待审核', value: `${pendingPlayCount} 篇` },
       { label: '已通过', value: `${approved} 篇` },
-      { label: '标签库', value: `${tags.length} 个` },
+      { label: '大类', value: `${groupCount} 个` },
+      { label: '小类', value: `${leafCount} 个` },
       { label: '总内容量', value: `${total} 篇` },
     ];
   }, [
@@ -2605,7 +2611,7 @@ export function AdminReviewPage() {
     playMetricsSource.length,
     plays.length,
     selectedStatus,
-    tags.length,
+    tags,
   ]);
 
   const repoMetrics = useMemo(() => {
@@ -2760,6 +2766,27 @@ export function AdminReviewPage() {
       displayTagGroups.flatMap((node) => [...(node.group ? [node.group] : []), ...node.children]),
     [displayTagGroups],
   );
+  const tagLibraryCounts = useMemo(() => countTagsByKind(tags), [tags]);
+  const displayTagLibraryCounts = useMemo(() => countTagsByKind(displayTags), [displayTags]);
+  const tagDisplayOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    let groupIndex = 0;
+    let leafIndex = 0;
+    displayTagGroups.forEach((node) => {
+      if (node.group) {
+        groupIndex += 1;
+        map.set(node.group.id, groupIndex);
+      }
+      if (tagSortScope === 'group') {
+        return;
+      }
+      node.children.forEach((tag) => {
+        leafIndex += 1;
+        map.set(tag.id, leafIndex);
+      });
+    });
+    return map;
+  }, [displayTagGroups, tagSortScope]);
   const emptyPlayTags = useMemo(
     () =>
       [...tags]
@@ -8873,7 +8900,10 @@ export function AdminReviewPage() {
                     ) : null}
                   </div>
                   <span className="content-meta">
-                    共 {tags.length} 个{tagKeyword.trim() ? `，匹配 ${displayTags.length} 个` : ''}
+                    共 大类 {tagLibraryCounts.groupCount} 个，小类 {tagLibraryCounts.leafCount} 个
+                    {tagKeyword.trim()
+                      ? `，匹配 大类 ${displayTagLibraryCounts.groupCount} 个，小类 ${displayTagLibraryCounts.leafCount} 个`
+                      : ''}
                     {hasLoadedAllPlays ? '' : ' · 正在统计小剧场数量'}
                     {tagSortScope === 'group'
                       ? ' · 拖动大类时所属小类会整体跟随，并自动折叠小类'
@@ -8915,6 +8945,7 @@ export function AdminReviewPage() {
                       return (
                         <TagAdminCard
                           canDrag={canDrag}
+                          displayOrder={tagDisplayOrderMap.get(tag.id) ?? tag.sortOrder + 1}
                           draggingTagId={draggingTagId}
                           editing={editingTagId === tag.id}
                           editingTagName={editingTagName}
