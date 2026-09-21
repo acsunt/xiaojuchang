@@ -8190,7 +8190,7 @@ body[data-style='gradient'][data-mode='day'] .nav-pill span {
 
 /* 渐变风格日间：广场工具栏 / 下方面板铺在半透明白卡上，
  * 但主题把 --text 设成了 #fff。未选中会白字叠白底。
- * 未选中改成深紫字 + 白底，选中改成主题紫渐变底 + 黑字。 */
+ * 未选中改成深紫字 + 白底，选中改成浅紫渐变底 + 黑字。 */
 body[data-style='gradient'][data-mode='day'] .plaza-pill-trigger,
 body[data-style='gradient'][data-mode='day'] .plaza-pill-subitem,
 body[data-style='gradient'][data-mode='day'] .plaza-status-tab,
@@ -8219,11 +8219,11 @@ body[data-style='gradient'][data-mode='day'] .tag-chip.active,
 body[data-style='gradient'][data-mode='day'] .plaza-tab-chip.active,
 body[data-style='gradient'][data-mode='day'] .button.active,
 body[data-style='gradient'][data-mode='day'] .switcher button.active {
-  background-color: #667eea;
-  background-image: linear-gradient(90deg, #667eea, #764ba2);
+  background-color: #d4dcff;
+  background-image: linear-gradient(90deg, #c7d2fe, #ead6ff);
   color: #000;
   border-color: transparent;
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.28);
+  box-shadow: inset 0 0 0 1px rgba(102, 126, 234, 0.28);
 }
 body[data-style='gradient'][data-mode='day'] .plaza-status-tab .plaza-status-tab-count {
   color: rgba(43, 31, 58, 0.62);
