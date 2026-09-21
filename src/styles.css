@@ -8154,6 +8154,40 @@ body[data-style='gradient'][data-mode='day'] .content-head h2 {
   color: #2b1f3a;
 }
 
+/* 渐变风格日间：顶部导航（续写 / 新增日历 / 广场 / 上传）压在粉橙渐变上。
+ * 通用非默认主题会给 .nav-pill 铺一层洗白的紫底，选中再用 --text(#fff)，
+ * 白字叠浅底又和背景抢对比。改成磨砂白底 + 深紫字，选中用主题紫字而不是高饱和填色。 */
+body[data-style='gradient'][data-mode='day'] .nav-pill {
+  background-color: rgba(255, 255, 255, 0.62);
+  background-image: none;
+  color: #3d2458;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 12px rgba(250, 112, 154, 0.14);
+  opacity: 1;
+}
+body[data-style='gradient'][data-mode='day'] .nav-pill:hover {
+  background-color: rgba(255, 255, 255, 0.86);
+  background-image: none;
+  color: #5340a0;
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 6px 14px rgba(118, 75, 162, 0.16);
+  opacity: 1;
+}
+body[data-style='gradient'][data-mode='day'] .nav-pill.active {
+  background-color: #fff;
+  background-image: none;
+  color: #5b4cdb;
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px rgba(102, 126, 234, 0.38),
+    0 6px 16px rgba(102, 126, 234, 0.18);
+  opacity: 1;
+}
+body[data-style='gradient'][data-mode='day'] .nav-pill svg,
+body[data-style='gradient'][data-mode='day'] .nav-pill span {
+  color: inherit;
+}
+
 /* 渐变风格日间：广场工具栏 / 下方面板铺在半透明白卡上，
  * 但主题把 --text 设成了 #fff。未选中会白字叠白底，选中又用浅紫底配白字。
  * 未选中改成深紫字 + 白底，选中改成主题紫渐变底 + 白字。 */
@@ -9459,6 +9493,49 @@ body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active * {
   background-image: none;
   color: #ffeb3b;
   text-shadow: none;
+}
+
+/* 粗野主义夜间：工具栏胶囊（折叠 / 随机 / 筛选 / 导出 / 更多 / 搜索）
+ * 写在黄底 hero-panel 里，但后面的 .plaza-pill-trigger { color: var(--text) }
+ * 会把图标和文字盖成白色。「筛选」因为有文字标签，更容易看出该是黑字；
+ * 纯图标入口就会和筛选不一致。这里跟黄底卡片统一成黑字。 */
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger {
+  color: #000;
+  background-color: transparent;
+  background-image: none;
+  border-color: #000;
+  box-shadow: none;
+  text-shadow: none;
+}
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger:hover {
+  color: #000;
+  background-color: #fff;
+  background-image: none;
+  border-color: #000;
+  box-shadow: 3px 3px 0 #000;
+}
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-open,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-active {
+  background-color: #000;
+  background-image: none;
+  color: #ffeb3b;
+  border-color: #000;
+  box-shadow: 3px 3px 0 #ffeb3b;
+}
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger svg,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger span,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger .plaza-pill-chevron {
+  color: inherit;
+  stroke: currentColor;
+}
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-open svg,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-open span,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-open .plaza-pill-chevron,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-active svg,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-active span,
+body[data-style='brutalism'][data-mode='night'] .plaza-pill-trigger.is-active .plaza-pill-chevron {
+  color: #ffeb3b;
+  stroke: currentColor;
 }
 
 /* 顶部导航行：把 ▼ 折叠按钮 + repo + 页面 Tab + 动作按钮排成一行 */
