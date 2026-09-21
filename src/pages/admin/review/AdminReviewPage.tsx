@@ -820,7 +820,7 @@ type AdminPanel =
 type AuditLogCategory = 'plays' | 'repos' | 'continuations';
 type MoveCategorySortMode = 'name' | 'count';
 type CategoryAdjustTab = 'move' | 'tag' | 'merge';
-type TagLibrarySortMode = 'name' | 'count';
+type TagLibrarySortMode = 'display' | 'name' | 'count';
 
 const MOVE_CATEGORY_SORT_STORAGE_KEY = 'mini-theater:admin-move-category-sort';
 const MERGE_SOURCE_SORT_STORAGE_KEY = 'mini-theater:admin-merge-source-sort';
@@ -839,8 +839,15 @@ const readStoredNameCountSortMode = (storageKey: string): MoveCategorySortMode =
 };
 const readMoveCategorySortMode = (): MoveCategorySortMode =>
   readStoredNameCountSortMode(MOVE_CATEGORY_SORT_STORAGE_KEY);
-const readTagLibrarySortMode = (): TagLibrarySortMode =>
-  readStoredNameCountSortMode(TAG_LIBRARY_SORT_STORAGE_KEY);
+const isTagLibrarySortMode = (value: string): value is TagLibrarySortMode =>
+  value === 'display' || value === 'name' || value === 'count';
+const readTagLibrarySortMode = (): TagLibrarySortMode => {
+  if (typeof window === 'undefined') {
+    return 'display';
+  }
+  const saved = window.localStorage.getItem(TAG_LIBRARY_SORT_STORAGE_KEY);
+  return saved && isTagLibrarySortMode(saved) ? saved : 'display';
+};
 const readMergeSourceSortMode = (): MoveCategorySortMode =>
   readStoredNameCountSortMode(MERGE_SOURCE_SORT_STORAGE_KEY);
 const readAdminPlayTimeSortMode = (): PlayTimeSortMode => {
@@ -2794,10 +2801,12 @@ export function AdminReviewPage() {
       }
       return left.name.localeCompare(right.name, 'zh-CN');
     };
+    const sortGroupChildren = (children: Tag[]) =>
+      tagLibrarySortMode === 'display' ? children : [...children].sort(compareTags);
 
     const nodes = buildTagGroupNodes(withParents).map((node) => ({
       ...node,
-      children: [...node.children].sort(compareTags),
+      children: sortGroupChildren(node.children),
     }));
 
     if (keywordMatchesUngrouped) {
@@ -2809,7 +2818,7 @@ export function AdminReviewPage() {
         ...grouped,
         {
           group: null,
-          children: [...(matchedUngrouped?.children ?? allUngrouped)].sort(compareTags),
+          children: sortGroupChildren(matchedUngrouped?.children ?? allUngrouped),
         },
       ];
     }
@@ -9221,6 +9230,14 @@ export function AdminReviewPage() {
                   </span>
                 </div>
                 <div className="inline-actions wrap-mobile" role="group" aria-label="标签排序">
+                  <button
+                    className={tagLibrarySortMode === 'display' ? 'tab-chip active' : 'tab-chip'}
+                    disabled={isTagSorting}
+                    onClick={() => setTagLibrarySortMode('display')}
+                    type="button"
+                  >
+                    按实际展示
+                  </button>
                   <button
                     className={tagLibrarySortMode === 'name' ? 'tab-chip active' : 'tab-chip'}
                     disabled={isTagSorting}
