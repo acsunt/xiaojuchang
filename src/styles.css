@@ -8154,6 +8154,94 @@ body[data-style='gradient'][data-mode='day'] .content-head h2 {
   color: #2b1f3a;
 }
 
+/* 渐变风格日间：广场工具栏 / 下方面板铺在半透明白卡上，
+ * 但主题把 --text 设成了 #fff。未选中会白字叠白底，选中又用浅紫底配白字。
+ * 未选中改成深紫字 + 白底，选中改成主题紫渐变底 + 白字。 */
+body[data-style='gradient'][data-mode='day'] .plaza-pill-trigger,
+body[data-style='gradient'][data-mode='day'] .plaza-pill-subitem,
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab,
+body[data-style='gradient'][data-mode='day'] .plaza-page-tab {
+  color: #2b1f3a;
+  background: rgba(255, 255, 255, 0.78);
+  background-image: none;
+  border-color: rgba(102, 126, 234, 0.28);
+  box-shadow: none;
+}
+body[data-style='gradient'][data-mode='day'] .plaza-pill-trigger:hover,
+body[data-style='gradient'][data-mode='day'] .plaza-pill-subitem:hover,
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab:hover,
+body[data-style='gradient'][data-mode='day'] .plaza-page-tab:hover {
+  color: #4c3a8a;
+  background: #ffffff;
+  background-image: none;
+}
+body[data-style='gradient'][data-mode='day'] .plaza-pill-trigger.is-open,
+body[data-style='gradient'][data-mode='day'] .plaza-pill-trigger.is-active,
+body[data-style='gradient'][data-mode='day'] .plaza-pill-subitem.is-active,
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab.is-active,
+body[data-style='gradient'][data-mode='day'] .plaza-page-tab.is-active {
+  background-color: #667eea;
+  background-image: linear-gradient(90deg, #667eea, #764ba2);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.28);
+}
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab .plaza-status-tab-count {
+  color: rgba(43, 31, 58, 0.62);
+}
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab.is-active,
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab.is-active * {
+  color: #fff;
+}
+body[data-style='gradient'][data-mode='day'] .plaza-status-tab.is-active .plaza-status-tab-count {
+  color: rgba(255, 255, 255, 0.86);
+}
+body[data-style='gradient'][data-mode='day'] .plaza-pill-grid .custom-select > span,
+body[data-style='gradient'][data-mode='day'] .plaza-search-body .plaza-search-field > span,
+body[data-style='gradient'][data-mode='day'] .toolbar-toggle-field > span {
+  color: #5a4a72;
+}
+
+/* 新拟态日间：广场「显示设置」里的 CustomSelect 不能走默认白底输入框，
+ * 否则会和灰底拟态卡片脱节。触发器 / 菜单 / 选项都改成同色拟态表面。 */
+body[data-style='neumorphism'][data-mode='day'] .custom-select-trigger,
+body[data-style='neumorphism'][data-mode='day'] .custom-select-menu {
+  background: var(--card-bg, #e0e5ec);
+  color: var(--text, #333);
+  border: none;
+  border-radius: var(--radius-btn, 12px);
+  box-shadow: var(--btn-shadow, 5px 5px 10px #b8bcc4, -5px -5px 10px #ffffff);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body[data-style='neumorphism'][data-mode='day'] .custom-select-trigger:hover,
+body[data-style='neumorphism'][data-mode='day'] .custom-select-trigger:focus-visible,
+body[data-style='neumorphism'][data-mode='day'] .custom-select.open .custom-select-trigger {
+  border: none;
+  box-shadow:
+    inset 4px 4px 8px #b8bcc4,
+    inset -4px -4px 8px #ffffff;
+  color: var(--btn-color, #4a90d9);
+}
+body[data-style='neumorphism'][data-mode='day'] .custom-select-option {
+  background: transparent;
+  color: var(--text, #333);
+  border-radius: 10px;
+}
+body[data-style='neumorphism'][data-mode='day'] .custom-select-option:hover,
+body[data-style='neumorphism'][data-mode='day'] .custom-select-option:focus-visible,
+body[data-style='neumorphism'][data-mode='day'] .custom-select-option.active {
+  background: var(--card-bg, #e0e5ec);
+  color: var(--btn-color, #4a90d9);
+  box-shadow:
+    inset 4px 4px 8px #b8bcc4,
+    inset -4px -4px 8px #ffffff;
+}
+body[data-style='neumorphism'][data-mode='day'] .plaza-pill-grid .custom-select > span,
+body[data-style='neumorphism'][data-mode='day'] .custom-select-chevron {
+  color: color-mix(in srgb, var(--text, #333) 72%, var(--btn-color, #4a90d9) 28%);
+}
+
 /* brutalism 主题夜间模式：黑底白字，但按钮颜色被设成 #000 黑字，
  * 一些未在卡片里的 nav-pill/icon-button 会出现黑字黑底。
  * 强制按钮文字颜色为高对比色（黄色背景就黑字，透明按钮就白字）。 */
@@ -8394,6 +8482,14 @@ body[data-style='brutalism'][data-mode='night'] .modal-panel *,
 body[data-style='brutalism'][data-mode='night'] .dialog-panel,
 body[data-style='brutalism'][data-mode='night'] .dialog-panel * {
   color: #000;
+  text-shadow: none;
+}
+
+/* 上面的 .form-panel * { color: #000 } 会把状态 Tab 里的 <span> 盖成黑字。
+ * 选中态本身是黑底黄字，子元素如果跟着变黑，字就看不见。 */
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active,
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active * {
+  color: #ffeb3b;
   text-shadow: none;
 }
 
@@ -9352,6 +9448,17 @@ body:not([data-style='default']) .admin-search-action-row > .button.danger:hover
 
 .plaza-status-tab.is-active .plaza-status-tab-count {
   color: color-mix(in srgb, var(--accent) 90%, var(--text) 10%);
+}
+
+/* 粗野主义夜间：状态 Tab 选中后必须保持黑底黄字。
+ * 后面的广场通用样式、以及 .form-panel * { color: #000 }
+ * 都会把里面的 <span> 盖成黑字，叠在黑底上看不见。 */
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active,
+body[data-style='brutalism'][data-mode='night'] .plaza-status-tab.is-active * {
+  background-color: #000;
+  background-image: none;
+  color: #ffeb3b;
+  text-shadow: none;
 }
 
 /* 顶部导航行：把 ▼ 折叠按钮 + repo + 页面 Tab + 动作按钮排成一行 */
