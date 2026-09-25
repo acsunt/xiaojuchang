@@ -4174,6 +4174,11 @@ body.tag-sort-dragging {
   min-height: 120px;
 }
 
+.batch-parse-content-textarea {
+  min-height: 0;
+  field-sizing: content;
+}
+
 .review-action-row {
   width: 100%;
   gap: 12px;

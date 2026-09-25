@@ -34,6 +34,7 @@ import {
 import { showFloatingToast } from '../../components/floating-toast-store';
 import { CategoryHierarchyPicker } from '../../components/CategoryHierarchyPicker';
 import {
+  getChildTagNames,
   getGroupTags,
   joinPlayCategoriesByTags,
   splitPlayCategories,
@@ -201,6 +202,7 @@ export function UploadPage() {
   const [mode, setMode] = useState<UploadMode>('single');
   const [submitting, setSubmitting] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
+  const sessionCreatedTagsRef = useRef<Tag[]>([]);
   const [categoryTagsOpen, setCategoryTagsOpen] = useState(() =>
     readUploadBool(UPLOAD_CATEGORY_TAGS_OPEN_KEY, true),
   );
@@ -228,7 +230,9 @@ export function UploadPage() {
   const [isMobileBatchViewport, setIsMobileBatchViewport] = useState(false);
   const [isMobileBatchListExpanded, setIsMobileBatchListExpanded] = useState(false);
   const [batchCategoryOpen, setBatchCategoryOpen] = useState(true);
+  const [batchCategoryQuery, setBatchCategoryQuery] = useState('');
   const batchFileInputRef = useRef<HTMLInputElement | null>(null);
+  const batchContentRef = useRef<HTMLTextAreaElement | null>(null);
   /* 续写版本填写块：主表单是「原文」，continuationVersions 是原文之下依次追加的续写。
    * 字段与详情页 continuation-panel 的 composer 完全一致：
    *   - nickname（作者，可空，与原文作者为同一人时可留空）
@@ -391,6 +395,7 @@ export function UploadPage() {
 
     if (!filteredBatchItems.some((item) => item.id === selectedBatchId)) {
       setSelectedBatchId(filteredBatchItems[0]?.id ?? '');
+      setBatchCategoryQuery('');
     }
   }, [filteredBatchItems, selectedBatchId]);
 
@@ -399,6 +404,22 @@ export function UploadPage() {
       setIsMobileBatchListExpanded(false);
     }
   }, [batchFilter, batchCurrentPage, isMobileBatchViewport, pagedBatchItems.length]);
+
+  /* 编辑态正文框按内容撑开高度，避免固定行数把短文撑出大片空白。 */
+  useEffect(() => {
+    const element = batchContentRef.current;
+    if (!element || batchViewMode === 'preview') {
+      return;
+    }
+
+    const resize = () => {
+      element.style.height = 'auto';
+      element.style.height = `${element.scrollHeight}px`;
+    };
+    resize();
+    const raf = requestAnimationFrame(resize);
+    return () => cancelAnimationFrame(raf);
+  }, [batchViewMode, selectedBatchItem?.content, selectedBatchItem?.id]);
 
   /* 「修改」模式下,与快照对比,用于启用提交按钮与文案。
    * 任意字段(title / category / summary / content)改动都算修改。 */
@@ -501,15 +522,31 @@ export function UploadPage() {
         name,
         parentId: createCategoryGroupId,
       });
-      setTags((current) =>
-        current.some((tag) => tag.id === created.id) ? current : [...current, created],
-      );
-      setForm((current) => ({
-        ...current,
-        category: addCategoryName(current.category, created.name, [...tags, created]),
-      }));
-      setCategoryQuery('');
-      setCategoryTagsOpen(true);
+      const nextTags = tags.some((tag) => tag.id === created.id) ? tags : [...tags, created];
+      sessionCreatedTagsRef.current = sessionCreatedTagsRef.current.some(
+        (tag) => tag.id === created.id,
+      )
+        ? sessionCreatedTagsRef.current
+        : [...sessionCreatedTagsRef.current, created];
+      setTags(nextTags);
+      if (mode === 'batch' && selectedBatchId) {
+        setBatchItems((current) =>
+          current.map((item) =>
+            item.id === selectedBatchId
+              ? { ...item, category: addCategoryName(item.category, created.name, nextTags) }
+              : item,
+          ),
+        );
+        setBatchCategoryQuery('');
+        setBatchCategoryOpen(true);
+      } else {
+        setForm((current) => ({
+          ...current,
+          category: addCategoryName(current.category, created.name, nextTags),
+        }));
+        setCategoryQuery('');
+        setCategoryTagsOpen(true);
+      }
       closeCreateCategoryModal();
       showFloatingToast(`已新增分类「${created.name}」`);
     } catch (reason) {
@@ -523,9 +560,12 @@ export function UploadPage() {
     const loadTags = async () => {
       try {
         const items = await playApi.getTags();
-        setTags(items);
+        const extras = sessionCreatedTagsRef.current.filter(
+          (created) => !items.some((item) => item.id === created.id),
+        );
+        setTags(extras.length > 0 ? [...items, ...extras] : items);
       } catch {
-        setTags([]);
+        setTags(sessionCreatedTagsRef.current);
       }
     };
 
@@ -680,20 +720,42 @@ export function UploadPage() {
   };
 
   const handleBatchSubmit = async () => {
-    if (!form.authorName.trim()) {
-      throw new Error('批量上传前先填写署名');
+    if (submitting) {
+      return;
     }
 
+    if (!form.authorName.trim()) {
+      showFloatingToast('请写上署名', 'error');
+      return;
+    }
+
+    const missingTitleCount = batchItems.filter((item) => !item.title.trim()).length;
+    const missingContentCount = batchItems.filter((item) => !item.content.trim()).length;
     const items = batchItems.filter((item) => item.title.trim() && item.content.trim());
     if (items.length === 0) {
-      throw new Error('批量内容为空');
+      if (missingTitleCount > 0 && missingContentCount > 0) {
+        showFloatingToast('没有可上传的内容，请补全标题和正文', 'error');
+      } else if (missingTitleCount > 0) {
+        showFloatingToast('没有可上传的内容，请补全标题', 'error');
+      } else if (missingContentCount > 0) {
+        showFloatingToast('没有可上传的内容，请补全正文', 'error');
+      } else {
+        showFloatingToast('没有可上传的内容', 'error');
+      }
+      return;
     }
 
-    const confirmed = window.confirm(`确认上传这 ${items.length} 篇小剧场吗？`);
+    const skippedCount = batchItems.length - items.length;
+    const confirmed = window.confirm(
+      skippedCount > 0
+        ? `有 ${skippedCount} 篇缺少标题或正文，将不会上传。确认上传其余 ${items.length} 篇吗？`
+        : `确认上传这 ${items.length} 篇小剧场吗？`,
+    );
     if (!confirmed) {
       return;
     }
 
+    setSubmitting(true);
     setBatchProgress({ completed: 0, total: items.length });
 
     const createdPlays = [] as Awaited<ReturnType<typeof playApi.uploadPlay>>[];
@@ -727,13 +789,15 @@ export function UploadPage() {
       }
 
       const baseMessage = reason instanceof Error ? reason.message : '提交失败';
-      throw new Error(
+      showFloatingToast(
         createdPlays.length > 0
           ? `已成功提交 ${createdPlays.length}/${items.length} 篇，剩余内容上传中断：${baseMessage}`
           : baseMessage,
-        { cause: reason },
+        'error',
       );
+      return;
     } finally {
+      setSubmitting(false);
       setBatchProgress(null);
     }
 
@@ -780,6 +844,7 @@ export function UploadPage() {
 
   const selectBatchItem = (id: string) => {
     setSelectedBatchId(id);
+    setBatchCategoryQuery('');
     const index = filteredBatchItems.findIndex((item) => item.id === id);
     if (index < 0) {
       return;
@@ -1742,10 +1807,20 @@ export function UploadPage() {
                                       value={selectedBatchItem.title}
                                     />
                                   </label>
-                                  <div className="stack-gap-sm">
+                                  <label>
                                     <div className="field-label-row">
                                       <span>分类</span>
                                       <div className="inline-actions field-inline-actions">
+                                        <button
+                                          className="text-button field-inline-action"
+                                          onClick={() => {
+                                            setCreateCategoryOpen(true);
+                                            setBatchCategoryOpen(true);
+                                          }}
+                                          type="button"
+                                        >
+                                          新增分类
+                                        </button>
                                         {tags.length > 0 ? (
                                           <button
                                             className="text-button field-inline-action"
@@ -1759,20 +1834,55 @@ export function UploadPage() {
                                         ) : null}
                                       </div>
                                     </div>
-                                    {batchCategoryOpen && tags.length > 0 ? (
-                                      <CategoryHierarchyPicker
-                                        onChange={(next) =>
-                                          updateBatchItem(selectedBatchItem.id, { category: next })
+                                    <ClearableField
+                                      onClear={() => {
+                                        if (batchCategoryQuery) {
+                                          setBatchCategoryQuery('');
+                                          return;
                                         }
+                                        updateBatchItem(selectedBatchItem.id, { category: '' });
+                                      }}
+                                      visible={
+                                        Boolean(batchCategoryQuery) ||
+                                        Boolean(selectedBatchItem.category)
+                                      }
+                                    >
+                                      <input
+                                        autoComplete="off"
+                                        onChange={(event) => {
+                                          setBatchCategoryQuery(event.target.value);
+                                          setBatchCategoryOpen(true);
+                                        }}
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                          }
+                                        }}
+                                        placeholder={
+                                          splitPlayCategories(selectedBatchItem.category).length > 0
+                                            ? `已选 ${splitPlayCategories(selectedBatchItem.category).join(' · ')}，可搜索已有分类`
+                                            : `搜索已有分类，不填记为 ${DEFAULT_CATEGORY}`
+                                        }
+                                        value={batchCategoryQuery}
+                                      />
+                                    </ClearableField>
+                                  </label>
+                                  {batchCategoryOpen ? (
+                                    tags.length > 0 ? (
+                                      <CategoryHierarchyPicker
+                                        emptyText="没有匹配的分类"
+                                        keyword={batchCategoryQuery}
+                                        onChange={(next) => {
+                                          updateBatchItem(selectedBatchItem.id, { category: next });
+                                          setBatchCategoryQuery('');
+                                        }}
                                         tags={tags}
                                         value={selectedBatchItem.category}
                                       />
                                     ) : (
-                                      <p className="content-meta">
-                                        {selectedBatchItem.category || DEFAULT_CATEGORY}
-                                      </p>
-                                    )}
-                                  </div>
+                                      <div className="content-meta">还没有分类，可先新增分类</div>
+                                    )
+                                  ) : null}
                                   <label>
                                     <span>简介（可空）</span>
                                     <input
@@ -1788,13 +1898,15 @@ export function UploadPage() {
                                   <label>
                                     <span>正文</span>
                                     <textarea
-                                      className="admin-review-content-textarea"
+                                      className="admin-review-content-textarea batch-parse-content-textarea"
                                       onChange={(event) =>
                                         updateBatchItem(selectedBatchItem.id, {
                                           content: event.target.value,
                                         })
                                       }
                                       placeholder="解析后可直接修正正文"
+                                      ref={batchContentRef}
+                                      rows={1}
                                       value={selectedBatchItem.content}
                                     />
                                   </label>
@@ -1854,11 +1966,16 @@ export function UploadPage() {
                 value={createCategoryGroupId}
               >
                 <option value="">请选择大类</option>
-                {groupTags.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
+                {groupTags.map((group) => {
+                  const childNames = getChildTagNames(tags, group);
+                  return (
+                    <option key={group.id} value={group.id}>
+                      {childNames.length > 0
+                        ? `${group.name}（${childNames.join('、')}）`
+                        : `${group.name}（暂无小类）`}
+                    </option>
+                  );
+                })}
               </select>
             </label>
             <label>
