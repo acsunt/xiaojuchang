@@ -3,6 +3,7 @@ import { chunkItems, D1_TAG_REORDER_CHUNK_SIZE } from './db-utils';
 import {
   BUILTIN_TAG_GROUPS,
   DEFAULT_CATEGORY,
+  LEGACY_UNCATEGORIZED,
   removeCategoryFromValue,
   renameCategoryInValue,
   splitPlayCategories,
@@ -167,6 +168,9 @@ export const createTag = async (db: D1Database, draft: TagDraft) => {
   if (!name) {
     throw new Error('标签名不能为空');
   }
+  if (name === DEFAULT_CATEGORY || name === LEGACY_UNCATEGORIZED) {
+    throw new Error('「未分类」是固定标签，不能再加入标签库');
+  }
 
   const existing = await getTagByName(db, name);
   if (existing) {
@@ -192,7 +196,11 @@ export const createTag = async (db: D1Database, draft: TagDraft) => {
 
 export const ensureTagByName = async (db: D1Database, name: string) => {
   const normalizedName = name.trim();
-  if (!normalizedName || normalizedName === DEFAULT_CATEGORY) {
+  if (
+    !normalizedName ||
+    normalizedName === DEFAULT_CATEGORY ||
+    normalizedName === LEGACY_UNCATEGORIZED
+  ) {
     return null;
   }
 
@@ -221,6 +229,9 @@ export const updateTag = async (db: D1Database, tagId: string, draft: TagDraft) 
   const name = draft.name.trim();
   if (!name) {
     throw new Error('标签名不能为空');
+  }
+  if (name === DEFAULT_CATEGORY || name === LEGACY_UNCATEGORIZED) {
+    throw new Error('「未分类」是固定标签，不能用作标签名');
   }
 
   const existing = await getTagByName(db, name);

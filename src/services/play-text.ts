@@ -8,7 +8,6 @@ const TITLE_PREFIX = 'Title:';
 const CATEGORY_PREFIX = 'Category:';
 const SUMMARY_PREFIX = 'Desc:';
 const IMPORTED_SUMMARY_PLACEHOLDER = '导入数据';
-const BATCH_FALLBACK_CATEGORY = '无分类';
 const BATCH_FALLBACK_SUMMARY = '';
 
 export type ParsedPlayBatchItem = PlayDraft & {
@@ -108,7 +107,7 @@ export const parsePlayBatchText = (source: string, authorName: string) => {
     }
 
     let title = '';
-    let category = BATCH_FALLBACK_CATEGORY;
+    let category = DEFAULT_CATEGORY;
     let summary = BATCH_FALLBACK_SUMMARY;
     let contentStartIndex = 1;
 
@@ -122,7 +121,7 @@ export const parsePlayBatchText = (source: string, authorName: string) => {
       }
 
       if (line.startsWith(CATEGORY_PREFIX)) {
-        category = line.slice(CATEGORY_PREFIX.length).trim() || BATCH_FALLBACK_CATEGORY;
+        category = line.slice(CATEGORY_PREFIX.length).trim() || DEFAULT_CATEGORY;
         contentStartIndex = lineIndex + 1;
         continue;
       }

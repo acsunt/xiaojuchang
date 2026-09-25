@@ -1,19 +1,19 @@
 import type { Play, Tag } from '../types/play';
-import { DEFAULT_CATEGORY } from '../types/play';
+import { DEFAULT_CATEGORY, LEGACY_UNCATEGORIZED } from '../types/play';
 
 export const CATEGORY_JOIN = ' | ';
 export const BUILTIN_TAG_GROUPS = ['世界观', '感情向', '结局', '尺度', '氛围', '特殊'] as const;
 
 export const splitPlayCategories = (category?: string | null) => {
   const raw = category?.trim() ?? '';
-  if (!raw || raw === DEFAULT_CATEGORY) {
+  if (!raw || raw === DEFAULT_CATEGORY || raw === LEGACY_UNCATEGORIZED) {
     return [] as string[];
   }
 
   return raw
     .split('|')
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter((item) => item && item !== DEFAULT_CATEGORY && item !== LEGACY_UNCATEGORIZED);
 };
 
 export const joinPlayCategories = (names: string[]) => {
@@ -22,7 +22,7 @@ export const joinPlayCategories = (names: string[]) => {
 
   names.forEach((name) => {
     const next = name.trim();
-    if (!next || next === DEFAULT_CATEGORY) {
+    if (!next || next === DEFAULT_CATEGORY || next === LEGACY_UNCATEGORIZED) {
       return;
     }
     const key = next.toLowerCase();

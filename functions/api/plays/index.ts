@@ -1,4 +1,9 @@
 import { createPlay, listPublicPlays } from '../../_lib/db';
+import {
+  DEFAULT_CATEGORY,
+  LEGACY_UNCATEGORIZED,
+  renameCategoryInValue,
+} from '../../_lib/categories';
 import { error, json } from '../../_lib/http';
 
 const normalizeImportedSummary = (value: string) => {
@@ -15,7 +20,12 @@ export const onRequestPost: PagesFunction = async ({ env, request }) => {
   const body = (await request.json()) as Record<string, unknown>;
   const title = String(body.title ?? '').trim();
   const authorName = String(body.authorName ?? '').trim();
-  const category = String(body.category ?? '未分类').trim() || '未分类';
+  const category =
+    renameCategoryInValue(
+      String(body.category ?? '').trim() || DEFAULT_CATEGORY,
+      LEGACY_UNCATEGORIZED,
+      DEFAULT_CATEGORY,
+    ) || DEFAULT_CATEGORY;
   const summary = normalizeImportedSummary(String(body.summary ?? ''));
   const content = String(body.content ?? '').trim();
 

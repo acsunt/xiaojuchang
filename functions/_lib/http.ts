@@ -1,8 +1,10 @@
+import { DEFAULT_CATEGORY, joinPlayCategories, splitPlayCategories } from './categories';
+
 export type PlayStatus = 'pending' | 'approved' | 'rejected' | 'offline';
 export type ReviewAction = 'approve' | 'reject' | 'offline';
 export type SubmissionType = 'original' | 'modify' | 'derived';
 
-export const DEFAULT_CATEGORY = '未分类';
+export { DEFAULT_CATEGORY } from './categories';
 export const PLAY_MODIFY_DRAFT_PARENT_PLACEHOLDER = '__pending_parent__';
 
 export const validPlayStatuses: PlayStatus[] = ['pending', 'approved', 'rejected', 'offline'];
@@ -205,7 +207,8 @@ export const normalizePlay = (row: Record<string, unknown>): PlayRecord => {
     id: String(row.id),
     title: String(row.title),
     authorName: String(row.author_name),
-    category: String(row.category),
+    category:
+      joinPlayCategories(splitPlayCategories(String(row.category ?? ''))) || DEFAULT_CATEGORY,
     summary: String(row.summary),
     content: String(row.content),
     status: String(row.status) as PlayStatus,

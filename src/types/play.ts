@@ -266,9 +266,11 @@ export type SubmissionFeedback = {
   latestContent?: string;
   editedFields?: SubmissionEditedField[];
 };
-export type UploadMode = 'single' | 'batch';
+export type UploadMode = 'single' | 'batch' | 'history';
 
 export const DEFAULT_CATEGORY = '未分类';
+/** 旧批量上传兜底值。读到时一律视为未分类，不再作为独立分类存在。 */
+export const LEGACY_UNCATEGORIZED = '无分类';
 export const PLAYS_UPDATED_EVENT = 'mini-theater:plays-updated';
 export const TAGS_UPDATED_EVENT = 'mini-theater:tags-updated';
 

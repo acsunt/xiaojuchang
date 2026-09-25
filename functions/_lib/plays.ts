@@ -14,6 +14,7 @@ import {
 import { chunkItems, D1_BACKUP_INSERT_CHUNK_SIZE, D1_SELECT_CHUNK_SIZE } from './db-utils';
 import { ensureTagsByCategory } from './tags';
 import { parseRepoStatus } from './repos';
+import { DEFAULT_CATEGORY, LEGACY_UNCATEGORIZED, renameCategoryInValue } from './categories';
 
 type PlayDraft = {
   title: string;
@@ -258,6 +259,56 @@ const mergeModificationIntoParent = async (
   return ensurePlay(db, parentPlay.id);
 };
 
+/** 把历史上批量上传留下的「无分类」全部改写成「未分类」。只跑一次。 */
+const legacyCategoryMigrationCache = new WeakMap<D1Database, boolean>();
+
+const migrateLegacyUncategorized = async (db: D1Database) => {
+  if (legacyCategoryMigrationCache.get(db)) {
+    return;
+  }
+
+  try {
+    const result = await db
+      .prepare(
+        `SELECT id, category FROM plays
+         WHERE category = ?
+            OR instr(category, ?) > 0`,
+      )
+      .bind(LEGACY_UNCATEGORIZED, LEGACY_UNCATEGORIZED)
+      .all<{ id: string; category: string }>();
+    const rows = result.results
+      .map((row) => {
+        const previous = String(row.category ?? '');
+        const next = renameCategoryInValue(previous, LEGACY_UNCATEGORIZED, DEFAULT_CATEGORY);
+        return {
+          id: String(row.id),
+          category: next,
+          previous,
+        };
+      })
+      .filter((row) => row.category !== row.previous);
+
+    if (rows.length > 0) {
+      const timestamp = now();
+      await db.batch(
+        rows.map((row) =>
+          db
+            .prepare(
+              `UPDATE plays
+               SET category = ?, updated_at = ?
+               WHERE id = ?`,
+            )
+            .bind(row.category, timestamp, row.id),
+        ),
+      );
+    }
+
+    legacyCategoryMigrationCache.set(db, true);
+  } catch {
+    /* 迁移失败不阻塞读取，下次请求再试。 */
+  }
+};
+
 const healApprovedModifications = async (db: D1Database) => {
   const supported = await ensureModifyColumns(db);
   if (!supported) {
@@ -324,7 +375,12 @@ const normalizeBackupPlayDraft = (draft: BackupPlayDraft): BackupPlayDraft => {
     id: String(draft.id ?? '').trim() || makeId('play'),
     title: String(draft.title ?? '').trim(),
     authorName: String(draft.authorName ?? '').trim(),
-    category: String(draft.category ?? '').trim() || '未分类',
+    category:
+      renameCategoryInValue(
+        String(draft.category ?? '').trim() || DEFAULT_CATEGORY,
+        LEGACY_UNCATEGORIZED,
+        DEFAULT_CATEGORY,
+      ) || DEFAULT_CATEGORY,
     summary: normalizeImportedSummary(String(draft.summary ?? '')),
     content: String(draft.content ?? ''),
     status: normalizedStatus,
@@ -341,6 +397,7 @@ const normalizeBackupPlayDraft = (draft: BackupPlayDraft): BackupPlayDraft => {
 };
 
 export const listPublicPlays = async (db: D1Database) => {
+  await migrateLegacyUncategorized(db);
   await healApprovedModifications(db);
   const modifySupported = await ensureModifyColumns(db);
   const result = await db
@@ -361,6 +418,7 @@ export const listPublicPlays = async (db: D1Database) => {
 };
 
 export const getPublicPlayById = async (db: D1Database, id: string) => {
+  await migrateLegacyUncategorized(db);
   await healApprovedModifications(db);
   const modifySupported = await ensureModifyColumns(db);
   const row = await db
@@ -382,6 +440,7 @@ export const getPublicPlayById = async (db: D1Database, id: string) => {
 };
 
 export const listSubmissionFeedbackByIds = async (db: D1Database, ids: string[]) => {
+  await migrateLegacyUncategorized(db);
   const normalizedIds = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean))).slice(
     0,
     60,
@@ -448,6 +507,12 @@ export const listSubmissionFeedbackByIds = async (db: D1Database, ids: string[])
 export const createPlay = async (db: D1Database, draft: PlayDraft) => {
   const id = makeId('play');
   const timestamp = now();
+  const category =
+    renameCategoryInValue(
+      draft.category.trim() || DEFAULT_CATEGORY,
+      LEGACY_UNCATEGORIZED,
+      DEFAULT_CATEGORY,
+    ) || DEFAULT_CATEGORY;
 
   await db
     .prepare(
@@ -460,7 +525,7 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
       id,
       draft.title,
       draft.authorName,
-      draft.category,
+      category,
       draft.summary,
       draft.content,
       timestamp,
@@ -472,6 +537,7 @@ export const createPlay = async (db: D1Database, draft: PlayDraft) => {
 };
 
 export const listAdminPlays = async (db: D1Database, status?: PlayStatus) => {
+  await migrateLegacyUncategorized(db);
   await healApprovedModifications(db);
   const statement = status
     ? db

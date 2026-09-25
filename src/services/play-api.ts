@@ -1,6 +1,7 @@
 import { mockDb } from '../data/mock-db';
 import { normalizeImportedSummary } from './play-text';
 import { DEFAULT_CATEGORY, PLAYS_UPDATED_EVENT, TAGS_UPDATED_EVENT } from '../types/play';
+import { joinPlayCategories, splitPlayCategories } from '../utils/categories';
 import type {
   AdminSession,
   BulkReviewResult,
@@ -179,7 +180,9 @@ const normalizeSiteSettings = (settings: SiteSettings): SiteSettings => ({
 
 const normalizePlayDraft = (draft: PlayDraft): PlayDraft => ({
   ...draft,
-  category: draft.category?.trim() || DEFAULT_CATEGORY,
+  category:
+    joinPlayCategories(splitPlayCategories(draft.category?.trim() || DEFAULT_CATEGORY)) ||
+    DEFAULT_CATEGORY,
   summary: normalizeImportedSummary(draft.summary),
   submissionType: draft.submissionType ?? 'original',
 });

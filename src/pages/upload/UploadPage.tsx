@@ -75,7 +75,7 @@ const readUploadBool = (key: string, fallback: boolean) => {
 
 const batchTemplate = `### Title
 Title: （标题）
-Category: （分类，可留空，默认无分类）
+Category: （分类，可留空，默认未分类）
 Desc: （简介，可留空，默认无简介）
 （正文）`;
 
@@ -542,6 +542,9 @@ export function UploadPage() {
     setSubmitting(true);
 
     try {
+      if (mode === 'history') {
+        return;
+      }
       if (mode === 'single') {
         await handleSingleSubmit();
       } else {
@@ -656,478 +659,502 @@ export function UploadPage() {
               >
                 批量上传
               </button>
+              <button
+                className={mode === 'history' ? 'tab-chip active' : 'tab-chip'}
+                onClick={() => setMode('history')}
+                type="button"
+              >
+                投稿记录
+              </button>
             </div>
           )}
 
-          {isEditOriginal ? (
-            <div className="callout callout-info upload-mode-banner">
-              <strong>「修改」模式</strong>
-              <span>
-                作者已锁定,标题 / 分类 / 简介 /
-                正文可改,审核通过后该作品所属系列下的所有版本会跟着更新。
-              </span>
-            </div>
-          ) : null}
-
-          <div className="field-grid">
-            <label>
-              <span>作者</span>
-              <ClearableField
-                onClear={() => setForm((current) => ({ ...current, authorName: '' }))}
-                visible={Boolean(form.authorName) && !lockAuthor}
-              >
-                <input
-                  list="author-history"
-                  value={form.authorName}
-                  readOnly={lockAuthor}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, authorName: event.target.value }))
-                  }
-                  placeholder="在这里签下名字吧，我会乖乖记住"
-                />
-              </ClearableField>
-              <datalist id="author-history">
-                {authorHistory.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-            </label>
-            {authorHistory.length > 0 && !lockAuthor ? (
-              <div className="stack-gap-sm">
-                <div className="inline-actions wrap-mobile author-history-inline">
-                  <span className="content-meta">历史作者 {authorHistory.length} 个</span>
-                  <button className="button ghost" onClick={handleClearAuthorHistory} type="button">
-                    清空作者历史
-                  </button>
-                </div>
-                <div className="tag-cloud compact-tag-cloud">
-                  {authorHistory.map((item) => {
-                    const active = form.authorName === item;
-
-                    return (
+          {mode === 'history' && !isEditOriginal ? (
+            <div className="stack-gap-lg">
+              <div className="stack-gap-md">
+                <div className="content-head upload-history-head">
+                  <div>
+                    <p className="eyebrow">History</p>
+                    <h3>投稿记录</h3>
+                  </div>
+                  <div className="inline-actions wrap-mobile review-log-head-row">
+                    {submissionHistory.length > 0 ? (
                       <button
-                        key={item}
-                        className={active ? 'tag-chip active' : 'tag-chip'}
-                        onClick={() => setForm((current) => ({ ...current, authorName: item }))}
+                        className="button ghost upload-history-clear-button"
+                        onClick={handleClearSubmissionHistory}
                         type="button"
                       >
-                        {item}
+                        清空
                       </button>
+                    ) : null}
+                  </div>
+                </div>
+                <p className="sub-copy">仅保存在当前浏览器,自动同步最新审核结果与审核备注。</p>
+              </div>
+
+              {submissionHistory.length === 0 ? (
+                <div className="empty-panel stack-gap-md">
+                  <p>你还没有本地投稿记录。</p>
+                  <span className="content-meta">
+                    提交成功后，这里会按最近时间保存你的投稿草稿。
+                  </span>
+                </div>
+              ) : (
+                <div className="tag-admin-list">
+                  {submissionHistory.map((record) => {
+                    const active = editingHistoryId === record.id;
+
+                    return (
+                      <article className="play-card stack-gap-md" key={record.id}>
+                        <div className="stack-gap-md">
+                          <div className="card-topline">
+                            <span>{record.category || DEFAULT_CATEGORY}</span>
+                            {record.latestFeedback ? (
+                              <span
+                                className={`status-tag ${record.latestFeedback.status === 'missing' ? 'offline' : record.latestFeedback.status}`}
+                              >
+                                {feedbackLabelMap[record.latestFeedback.status]}
+                              </span>
+                            ) : (
+                              <span>
+                                {active ? '当前回填中' : `已投稿 ${record.submissionCount} 次`}
+                              </span>
+                            )}
+                          </div>
+                          <div className="stack-gap-md">
+                            <h3>{record.title}</h3>
+                            {record.summary ? <p className="summary">{record.summary}</p> : null}
+                          </div>
+                          {record.latestFeedback ? (
+                            <div className="stack-gap-sm">
+                              <span className="content-meta">
+                                {record.latestFeedback.status === 'pending'
+                                  ? '当前还在等待审核。'
+                                  : '最新处理结果'}
+                              </span>
+                              <p className="sub-copy">
+                                {record.latestFeedback.reviewNote ||
+                                  (record.latestFeedback.status === 'approved'
+                                    ? '已通过审核，广场现在可见。'
+                                    : record.latestFeedback.status === 'rejected'
+                                      ? '已被拒绝，广场不会展示。'
+                                      : record.latestFeedback.status === 'offline'
+                                        ? '已下线，广场已隐藏。'
+                                        : '')}
+                              </p>
+                              {record.latestFeedback.editedFields &&
+                              record.latestFeedback.editedFields.length > 0 ? (
+                                <p className="sub-copy">
+                                  后台已调整：
+                                  {record.latestFeedback.editedFields
+                                    .map((field) => feedbackEditedFieldLabelMap[field])
+                                    .join('、')}
+                                  ，当前浏览器记录已同步最新版本。
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          <div className="meta-row">
+                            <span>作者 {record.authorName}</span>
+                            <span>最近提交 {formatLocalTime(record.lastSubmittedAt)}</span>
+                            {record.latestFeedback?.reviewedAt ? (
+                              <span>
+                                处理于 {formatLocalTime(record.latestFeedback.reviewedAt)}
+                              </span>
+                            ) : null}
+                            {record.missingDetectedAt ? (
+                              <span>后台已删除 {formatLocalTime(record.missingDetectedAt)}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="inline-actions wrap-mobile submission-action-row">
+                          <button
+                            className="button ghost"
+                            onClick={() => handleDeleteSubmission(record)}
+                            type="button"
+                          >
+                            删除本地记录
+                          </button>
+                        </div>
+                      </article>
                     );
                   })}
                 </div>
-              </div>
-            ) : null}
-          </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {isEditOriginal ? (
+                <div className="callout callout-info upload-mode-banner">
+                  <strong>「修改」模式</strong>
+                  <span>
+                    作者已锁定,标题 / 分类 / 简介 /
+                    正文可改,审核通过后该作品所属系列下的所有版本会跟着更新。
+                  </span>
+                </div>
+              ) : null}
 
-          {mode === 'single' ? (
-            <div className="field-grid">
-              <label>
-                <div className="field-label-row">
-                  <span>分类</span>
-                  {!lockTitleAndCategory ? (
-                    <div className="inline-actions field-inline-actions">
+              <div className="field-grid">
+                <label>
+                  <span>作者</span>
+                  <ClearableField
+                    onClear={() => setForm((current) => ({ ...current, authorName: '' }))}
+                    visible={Boolean(form.authorName) && !lockAuthor}
+                  >
+                    <input
+                      list="author-history"
+                      value={form.authorName}
+                      readOnly={lockAuthor}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, authorName: event.target.value }))
+                      }
+                      placeholder="在这里签下名字吧，我会乖乖记住"
+                    />
+                  </ClearableField>
+                  <datalist id="author-history">
+                    {authorHistory.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                </label>
+                {authorHistory.length > 0 && !lockAuthor ? (
+                  <div className="stack-gap-sm">
+                    <div className="inline-actions wrap-mobile author-history-inline">
+                      <span className="content-meta">历史作者 {authorHistory.length} 个</span>
                       <button
-                        className="text-button field-inline-action"
-                        onClick={() => {
-                          setCreateCategoryOpen(true);
-                          setCategoryTagsOpen(true);
-                        }}
+                        className="button ghost"
+                        onClick={handleClearAuthorHistory}
                         type="button"
                       >
-                        新增分类
+                        清空作者历史
                       </button>
-                      {tags.length > 0 ? (
-                        <button
-                          className="text-button field-inline-action"
-                          onClick={() => setCategoryTagsOpen((current) => !current)}
-                          type="button"
-                        >
-                          {categoryTagsOpen ? '收起分类' : '展开分类'}
-                        </button>
-                      ) : null}
                     </div>
-                  ) : null}
-                </div>
-                <ClearableField
-                  onClear={() => {
-                    if (categoryQuery) {
-                      setCategoryQuery('');
-                      return;
-                    }
-                    setForm((current) => ({ ...current, category: '' }));
-                  }}
-                  visible={
-                    (Boolean(categoryQuery) || Boolean(form.category)) && !lockTitleAndCategory
-                  }
-                >
-                  <input
-                    value={lockTitleAndCategory ? selectedCategoryNames.join(' · ') : categoryQuery}
-                    readOnly={lockTitleAndCategory}
-                    autoComplete="off"
-                    onChange={(event) => {
-                      setCategoryQuery(event.target.value);
-                      setCategoryTagsOpen(true);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                      }
-                    }}
-                    placeholder={
-                      selectedCategoryNames.length > 0
-                        ? `已选 ${selectedCategoryNames.join(' · ')}，可搜索已有分类`
-                        : `搜索已有分类，不填记为 ${DEFAULT_CATEGORY}`
-                    }
-                  />
-                </ClearableField>
-              </label>
-              {!lockTitleAndCategory && categoryTagsOpen ? (
-                tags.length > 0 ? (
-                  <CategoryHierarchyPicker
-                    emptyText="没有匹配的分类"
-                    keyword={categoryQuery}
-                    tags={tags}
-                    value={form.category}
-                    onChange={(next) => {
-                      setForm((current) => ({ ...current, category: next }));
-                      setCategoryQuery('');
-                    }}
-                  />
-                ) : (
-                  <div className="content-meta">还没有分类，可先新增分类</div>
-                )
-              ) : null}
-              <label>
-                <div className="field-label-row">
-                  <span>标题</span>
-                  {!lockTitleAndCategory ? (
-                    <button
-                      className="text-button field-inline-action"
-                      onClick={handleDetectTitle}
-                      type="button"
-                    >
-                      识别标题
-                    </button>
-                  ) : null}
-                </div>
-                <ClearableField
-                  onClear={() => setForm((current) => ({ ...current, title: '' }))}
-                  visible={Boolean(form.title) && !lockTitleAndCategory}
-                >
-                  <input
-                    value={form.title}
-                    readOnly={lockTitleAndCategory}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    placeholder="想给这个故事，定一个怎样的标题呢？"
-                  />
-                </ClearableField>
-              </label>
+                    <div className="tag-cloud compact-tag-cloud">
+                      {authorHistory.map((item) => {
+                        const active = form.authorName === item;
 
-              <label>
-                <span>简介（可空）</span>
-                <ClearableField
-                  onClear={() => setForm((current) => ({ ...current, summary: '' }))}
-                  visible={Boolean(form.summary)}
-                >
-                  <input
-                    value={form.summary}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, summary: event.target.value }))
-                    }
-                    placeholder="不填也可以，列表卡片会直接隐藏简介"
-                  />
-                </ClearableField>
-              </label>
-
-              <label>
-                <span>内容</span>
-                <ClearableField
-                  onClear={() => setForm((current) => ({ ...current, content: '' }))}
-                  visible={Boolean(form.content) && !lockOriginalContent}
-                >
-                  <textarea
-                    rows={12}
-                    value={form.content}
-                    readOnly={lockOriginalContent}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, content: event.target.value }))
-                    }
-                    placeholder="把正文填在这里，我会逐字逐句地认真看"
-                  />
-                </ClearableField>
-              </label>
-
-              {/* 续写版本块:每按一次"续写"追加一版,可各自填作者/简介/正文;
-               * 字段、placeholder、要求与小剧场详情页 continuation-panel 的 composer 一致。
-               * 提交时按顺序 uploadPlay(原文) → createContinuation(续写 1) → createContinuation(续写 2)…
-               * 所有续写与原文共享同一个 playId。
-               * 「修改」模式不展示续写块,也不出现「续写」按钮。 */}
-              {continuationVersions.map((version, index) => (
-                <div className="upload-continuation-block stack-gap-sm" key={version.id}>
-                  <div className="upload-continuation-head">
-                    <strong>{`续写版本 ${index + 1}`}</strong>
-                    <button
-                      className="text-button"
-                      onClick={() => removeContinuationVersion(version.id)}
-                      type="button"
-                    >
-                      删除该续写
-                    </button>
+                        return (
+                          <button
+                            key={item}
+                            className={active ? 'tag-chip active' : 'tag-chip'}
+                            onClick={() => setForm((current) => ({ ...current, authorName: item }))}
+                            type="button"
+                          >
+                            {item}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <label>
-                    <span>作者（与原文作者为同一人可留空）</span>
-                    <ClearableField
-                      onClear={() => updateContinuationVersion(version.id, { nickname: '' })}
-                      visible={Boolean(version.nickname)}
-                    >
-                      <input
-                        value={version.nickname}
-                        onChange={(event) =>
-                          updateContinuationVersion(version.id, { nickname: event.target.value })
-                        }
-                        placeholder="写下你的笔名"
-                      />
-                    </ClearableField>
-                  </label>
-                  <label>
-                    <span>简介</span>
-                    <ClearableField
-                      onClear={() => updateContinuationVersion(version.id, { summary: '' })}
-                      visible={Boolean(version.summary)}
-                    >
-                      <input
-                        value={version.summary}
-                        onChange={(event) =>
-                          updateContinuationVersion(version.id, { summary: event.target.value })
-                        }
-                        placeholder="告诉大家这是哪个版本或者增加的什么类型的指令"
-                      />
-                    </ClearableField>
-                  </label>
-                  <label>
-                    <span>正文</span>
-                    <ClearableField
-                      onClear={() => updateContinuationVersion(version.id, { content: '' })}
-                      visible={Boolean(version.content)}
-                    >
-                      <textarea
-                        rows={10}
-                        value={version.content}
-                        onChange={(event) =>
-                          updateContinuationVersion(version.id, { content: event.target.value })
-                        }
-                        placeholder="把续写的正文填在这里"
-                      />
-                    </ClearableField>
-                  </label>
-                </div>
-              ))}
-
-              {/* 单篇模式的底部按钮区:续写按钮 + 上传小剧场按钮
-               * 位置始终在最后一个续写块下方(动态追加时自动往下推)。
-               * 「修改」入口下隐藏「续写」按钮,只允许提交修改。 */}
-              <div className="inline-actions wrap-mobile upload-single-action-row">
-                {isEditOriginal ? null : (
-                  <button
-                    className="button secondary"
-                    onClick={addContinuationVersion}
-                    type="button"
-                    disabled={submitting}
-                  >
-                    续写
-                  </button>
-                )}
-                <button
-                  className="button primary upload-submit-button"
-                  disabled={singleDisabled}
-                  type="submit"
-                >
-                  {submitting
-                    ? '提交中...'
-                    : isEditOriginal
-                      ? '提交修改'
-                      : editingHistoryId
-                        ? '重新投稿'
-                        : continuationVersions.length > 0
-                          ? `上传小剧场（原文 + ${continuationVersions.length} 条续写）`
-                          : '上传小剧场'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="field-grid">
-              <label>
-                <span>批量文本</span>
-                <ClearableField onClear={() => setBatchText('')} visible={Boolean(batchText)}>
-                  <textarea
-                    rows={18}
-                    value={batchText}
-                    onChange={(event) => setBatchText(event.target.value)}
-                    placeholder="写了这么多呀，有点看不过来了"
-                  />
-                </ClearableField>
-              </label>
-              <div className="template-code subdued-template">{`${batchTemplate}\n\n${batchTemplate}`}</div>
-              <div className="inline-actions wrap-mobile upload-batch-action-row">
-                <label className="button secondary file-button">
-                  <span>上传 txt</span>
-                  <input
-                    accept=".txt,text/plain"
-                    onChange={(event) => void handleTextFile(event.target.files?.[0])}
-                    type="file"
-                  />
-                </label>
-                <button className="button primary" disabled={batchDisabled} type="submit">
-                  {submitting
-                    ? batchProgress
-                      ? `上传中 ${batchProgress.completed}/${batchProgress.total}`
-                      : '提交中...'
-                    : batchItemCount > 0
-                      ? `批量上传（${batchItemCount} 篇）`
-                      : '批量上传'}
-                </button>
-              </div>
-              {batchItemCount > 0 ? (
-                <p className="content-meta">
-                  已识别 {batchItemCount} 篇小剧场。
-                  {!form.authorName.trim() ? ' 点击上传时会先提示填写作者署名。' : ''}
-                </p>
-              ) : null}
-              {submitting && batchProgress ? (
-                <p className="content-meta">
-                  正在依次上传 {batchProgress.completed}/{batchProgress.total} 篇，请先别关闭页面。
-                </p>
-              ) : null}
-            </div>
-          )}
-
-          {/* 只在回填历史时才显示"取消回填"按钮;
-           * single 模式的提交按钮已经渲染在原文/衍生版本组的底部按钮区,不再重复。
-           * batch 模式的提交按钮由"批量文本"区块内部的 upload-batch-action-row 承担。 */}
-          {editingHistoryId ? (
-            <div className="action-bar wrap-mobile action-bar-half">
-              <button
-                className="button ghost upload-reset-button"
-                onClick={resetEditingState}
-                type="button"
-              >
-                取消回填
-              </button>
-            </div>
-          ) : null}
-        </form>
-
-        <aside className="review-sidebar stack-gap-lg">
-          <div className="stack-gap-md">
-            <div className="content-head upload-history-head">
-              <div>
-                <p className="eyebrow">History</p>
-                <h3>投稿记录</h3>
-              </div>
-              <div className="inline-actions wrap-mobile review-log-head-row">
-                {submissionHistory.length > 0 ? (
-                  <button
-                    className="button ghost upload-history-clear-button"
-                    onClick={handleClearSubmissionHistory}
-                    type="button"
-                  >
-                    清空
-                  </button>
                 ) : null}
               </div>
-            </div>
-            <p className="sub-copy">仅保存在当前浏览器,自动同步最新审核结果与审核备注。</p>
-          </div>
 
-          {submissionHistory.length === 0 ? (
-            <div className="empty-panel stack-gap-md">
-              <p>你还没有本地投稿记录。</p>
-              <span className="content-meta">提交成功后，这里会按最近时间保存你的投稿草稿。</span>
-            </div>
-          ) : (
-            <div className="tag-admin-list">
-              {submissionHistory.map((record) => {
-                const active = editingHistoryId === record.id;
-
-                return (
-                  <article className="play-card stack-gap-md" key={record.id}>
-                    <div className="stack-gap-md">
-                      <div className="card-topline">
-                        <span>{record.category || DEFAULT_CATEGORY}</span>
-                        {record.latestFeedback ? (
-                          <span
-                            className={`status-tag ${record.latestFeedback.status === 'missing' ? 'offline' : record.latestFeedback.status}`}
+              {mode === 'single' ? (
+                <div className="field-grid">
+                  <label>
+                    <div className="field-label-row">
+                      <span>分类</span>
+                      {!lockTitleAndCategory ? (
+                        <div className="inline-actions field-inline-actions">
+                          <button
+                            className="text-button field-inline-action"
+                            onClick={() => {
+                              setCreateCategoryOpen(true);
+                              setCategoryTagsOpen(true);
+                            }}
+                            type="button"
                           >
-                            {feedbackLabelMap[record.latestFeedback.status]}
-                          </span>
-                        ) : (
-                          <span>
-                            {active ? '当前回填中' : `已投稿 ${record.submissionCount} 次`}
-                          </span>
-                        )}
-                      </div>
-                      <div className="stack-gap-md">
-                        <h3>{record.title}</h3>
-                        {record.summary ? <p className="summary">{record.summary}</p> : null}
-                      </div>
-                      {record.latestFeedback ? (
-                        <div className="stack-gap-sm">
-                          <span className="content-meta">
-                            {record.latestFeedback.status === 'pending'
-                              ? '当前还在等待审核。'
-                              : '最新处理结果'}
-                          </span>
-                          <p className="sub-copy">
-                            {record.latestFeedback.reviewNote ||
-                              (record.latestFeedback.status === 'approved'
-                                ? '已通过审核，广场现在可见。'
-                                : record.latestFeedback.status === 'rejected'
-                                  ? '已被拒绝，广场不会展示。'
-                                  : record.latestFeedback.status === 'offline'
-                                    ? '已下线，广场已隐藏。'
-                                    : '')}
-                          </p>
-                          {record.latestFeedback.editedFields &&
-                          record.latestFeedback.editedFields.length > 0 ? (
-                            <p className="sub-copy">
-                              后台已调整：
-                              {record.latestFeedback.editedFields
-                                .map((field) => feedbackEditedFieldLabelMap[field])
-                                .join('、')}
-                              ，当前浏览器记录已同步最新版本。
-                            </p>
+                            新增分类
+                          </button>
+                          {tags.length > 0 ? (
+                            <button
+                              className="text-button field-inline-action"
+                              onClick={() => setCategoryTagsOpen((current) => !current)}
+                              type="button"
+                            >
+                              {categoryTagsOpen ? '收起分类' : '展开分类'}
+                            </button>
                           ) : null}
                         </div>
                       ) : null}
-                      <div className="meta-row">
-                        <span>作者 {record.authorName}</span>
-                        <span>最近提交 {formatLocalTime(record.lastSubmittedAt)}</span>
-                        {record.latestFeedback?.reviewedAt ? (
-                          <span>处理于 {formatLocalTime(record.latestFeedback.reviewedAt)}</span>
-                        ) : null}
-                        {record.missingDetectedAt ? (
-                          <span>后台已删除 {formatLocalTime(record.missingDetectedAt)}</span>
-                        ) : null}
+                    </div>
+                    <ClearableField
+                      onClear={() => {
+                        if (categoryQuery) {
+                          setCategoryQuery('');
+                          return;
+                        }
+                        setForm((current) => ({ ...current, category: '' }));
+                      }}
+                      visible={
+                        (Boolean(categoryQuery) || Boolean(form.category)) && !lockTitleAndCategory
+                      }
+                    >
+                      <input
+                        value={
+                          lockTitleAndCategory ? selectedCategoryNames.join(' · ') : categoryQuery
+                        }
+                        readOnly={lockTitleAndCategory}
+                        autoComplete="off"
+                        onChange={(event) => {
+                          setCategoryQuery(event.target.value);
+                          setCategoryTagsOpen(true);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                          }
+                        }}
+                        placeholder={
+                          selectedCategoryNames.length > 0
+                            ? `已选 ${selectedCategoryNames.join(' · ')}，可搜索已有分类`
+                            : `搜索已有分类，不填记为 ${DEFAULT_CATEGORY}`
+                        }
+                      />
+                    </ClearableField>
+                  </label>
+                  {!lockTitleAndCategory && categoryTagsOpen ? (
+                    tags.length > 0 ? (
+                      <CategoryHierarchyPicker
+                        emptyText="没有匹配的分类"
+                        keyword={categoryQuery}
+                        tags={tags}
+                        value={form.category}
+                        onChange={(next) => {
+                          setForm((current) => ({ ...current, category: next }));
+                          setCategoryQuery('');
+                        }}
+                      />
+                    ) : (
+                      <div className="content-meta">还没有分类，可先新增分类</div>
+                    )
+                  ) : null}
+                  <label>
+                    <div className="field-label-row">
+                      <span>标题</span>
+                      {!lockTitleAndCategory ? (
+                        <button
+                          className="text-button field-inline-action"
+                          onClick={handleDetectTitle}
+                          type="button"
+                        >
+                          识别标题
+                        </button>
+                      ) : null}
+                    </div>
+                    <ClearableField
+                      onClear={() => setForm((current) => ({ ...current, title: '' }))}
+                      visible={Boolean(form.title) && !lockTitleAndCategory}
+                    >
+                      <input
+                        value={form.title}
+                        readOnly={lockTitleAndCategory}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, title: event.target.value }))
+                        }
+                        placeholder="想给这个故事，定一个怎样的标题呢？"
+                      />
+                    </ClearableField>
+                  </label>
+
+                  <label>
+                    <span>简介（可空）</span>
+                    <ClearableField
+                      onClear={() => setForm((current) => ({ ...current, summary: '' }))}
+                      visible={Boolean(form.summary)}
+                    >
+                      <input
+                        value={form.summary}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, summary: event.target.value }))
+                        }
+                        placeholder="不填也可以，列表卡片会直接隐藏简介"
+                      />
+                    </ClearableField>
+                  </label>
+
+                  <label>
+                    <span>内容</span>
+                    <ClearableField
+                      onClear={() => setForm((current) => ({ ...current, content: '' }))}
+                      visible={Boolean(form.content) && !lockOriginalContent}
+                    >
+                      <textarea
+                        rows={12}
+                        value={form.content}
+                        readOnly={lockOriginalContent}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, content: event.target.value }))
+                        }
+                        placeholder="把正文填在这里，我会逐字逐句地认真看"
+                      />
+                    </ClearableField>
+                  </label>
+
+                  {/* 续写版本块:每按一次"续写"追加一版,可各自填作者/简介/正文;
+                   * 字段、placeholder、要求与小剧场详情页 continuation-panel 的 composer 一致。
+                   * 提交时按顺序 uploadPlay(原文) → createContinuation(续写 1) → createContinuation(续写 2)…
+                   * 所有续写与原文共享同一个 playId。
+                   * 「修改」模式不展示续写块,也不出现「续写」按钮。 */}
+                  {continuationVersions.map((version, index) => (
+                    <div className="upload-continuation-block stack-gap-sm" key={version.id}>
+                      <div className="upload-continuation-head">
+                        <strong>{`续写版本 ${index + 1}`}</strong>
+                        <button
+                          className="text-button"
+                          onClick={() => removeContinuationVersion(version.id)}
+                          type="button"
+                        >
+                          删除该续写
+                        </button>
                       </div>
+                      <label>
+                        <span>作者（与原文作者为同一人可留空）</span>
+                        <ClearableField
+                          onClear={() => updateContinuationVersion(version.id, { nickname: '' })}
+                          visible={Boolean(version.nickname)}
+                        >
+                          <input
+                            value={version.nickname}
+                            onChange={(event) =>
+                              updateContinuationVersion(version.id, {
+                                nickname: event.target.value,
+                              })
+                            }
+                            placeholder="写下你的笔名"
+                          />
+                        </ClearableField>
+                      </label>
+                      <label>
+                        <span>简介</span>
+                        <ClearableField
+                          onClear={() => updateContinuationVersion(version.id, { summary: '' })}
+                          visible={Boolean(version.summary)}
+                        >
+                          <input
+                            value={version.summary}
+                            onChange={(event) =>
+                              updateContinuationVersion(version.id, { summary: event.target.value })
+                            }
+                            placeholder="告诉大家这是哪个版本或者增加的什么类型的指令"
+                          />
+                        </ClearableField>
+                      </label>
+                      <label>
+                        <span>正文</span>
+                        <ClearableField
+                          onClear={() => updateContinuationVersion(version.id, { content: '' })}
+                          visible={Boolean(version.content)}
+                        >
+                          <textarea
+                            rows={10}
+                            value={version.content}
+                            onChange={(event) =>
+                              updateContinuationVersion(version.id, { content: event.target.value })
+                            }
+                            placeholder="把续写的正文填在这里"
+                          />
+                        </ClearableField>
+                      </label>
                     </div>
-                    <div className="inline-actions wrap-mobile submission-action-row">
+                  ))}
+
+                  {/* 单篇模式的底部按钮区:续写按钮 + 上传小剧场按钮
+                   * 位置始终在最后一个续写块下方(动态追加时自动往下推)。
+                   * 「修改」入口下隐藏「续写」按钮,只允许提交修改。 */}
+                  <div className="inline-actions wrap-mobile upload-single-action-row">
+                    {isEditOriginal ? null : (
                       <button
-                        className="button ghost"
-                        onClick={() => handleDeleteSubmission(record)}
+                        className="button secondary"
+                        onClick={addContinuationVersion}
                         type="button"
+                        disabled={submitting}
                       >
-                        删除本地记录
+                        续写
                       </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+                    )}
+                    <button
+                      className="button primary upload-submit-button"
+                      disabled={singleDisabled}
+                      type="submit"
+                    >
+                      {submitting
+                        ? '提交中...'
+                        : isEditOriginal
+                          ? '提交修改'
+                          : editingHistoryId
+                            ? '重新投稿'
+                            : continuationVersions.length > 0
+                              ? `上传小剧场（原文 + ${continuationVersions.length} 条续写）`
+                              : '上传小剧场'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="field-grid">
+                  <label>
+                    <span>批量文本</span>
+                    <ClearableField onClear={() => setBatchText('')} visible={Boolean(batchText)}>
+                      <textarea
+                        rows={18}
+                        value={batchText}
+                        onChange={(event) => setBatchText(event.target.value)}
+                        placeholder="写了这么多呀，有点看不过来了"
+                      />
+                    </ClearableField>
+                  </label>
+                  <div className="template-code subdued-template">{`${batchTemplate}\n\n${batchTemplate}`}</div>
+                  <div className="inline-actions wrap-mobile upload-batch-action-row">
+                    <label className="button secondary file-button">
+                      <span>上传 txt</span>
+                      <input
+                        accept=".txt,text/plain"
+                        onChange={(event) => void handleTextFile(event.target.files?.[0])}
+                        type="file"
+                      />
+                    </label>
+                    <button className="button primary" disabled={batchDisabled} type="submit">
+                      {submitting
+                        ? batchProgress
+                          ? `上传中 ${batchProgress.completed}/${batchProgress.total}`
+                          : '提交中...'
+                        : batchItemCount > 0
+                          ? `批量上传（${batchItemCount} 篇）`
+                          : '批量上传'}
+                    </button>
+                  </div>
+                  {batchItemCount > 0 ? (
+                    <p className="content-meta">
+                      已识别 {batchItemCount} 篇小剧场。
+                      {!form.authorName.trim() ? ' 点击上传时会先提示填写作者署名。' : ''}
+                    </p>
+                  ) : null}
+                  {submitting && batchProgress ? (
+                    <p className="content-meta">
+                      正在依次上传 {batchProgress.completed}/{batchProgress.total}{' '}
+                      篇，请先别关闭页面。
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              {/* 只在回填历史时才显示"取消回填"按钮;
+               * single 模式的提交按钮已经渲染在原文/衍生版本组的底部按钮区,不再重复。
+               * batch 模式的提交按钮由"批量文本"区块内部的 upload-batch-action-row 承担。 */}
+              {editingHistoryId ? (
+                <div className="action-bar wrap-mobile action-bar-half">
+                  <button
+                    className="button ghost upload-reset-button"
+                    onClick={resetEditingState}
+                    type="button"
+                  >
+                    取消回填
+                  </button>
+                </div>
+              ) : null}
+            </>
           )}
-        </aside>
+        </form>
       </div>
       {createCategoryOpen ? (
         <div className="modal-overlay" onClick={closeCreateCategoryModal} role="presentation">

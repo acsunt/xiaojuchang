@@ -1,5 +1,7 @@
 import { normalizeImportedSummary } from './play-text';
 import type { PlayDraft, SubmissionEditedField, SubmissionFeedback } from '../types/play';
+import { DEFAULT_CATEGORY } from '../types/play';
+import { joinPlayCategories, splitPlayCategories } from '../utils/categories';
 
 const AUTHOR_HISTORY_KEY = 'mini-theater.author-history';
 const SUBMISSION_HISTORY_KEY = 'mini-theater.submission-history';
@@ -53,6 +55,10 @@ const normalizeSubmissionFeedbackSummary = (feedback?: SubmissionFeedback) => {
 
   return {
     ...feedback,
+    latestCategory:
+      typeof feedback.latestCategory === 'string'
+        ? joinPlayCategories(splitPlayCategories(feedback.latestCategory)) || DEFAULT_CATEGORY
+        : feedback.latestCategory,
     latestSummary:
       typeof feedback.latestSummary === 'string'
         ? normalizeImportedSummary(feedback.latestSummary)
@@ -61,11 +67,15 @@ const normalizeSubmissionFeedbackSummary = (feedback?: SubmissionFeedback) => {
 };
 
 const normalizeSubmissionDraftFields = <
-  T extends { summary: string; latestFeedback?: SubmissionFeedback },
+  T extends { summary: string; category?: string; latestFeedback?: SubmissionFeedback },
 >(
   record: T,
 ): T => ({
   ...record,
+  category:
+    typeof record.category === 'string'
+      ? joinPlayCategories(splitPlayCategories(record.category)) || DEFAULT_CATEGORY
+      : record.category,
   summary: normalizeImportedSummary(record.summary),
   latestFeedback: normalizeSubmissionFeedbackSummary(record.latestFeedback),
 });

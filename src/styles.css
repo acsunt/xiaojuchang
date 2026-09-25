@@ -2186,7 +2186,7 @@ body[data-style='default'][data-mode='day'] .app-toast-error {
 
 .upload-grid {
   gap: 16px;
-  grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
