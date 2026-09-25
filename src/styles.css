@@ -4450,6 +4450,20 @@ body.tag-sort-dragging {
   backdrop-filter: none;
 }
 
+@media (max-width: 768px) {
+  .batch-parse-panel .admin-status-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .batch-parse-panel .admin-status-tabs .tab-chip {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+}
+
 .diff-panel {
   padding: 12px 14px;
   border-radius: 14px;

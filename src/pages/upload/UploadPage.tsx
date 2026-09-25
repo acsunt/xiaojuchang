@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   countPlayBatchItems,
@@ -78,6 +78,49 @@ Title: （标题）
 Category: （分类，可留空，默认未分类）
 Desc: （简介，可留空，默认无简介）
 （正文）`;
+
+type BatchParseFilter = 'all' | 'uncategorized' | 'no-summary' | 'uncategorized-no-summary';
+type BatchViewMode = 'preview' | 'edit' | 'both';
+
+type BatchParseItem = {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  content: string;
+};
+
+const BATCH_PARSE_PAGE_SIZE_KEY = 'mini-theater:batch-parse-page-size';
+const DEFAULT_BATCH_PARSE_PAGE_SIZE = 20;
+const MIN_BATCH_PARSE_PAGE_SIZE = 1;
+const MAX_BATCH_PARSE_PAGE_SIZE = 200;
+const MOBILE_BATCH_LIST_PREVIEW_COUNT = 2;
+
+const clampBatchParsePageSize = (value: number) =>
+  Math.min(MAX_BATCH_PARSE_PAGE_SIZE, Math.max(MIN_BATCH_PARSE_PAGE_SIZE, Math.trunc(value)));
+
+const readBatchParsePageSize = () => {
+  if (typeof window === 'undefined') {
+    return DEFAULT_BATCH_PARSE_PAGE_SIZE;
+  }
+
+  const raw = Number(window.localStorage.getItem(BATCH_PARSE_PAGE_SIZE_KEY));
+  return Number.isFinite(raw) && raw > 0
+    ? clampBatchParsePageSize(raw)
+    : DEFAULT_BATCH_PARSE_PAGE_SIZE;
+};
+
+const makeBatchParseId = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const isUncategorizedCategory = (category: string) => {
+  const names = splitPlayCategories(category);
+  return names.length === 0 || (names.length === 1 && names[0] === DEFAULT_CATEGORY);
+};
+
+const isEmptySummary = (summary: string) => !summary.trim();
 
 const feedbackLabelMap: Record<SubmissionFeedbackStatus, string> = {
   ...statusLabelMap,
@@ -172,6 +215,20 @@ export function UploadPage() {
   const [batchProgress, setBatchProgress] = useState<{ completed: number; total: number } | null>(
     null,
   );
+  const [batchItems, setBatchItems] = useState<BatchParseItem[]>([]);
+  const [batchFilter, setBatchFilter] = useState<BatchParseFilter>('all');
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+  const [batchViewMode, setBatchViewMode] = useState<BatchViewMode>('both');
+  const [batchPageSize, setBatchPageSizeState] = useState(() => readBatchParsePageSize());
+  const [batchPageSizeInput, setBatchPageSizeInput] = useState(() =>
+    String(readBatchParsePageSize()),
+  );
+  const [batchCurrentPage, setBatchCurrentPage] = useState(1);
+  const [batchPageInput, setBatchPageInput] = useState('1');
+  const [isMobileBatchViewport, setIsMobileBatchViewport] = useState(false);
+  const [isMobileBatchListExpanded, setIsMobileBatchListExpanded] = useState(false);
+  const [batchCategoryOpen, setBatchCategoryOpen] = useState(true);
+  const batchFileInputRef = useRef<HTMLInputElement | null>(null);
   /* 续写版本填写块：主表单是「原文」，continuationVersions 是原文之下依次追加的续写。
    * 字段与详情页 continuation-panel 的 composer 完全一致：
    *   - nickname（作者，可空，与原文作者为同一人时可留空）
@@ -240,7 +297,108 @@ export function UploadPage() {
     setEditingHistoryId('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillKey]);
+
   const batchItemCount = useMemo(() => countPlayBatchItems(batchText), [batchText]);
+
+  const batchFilterCounts = useMemo(() => {
+    const uncategorized = batchItems.filter((item) =>
+      isUncategorizedCategory(item.category),
+    ).length;
+    const noSummary = batchItems.filter((item) => isEmptySummary(item.summary)).length;
+    const both = batchItems.filter(
+      (item) => isUncategorizedCategory(item.category) && isEmptySummary(item.summary),
+    ).length;
+    return {
+      all: batchItems.length,
+      uncategorized,
+      noSummary,
+      both,
+    };
+  }, [batchItems]);
+
+  const filteredBatchItems = useMemo(() => {
+    if (batchFilter === 'uncategorized') {
+      return batchItems.filter((item) => isUncategorizedCategory(item.category));
+    }
+    if (batchFilter === 'no-summary') {
+      return batchItems.filter((item) => isEmptySummary(item.summary));
+    }
+    if (batchFilter === 'uncategorized-no-summary') {
+      return batchItems.filter(
+        (item) => isUncategorizedCategory(item.category) && isEmptySummary(item.summary),
+      );
+    }
+    return batchItems;
+  }, [batchFilter, batchItems]);
+
+  const batchTotalPages = Math.max(1, Math.ceil(filteredBatchItems.length / batchPageSize));
+  const safeBatchPage = Math.min(batchCurrentPage, batchTotalPages);
+  const pagedBatchItems = useMemo(() => {
+    const start = (safeBatchPage - 1) * batchPageSize;
+    return filteredBatchItems.slice(start, start + batchPageSize);
+  }, [batchPageSize, filteredBatchItems, safeBatchPage]);
+
+  const selectedBatchIndex = filteredBatchItems.findIndex((item) => item.id === selectedBatchId);
+  const selectedBatchItem =
+    selectedBatchIndex >= 0 ? filteredBatchItems[selectedBatchIndex] : undefined;
+  const previousBatchId =
+    selectedBatchIndex > 0 ? (filteredBatchItems[selectedBatchIndex - 1]?.id ?? '') : '';
+  const nextBatchId =
+    selectedBatchIndex >= 0 && selectedBatchIndex < filteredBatchItems.length - 1
+      ? (filteredBatchItems[selectedBatchIndex + 1]?.id ?? '')
+      : '';
+
+  const shouldCollapseMobileBatchList =
+    isMobileBatchViewport && pagedBatchItems.length > MOBILE_BATCH_LIST_PREVIEW_COUNT;
+  const visibleBatchItems =
+    shouldCollapseMobileBatchList && !isMobileBatchListExpanded
+      ? pagedBatchItems.slice(0, MOBILE_BATCH_LIST_PREVIEW_COUNT)
+      : pagedBatchItems;
+
+  const batchFilterLabel =
+    batchFilter === 'uncategorized'
+      ? '未分类'
+      : batchFilter === 'no-summary'
+        ? '无简介'
+        : batchFilter === 'uncategorized-no-summary'
+          ? '未分类且无简介'
+          : '全部';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 768px)');
+    const syncViewport = () => {
+      setIsMobileBatchViewport(mediaQuery.matches);
+    };
+
+    syncViewport();
+    mediaQuery.addEventListener('change', syncViewport);
+    return () => {
+      mediaQuery.removeEventListener('change', syncViewport);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (filteredBatchItems.length === 0) {
+      if (selectedBatchId) {
+        setSelectedBatchId('');
+      }
+      return;
+    }
+
+    if (!filteredBatchItems.some((item) => item.id === selectedBatchId)) {
+      setSelectedBatchId(filteredBatchItems[0]?.id ?? '');
+    }
+  }, [filteredBatchItems, selectedBatchId]);
+
+  useEffect(() => {
+    if (!isMobileBatchViewport) {
+      setIsMobileBatchListExpanded(false);
+    }
+  }, [batchFilter, batchCurrentPage, isMobileBatchViewport, pagedBatchItems.length]);
 
   /* 「修改」模式下,与快照对比,用于启用提交按钮与文案。
    * 任意字段(title / category / summary / content)改动都算修改。 */
@@ -293,6 +451,29 @@ export function UploadPage() {
     () => submitting || batchItemCount === 0,
     [batchItemCount, submitting],
   );
+
+  const setBatchPageSize = (next: number) => {
+    const clamped = clampBatchParsePageSize(next);
+    setBatchPageSizeState(clamped);
+    setBatchPageSizeInput(String(clamped));
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(BATCH_PARSE_PAGE_SIZE_KEY, String(clamped));
+    }
+  };
+
+  const jumpBatchPage = (next: number) => {
+    const safe = Math.min(batchTotalPages, Math.max(1, Math.trunc(next)));
+    setBatchCurrentPage(safe);
+    setBatchPageInput(String(safe));
+  };
+
+  useEffect(() => {
+    if (batchCurrentPage > batchTotalPages) {
+      jumpBatchPage(batchTotalPages);
+    }
+    // 只在总页数收缩时把当前页拉回最后一页。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchCurrentPage, batchTotalPages]);
 
   const groupTags = useMemo(() => getGroupTags(tags), [tags]);
   const selectedCategoryNames = useMemo(() => splitPlayCategories(form.category), [form.category]);
@@ -499,9 +680,18 @@ export function UploadPage() {
   };
 
   const handleBatchSubmit = async () => {
-    const items = parsePlayBatchText(batchText, form.authorName);
+    if (!form.authorName.trim()) {
+      throw new Error('批量上传前先填写署名');
+    }
+
+    const items = batchItems.filter((item) => item.title.trim() && item.content.trim());
     if (items.length === 0) {
       throw new Error('批量内容为空');
+    }
+
+    const confirmed = window.confirm(`确认上传这 ${items.length} 篇小剧场吗？`);
+    if (!confirmed) {
+      return;
     }
 
     setBatchProgress({ completed: 0, total: items.length });
@@ -510,9 +700,24 @@ export function UploadPage() {
 
     try {
       for (const [index, item] of items.entries()) {
-        const createdPlay = await playApi.uploadPlay(item);
+        const createdPlay = await playApi.uploadPlay({
+          authorName: form.authorName.trim(),
+          title: item.title.trim(),
+          category: item.category.trim() || DEFAULT_CATEGORY,
+          summary: item.summary.trim(),
+          content: item.content.trim(),
+        });
         createdPlays.push(createdPlay);
-        saveSubmissionRecord(item, { latestPlayId: createdPlay.id });
+        saveSubmissionRecord(
+          {
+            authorName: form.authorName.trim(),
+            title: item.title.trim(),
+            category: item.category.trim() || DEFAULT_CATEGORY,
+            summary: item.summary.trim(),
+            content: item.content.trim(),
+          },
+          { latestPlayId: createdPlay.id },
+        );
         rememberOwnedPlayId(createdPlay.id);
         setBatchProgress({ completed: index + 1, total: items.length });
       }
@@ -534,7 +739,72 @@ export function UploadPage() {
 
     syncLocalHistory(form.authorName);
     setBatchText('');
+    setBatchItems([]);
+    setSelectedBatchId('');
+    setBatchFilter('all');
+    jumpBatchPage(1);
     showFloatingToast(`已批量提交 ${items.length} 篇到待审核池。`);
+  };
+
+  const handleParseBatch = () => {
+    try {
+      const items = parsePlayBatchText(batchText, form.authorName.trim() || '待填写');
+      if (items.length === 0) {
+        showFloatingToast('没有解析到小剧场，请检查批量文本格式', 'error');
+        return;
+      }
+
+      const nextItems = items.map((item) => ({
+        id: makeBatchParseId(),
+        title: item.title,
+        category: item.category || DEFAULT_CATEGORY,
+        summary: item.summary,
+        content: item.content,
+      }));
+      setBatchItems(nextItems);
+      setSelectedBatchId(nextItems[0]?.id ?? '');
+      setBatchFilter('all');
+      jumpBatchPage(1);
+      setIsMobileBatchListExpanded(false);
+      showFloatingToast(`已解析 ${nextItems.length} 篇小剧场。`);
+    } catch (reason) {
+      showFloatingToast(reason instanceof Error ? reason.message : '解析失败', 'error');
+    }
+  };
+
+  const updateBatchItem = (id: string, patch: Partial<BatchParseItem>) => {
+    setBatchItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+  };
+
+  const selectBatchItem = (id: string) => {
+    setSelectedBatchId(id);
+    const index = filteredBatchItems.findIndex((item) => item.id === id);
+    if (index < 0) {
+      return;
+    }
+
+    const page = Math.floor(index / batchPageSize) + 1;
+    if (page !== batchCurrentPage) {
+      jumpBatchPage(page);
+    }
+  };
+
+  const handleScrollToTop = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleScrollToBottom = () => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -547,9 +817,8 @@ export function UploadPage() {
       }
       if (mode === 'single') {
         await handleSingleSubmit();
-      } else {
-        await handleBatchSubmit();
       }
+      return;
     } catch (reason) {
       showFloatingToast(reason instanceof Error ? reason.message : '提交失败', 'error');
     } finally {
@@ -565,7 +834,12 @@ export function UploadPage() {
     try {
       const content = await file.text();
       setBatchText(content);
+      setBatchItems([]);
+      setSelectedBatchId('');
       setMode('batch');
+      if (batchFileInputRef.current) {
+        batchFileInputRef.current.value = '';
+      }
     } catch {
       showFloatingToast('读取 txt 失败', 'error');
     }
@@ -1094,11 +1368,22 @@ export function UploadPage() {
                 <div className="field-grid">
                   <label>
                     <span>批量文本</span>
-                    <ClearableField onClear={() => setBatchText('')} visible={Boolean(batchText)}>
+                    <ClearableField
+                      onClear={() => {
+                        setBatchText('');
+                        setBatchItems([]);
+                        setSelectedBatchId('');
+                      }}
+                      visible={Boolean(batchText)}
+                    >
                       <textarea
                         rows={18}
                         value={batchText}
-                        onChange={(event) => setBatchText(event.target.value)}
+                        onChange={(event) => {
+                          setBatchText(event.target.value);
+                          setBatchItems([]);
+                          setSelectedBatchId('');
+                        }}
                         placeholder="写了这么多呀，有点看不过来了"
                       />
                     </ClearableField>
@@ -1108,32 +1393,424 @@ export function UploadPage() {
                     <label className="button secondary file-button">
                       <span>上传 txt</span>
                       <input
+                        ref={batchFileInputRef}
                         accept=".txt,text/plain"
                         onChange={(event) => void handleTextFile(event.target.files?.[0])}
                         type="file"
                       />
                     </label>
-                    <button className="button primary" disabled={batchDisabled} type="submit">
-                      {submitting
-                        ? batchProgress
-                          ? `上传中 ${batchProgress.completed}/${batchProgress.total}`
-                          : '提交中...'
-                        : batchItemCount > 0
-                          ? `批量上传（${batchItemCount} 篇）`
-                          : '批量上传'}
+                    <button
+                      className="button primary"
+                      disabled={batchDisabled || submitting}
+                      onClick={handleParseBatch}
+                      type="button"
+                    >
+                      {batchItemCount > 0 ? `开始解析（${batchItemCount} 篇）` : '开始解析'}
                     </button>
                   </div>
                   {batchItemCount > 0 ? (
                     <p className="content-meta">
-                      已识别 {batchItemCount} 篇小剧场。
-                      {!form.authorName.trim() ? ' 点击上传时会先提示填写作者署名。' : ''}
+                      已识别 {batchItemCount} 篇小剧场。点击开始解析后可逐篇检查，再确认上传。
                     </p>
                   ) : null}
-                  {submitting && batchProgress ? (
-                    <p className="content-meta">
-                      正在依次上传 {batchProgress.completed}/{batchProgress.total}{' '}
-                      篇，请先别关闭页面。
-                    </p>
+                  {batchItems.length > 0 ? (
+                    <div className="stack-gap-md batch-parse-panel">
+                      <div className="content-head wrap-mobile">
+                        <div>
+                          <h3>批量解析列表</h3>
+                          <p className="sub-copy">
+                            先检查分类和简介，确认无误后再上传。上传时会使用上方的作者署名。
+                          </p>
+                        </div>
+                        <button
+                          className="button primary"
+                          disabled={submitting || batchItems.length === 0}
+                          onClick={() => void handleBatchSubmit()}
+                          type="button"
+                        >
+                          {submitting
+                            ? batchProgress
+                              ? `上传中 ${batchProgress.completed}/${batchProgress.total}`
+                              : '提交中...'
+                            : `确认上传（${batchItems.length} 篇）`}
+                        </button>
+                      </div>
+                      {submitting && batchProgress ? (
+                        <p className="content-meta">
+                          正在依次上传 {batchProgress.completed}/{batchProgress.total}{' '}
+                          篇，请先别关闭页面。
+                        </p>
+                      ) : null}
+
+                      <div className="inline-actions wrap-mobile admin-status-tabs">
+                        {(
+                          [
+                            { value: 'all', label: `全部（${batchFilterCounts.all}）` },
+                            {
+                              value: 'uncategorized',
+                              label: `未分类（${batchFilterCounts.uncategorized}）`,
+                            },
+                            {
+                              value: 'no-summary',
+                              label: `无简介（${batchFilterCounts.noSummary}）`,
+                            },
+                            {
+                              value: 'uncategorized-no-summary',
+                              label: `未分类且无简介（${batchFilterCounts.both}）`,
+                            },
+                          ] as Array<{ value: BatchParseFilter; label: string }>
+                        ).map((tab) => (
+                          <button
+                            className={batchFilter === tab.value ? 'tab-chip active' : 'tab-chip'}
+                            key={tab.value}
+                            onClick={() => {
+                              setBatchFilter(tab.value);
+                              jumpBatchPage(1);
+                            }}
+                            type="button"
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="review-layout review-layout-wide">
+                        <aside className="review-sidebar stack-gap-md">
+                          <div className="form-panel compact-panel stack-gap-md plaza-pagination-panel">
+                            <div className="plaza-pagination-toolbar">
+                              <div className="inline-actions plaza-pagination-nav">
+                                <button
+                                  className="button secondary icon-page-button"
+                                  disabled={safeBatchPage <= 1}
+                                  onClick={() => jumpBatchPage(1)}
+                                  title="第一页"
+                                  type="button"
+                                >
+                                  ≪
+                                </button>
+                                <button
+                                  className="button secondary icon-page-button"
+                                  disabled={safeBatchPage <= 1}
+                                  onClick={() => jumpBatchPage(safeBatchPage - 1)}
+                                  title="上一页"
+                                  type="button"
+                                >
+                                  ‹
+                                </button>
+                              </div>
+                              <span className="content-meta plaza-page-indicator">
+                                第 {safeBatchPage} / {batchTotalPages} 页
+                              </span>
+                              <div className="inline-actions plaza-pagination-nav plaza-pagination-nav-end">
+                                <button
+                                  className="button secondary icon-page-button"
+                                  disabled={safeBatchPage >= batchTotalPages}
+                                  onClick={() => jumpBatchPage(safeBatchPage + 1)}
+                                  title="下一页"
+                                  type="button"
+                                >
+                                  ›
+                                </button>
+                                <button
+                                  className="button secondary icon-page-button"
+                                  disabled={safeBatchPage >= batchTotalPages}
+                                  onClick={() => jumpBatchPage(batchTotalPages)}
+                                  title="最后一页"
+                                  type="button"
+                                >
+                                  ≫
+                                </button>
+                              </div>
+                              <div className="inline-actions plaza-page-control-inline">
+                                <label
+                                  className="plaza-page-size-field"
+                                  htmlFor="batch-parse-page-size-input"
+                                >
+                                  <span className="content-meta plaza-page-size-copy">每页</span>
+                                  <input
+                                    id="batch-parse-page-size-input"
+                                    inputMode="numeric"
+                                    max={MAX_BATCH_PARSE_PAGE_SIZE}
+                                    min={MIN_BATCH_PARSE_PAGE_SIZE}
+                                    onBlur={() => {
+                                      if (!/^\d+$/.test(batchPageSizeInput)) {
+                                        setBatchPageSizeInput(String(batchPageSize));
+                                        return;
+                                      }
+                                      setBatchPageSize(
+                                        clampBatchParsePageSize(Number(batchPageSizeInput)),
+                                      );
+                                    }}
+                                    onChange={(event) => {
+                                      const cleaned = event.target.value.replace(/\D+/g, '');
+                                      setBatchPageSizeInput(cleaned);
+                                      if (/^\d+$/.test(cleaned)) {
+                                        setBatchPageSize(clampBatchParsePageSize(Number(cleaned)));
+                                        jumpBatchPage(1);
+                                      }
+                                    }}
+                                    value={batchPageSizeInput}
+                                  />
+                                  <span className="content-meta plaza-page-size-copy">个</span>
+                                </label>
+                                <div className="inline-actions plaza-page-jump-inline">
+                                  <span className="content-meta plaza-page-jump-copy">第</span>
+                                  <label className="page-jump-field page-jump-field-compact">
+                                    <input
+                                      inputMode="numeric"
+                                      max={batchTotalPages}
+                                      min={1}
+                                      onChange={(event) =>
+                                        setBatchPageInput(event.target.value.replace(/\D+/g, ''))
+                                      }
+                                      value={batchPageInput}
+                                    />
+                                  </label>
+                                  <span className="content-meta plaza-page-jump-copy">页</span>
+                                  <button
+                                    className="button primary plaza-page-jump-button"
+                                    onClick={() => {
+                                      const next = Number(batchPageInput);
+                                      if (
+                                        !Number.isFinite(next) ||
+                                        next < 1 ||
+                                        next > batchTotalPages
+                                      ) {
+                                        showFloatingToast(
+                                          `页数范围是 1 到 ${batchTotalPages}`,
+                                          'error',
+                                        );
+                                        return;
+                                      }
+                                      jumpBatchPage(next);
+                                    }}
+                                    type="button"
+                                  >
+                                    跳转
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="review-list">
+                            {shouldCollapseMobileBatchList ? (
+                              <div className="inline-actions review-list-mobile-toggle-row">
+                                <span className="content-meta">
+                                  手机端先显示前 {MOBILE_BATCH_LIST_PREVIEW_COUNT} 条，当前“
+                                  {batchFilterLabel}”列表共 {filteredBatchItems.length} 条
+                                </span>
+                                <button
+                                  className="button ghost"
+                                  onClick={() =>
+                                    setIsMobileBatchListExpanded((current) => !current)
+                                  }
+                                  type="button"
+                                >
+                                  {isMobileBatchListExpanded ? '收起' : '展开'}
+                                </button>
+                              </div>
+                            ) : null}
+                            {visibleBatchItems.map((item) => (
+                              <article className="review-card-shell" key={item.id}>
+                                <div
+                                  className={
+                                    selectedBatchId === item.id
+                                      ? 'review-card active'
+                                      : 'review-card'
+                                  }
+                                >
+                                  <button
+                                    className="review-card-main"
+                                    onClick={() => selectBatchItem(item.id)}
+                                    type="button"
+                                  >
+                                    <div className="card-topline">
+                                      <span className="status-tag pending">待上传</span>
+                                      <div className="compact-meta-row compact-meta-row-small compact-meta-row-end">
+                                        <span className="compact-meta-item">
+                                          ◈ {item.category || DEFAULT_CATEGORY}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <strong>{item.title}</strong>
+                                  </button>
+                                  <div className="review-card-summary-row">
+                                    <span className="summary review-card-summary-text">
+                                      {item.summary.trim() ? item.summary : '无简介'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </article>
+                            ))}
+                            {filteredBatchItems.length === 0 ? (
+                              <div className="empty-panel">这个筛选下没有内容。</div>
+                            ) : null}
+                          </div>
+                        </aside>
+
+                        <section className="review-main review-main-wide stack-gap-lg">
+                          {selectedBatchItem ? (
+                            <>
+                              <div className="admin-review-mode-line">
+                                <div className="inline-actions wrap-mobile admin-review-view-mode-row admin-mode-lefthalf">
+                                  <span className="content-meta">查看模式</span>
+                                  <button
+                                    className={
+                                      batchViewMode === 'preview' ? 'tab-chip active' : 'tab-chip'
+                                    }
+                                    onClick={() => setBatchViewMode('preview')}
+                                    type="button"
+                                  >
+                                    仅预览
+                                  </button>
+                                  <button
+                                    className={
+                                      batchViewMode === 'edit' ? 'tab-chip active' : 'tab-chip'
+                                    }
+                                    onClick={() => setBatchViewMode('edit')}
+                                    type="button"
+                                  >
+                                    仅编辑
+                                  </button>
+                                  <button
+                                    className={
+                                      batchViewMode === 'both' ? 'tab-chip active' : 'tab-chip'
+                                    }
+                                    onClick={() => setBatchViewMode('both')}
+                                    type="button"
+                                  >
+                                    编辑 + 预览
+                                  </button>
+                                </div>
+                                <div className="inline-actions admin-adjacent-row admin-mode-righthalf">
+                                  <button
+                                    className="button secondary admin-mode-adjacent-button"
+                                    disabled={!previousBatchId}
+                                    onClick={() => selectBatchItem(previousBatchId)}
+                                    type="button"
+                                  >
+                                    上一篇
+                                  </button>
+                                  <button
+                                    className="button secondary admin-mode-adjacent-button"
+                                    disabled={!nextBatchId}
+                                    onClick={() => selectBatchItem(nextBatchId)}
+                                    type="button"
+                                  >
+                                    下一篇
+                                  </button>
+                                </div>
+                              </div>
+
+                              {batchViewMode !== 'edit' ? (
+                                <div className="detail-panel stack-gap-md">
+                                  <div className="card-topline">
+                                    <span className="status-tag pending">待上传</span>
+                                    <span>{selectedBatchItem.category || DEFAULT_CATEGORY}</span>
+                                  </div>
+                                  <div className="preview-section-header">
+                                    <h3>{selectedBatchItem.title}</h3>
+                                  </div>
+                                  {selectedBatchItem.summary.trim() ? (
+                                    <p className="sub-copy">{selectedBatchItem.summary}</p>
+                                  ) : (
+                                    <p className="sub-copy content-meta">（无简介）</p>
+                                  )}
+                                  <div className="inline-detail-block stack-gap-md preview-content-block">
+                                    <div className="preview-section-header">
+                                      <span className="content-meta">
+                                        正文约 {selectedBatchItem.content.length} 字
+                                      </span>
+                                    </div>
+                                    <p>{selectedBatchItem.content}</p>
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {batchViewMode !== 'preview' ? (
+                                <div className="form-panel stack-gap-md">
+                                  <label>
+                                    <span>标题</span>
+                                    <input
+                                      onChange={(event) =>
+                                        updateBatchItem(selectedBatchItem.id, {
+                                          title: event.target.value,
+                                        })
+                                      }
+                                      placeholder="标题不能为空"
+                                      value={selectedBatchItem.title}
+                                    />
+                                  </label>
+                                  <div className="stack-gap-sm">
+                                    <div className="field-label-row">
+                                      <span>分类</span>
+                                      <div className="inline-actions field-inline-actions">
+                                        {tags.length > 0 ? (
+                                          <button
+                                            className="text-button field-inline-action"
+                                            onClick={() =>
+                                              setBatchCategoryOpen((current) => !current)
+                                            }
+                                            type="button"
+                                          >
+                                            {batchCategoryOpen ? '收起分类' : '展开分类'}
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                    {batchCategoryOpen && tags.length > 0 ? (
+                                      <CategoryHierarchyPicker
+                                        onChange={(next) =>
+                                          updateBatchItem(selectedBatchItem.id, { category: next })
+                                        }
+                                        tags={tags}
+                                        value={selectedBatchItem.category}
+                                      />
+                                    ) : (
+                                      <p className="content-meta">
+                                        {selectedBatchItem.category || DEFAULT_CATEGORY}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <label>
+                                    <span>简介（可空）</span>
+                                    <input
+                                      onChange={(event) =>
+                                        updateBatchItem(selectedBatchItem.id, {
+                                          summary: event.target.value,
+                                        })
+                                      }
+                                      placeholder="留空则前台不展示简介"
+                                      value={selectedBatchItem.summary}
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>正文</span>
+                                    <textarea
+                                      className="admin-review-content-textarea"
+                                      onChange={(event) =>
+                                        updateBatchItem(selectedBatchItem.id, {
+                                          content: event.target.value,
+                                        })
+                                      }
+                                      placeholder="解析后可直接修正正文"
+                                      value={selectedBatchItem.content}
+                                    />
+                                  </label>
+                                </div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div className="empty-panel">
+                              {isMobileBatchViewport
+                                ? '先从上面选择一篇内容。'
+                                : '先从左侧选择一篇内容。'}
+                            </div>
+                          )}
+                        </section>
+                      </div>
+                    </div>
                   ) : null}
                 </div>
               )}
@@ -1221,6 +1898,28 @@ export function UploadPage() {
               </button>
             </div>
           </div>
+        </div>
+      ) : null}
+      {mode === 'batch' && batchItems.length > 0 && isMobileBatchViewport ? (
+        <div className="admin-scroll-jump-stack">
+          <button
+            aria-label="一键置顶"
+            className="icon-button admin-scroll-top-button"
+            onClick={handleScrollToTop}
+            title="一键置顶"
+            type="button"
+          >
+            ↑
+          </button>
+          <button
+            aria-label="一键置底"
+            className="icon-button admin-scroll-bottom-button"
+            onClick={handleScrollToBottom}
+            title="一键置底"
+            type="button"
+          >
+            ↓
+          </button>
         </div>
       ) : null}
     </section>
